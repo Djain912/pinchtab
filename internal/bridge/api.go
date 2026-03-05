@@ -25,6 +25,7 @@ type BridgeAPI interface {
 
 	ExecuteAction(ctx context.Context, kind string, req ActionRequest) (map[string]any, error)
 	AvailableActions() []string
+	RunParallel(ctx context.Context, groups []TabActionGroup, actionTimeout time.Duration) *ParallelResult
 
 	TabLockInfo(tabID string) *LockInfo
 	Lock(tabID, owner string, ttl time.Duration) error

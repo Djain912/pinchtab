@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
@@ -77,6 +78,11 @@ func (m *mockBridge) GetAggregatedMemoryMetrics() (*bridge.MemoryMetrics, error)
 
 func (m *mockBridge) GetCrashLogs() []string {
 	return nil
+}
+
+func (m *mockBridge) RunParallel(ctx context.Context, groups []bridge.TabActionGroup, actionTimeout time.Duration) *bridge.ParallelResult {
+	pool := bridge.NewTabWorkerPool(4)
+	return pool.RunParallel(ctx, groups, m.TabContext, m.ExecuteAction, actionTimeout)
 }
 
 func TestHandlers(t *testing.T) {

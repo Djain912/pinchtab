@@ -37,6 +37,7 @@ type Bridge struct {
 	StealthScript string
 	Actions       map[string]ActionFunc
 	Locks         *LockManager
+	WorkerPool    *TabWorkerPool
 
 	// Lazy initialization
 	initMu      sync.Mutex
@@ -56,6 +57,11 @@ func New(allocCtx, browserCtx context.Context, cfg *config.RuntimeConfig) *Bridg
 		b.TabManager = NewTabManager(browserCtx, cfg, idMgr, b.tabSetup)
 	}
 	b.Locks = NewLockManager()
+	maxParallel := 4
+	if cfg != nil {
+		maxParallel = cfg.MaxParallelTabs
+	}
+	b.WorkerPool = NewTabWorkerPool(maxParallel)
 	b.InitActionRegistry()
 	return b
 }
@@ -180,6 +186,10 @@ func (b *Bridge) AvailableActions() []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+func (b *Bridge) RunParallel(ctx context.Context, groups []TabActionGroup, actionTimeout time.Duration) *ParallelResult {
+	return b.WorkerPool.RunParallel(ctx, groups, b.TabContext, b.ExecuteAction, actionTimeout)
 }
 
 // ActionFunc is the type for action handlers.

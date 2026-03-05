@@ -350,6 +350,10 @@ func (m *MockBridge) GetCrashLogs() []string {
 	return nil
 }
 
+func (m *MockBridge) RunParallel(ctx context.Context, groups []bridge.TabActionGroup, actionTimeout time.Duration) *bridge.ParallelResult {
+	return &bridge.ParallelResult{}
+}
+
 type mockBridgeDisconnected struct {
 	mockBridge
 }

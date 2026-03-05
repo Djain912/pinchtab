@@ -36,6 +36,7 @@ type RuntimeConfig struct {
 	NavigateTimeout   time.Duration
 	ShutdownTimeout   time.Duration
 	WaitNavDelay      time.Duration
+	MaxParallelTabs   int
 }
 
 func envOr(key, fallback string) string {
@@ -136,6 +137,7 @@ type FileConfig struct {
 	Headless          *bool  `json:"headless,omitempty"`
 	NoRestore         bool   `json:"noRestore"`
 	MaxTabs           *int   `json:"maxTabs,omitempty"`
+	MaxParallelTabs   *int   `json:"maxParallelTabs,omitempty"`
 	TimeoutSec        int    `json:"timeoutSec,omitempty"`
 	NavigateSec       int    `json:"navigateSec,omitempty"`
 }
@@ -167,6 +169,7 @@ func Load() *RuntimeConfig {
 		NavigateTimeout:   60 * time.Second,
 		ShutdownTimeout:   10 * time.Second,
 		WaitNavDelay:      1 * time.Second,
+		MaxParallelTabs:   envIntOr("BRIDGE_MAX_PARALLEL_TABS", 4),
 	}
 
 	configPath := envOr("BRIDGE_CONFIG", filepath.Join(userConfigDir(), "config.json"))
@@ -210,6 +213,9 @@ func Load() *RuntimeConfig {
 	}
 	if fc.MaxTabs != nil && os.Getenv("BRIDGE_MAX_TABS") == "" {
 		cfg.MaxTabs = *fc.MaxTabs
+	}
+	if fc.MaxParallelTabs != nil && os.Getenv("BRIDGE_MAX_PARALLEL_TABS") == "" {
+		cfg.MaxParallelTabs = *fc.MaxParallelTabs
 	}
 	if fc.TimeoutSec > 0 && os.Getenv("BRIDGE_TIMEOUT") == "" {
 		cfg.ActionTimeout = time.Duration(fc.TimeoutSec) * time.Second
@@ -292,6 +298,7 @@ func HandleConfigCommand(cfg *RuntimeConfig) {
 		fmt.Printf("  Profile:    %s\n", cfg.ProfileDir)
 		fmt.Printf("  Headless:   %v\n", cfg.Headless)
 		fmt.Printf("  Max Tabs:   %d\n", cfg.MaxTabs)
+		fmt.Printf("  Parallel:   %d\n", cfg.MaxParallelTabs)
 		fmt.Printf("  No Restore: %v\n", cfg.NoRestore)
 		fmt.Printf("  Timeouts:   action=%v navigate=%v\n", cfg.ActionTimeout, cfg.NavigateTimeout)
 
