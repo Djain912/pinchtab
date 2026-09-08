@@ -375,6 +375,22 @@ func TestRestoreSecurityDefaults_RefusesToProvisionIntoAnOperatorConfig(t *testi
 	}
 }
 
+func pathWithinDir(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
+
+func TestPathWithinDirRejectsSiblingWithSharedPrefix(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "config")
+
+	if !pathWithinDir(dir, filepath.Join(dir, "config.json")) {
+		t.Fatal("path inside directory was rejected")
+	}
+	if pathWithinDir(dir, filepath.Join(dir+"-escaped", "config.json")) {
+		t.Fatal("sibling path sharing directory prefix was accepted")
+	}
+}
+
 func TestRestoreSecurityDefaults_TokenOnlyChangeOnTheDefaultPathIsSaved(t *testing.T) {
 	tmpHome := t.TempDir()
 	// This test clears PINCHTAB_CONFIG on purpose, so restoreSecurityDefaults
@@ -397,7 +413,7 @@ func TestRestoreSecurityDefaults_TokenOnlyChangeOnTheDefaultPathIsSaved(t *testi
 	// rewrites what it finds there. Fail loudly rather than proceed: before this
 	// guard the escape was silent and the test still PASSED, because the token it
 	// asserts on was already present in the file it should never have opened.
-	if !strings.HasPrefix(configPath, tmpHome) {
+	if !pathWithinDir(tmpHome, configPath) {
 		t.Fatalf("default config path %q escaped the test's temp dir %q; this test would be rewriting the real config", configPath, tmpHome)
 	}
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
