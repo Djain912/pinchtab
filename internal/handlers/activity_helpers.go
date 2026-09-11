@@ -85,6 +85,8 @@ type tabScopeTracker interface {
 	TabsOnlyUsedByCreator(scope string) []string
 }
 
+var _ tabScopeTracker = (*bridge.Bridge)(nil)
+
 func (h *Handlers) tabScopes() (tabScopeTracker, bool) {
 	if h == nil {
 		return nil, false

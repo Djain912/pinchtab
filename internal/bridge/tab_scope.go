@@ -15,7 +15,9 @@ func (tm *TabManager) RecordTabScope(tabID, scope string, created bool) {
 	if created && entry.CreatorScope == "" {
 		entry.CreatorScope = scope
 	}
-	entry.LastScope = scope
+	if entry.CreatorScope != "" && scope != entry.CreatorScope {
+		entry.UsedByOtherScope = true
+	}
 }
 
 func (tm *TabManager) TabsOnlyUsedByCreator(scope string) []string {
@@ -26,7 +28,7 @@ func (tm *TabManager) TabsOnlyUsedByCreator(scope string) []string {
 	defer tm.mu.RUnlock()
 	var ids []string
 	for id, entry := range tm.tabs {
-		if entry.CreatorScope == scope && entry.LastScope == scope {
+		if entry.CreatorScope == scope && !entry.UsedByOtherScope {
 			ids = append(ids, id)
 		}
 	}
