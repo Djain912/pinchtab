@@ -9,13 +9,13 @@ import (
 	"go/token"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/pinchtab/pinchtab/internal/bridge"
 	"github.com/pinchtab/pinchtab/internal/config"
+	"github.com/pinchtab/pinchtab/internal/srccensus"
 )
 
 type dialogRaisingBridge struct {
@@ -130,29 +130,21 @@ func TestDialogActionRemedyLiteralHasOneOwnerBesideTheFlagHelp(t *testing.T) {
 		"internal/handlers/dialog_blocked.go": true,
 		"cmd/pinchtab/cmd_cli_register.go":    true,
 	}
-	root := filepath.Join("..", "..")
 	found := map[string]bool{}
-	for _, dir := range []string{"internal", "cmd"} {
-		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-				return err
-			}
-			f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-			if err != nil {
-				return err
-			}
-			ast.Inspect(f, func(n ast.Node) bool {
-				if lit, ok := n.(*ast.BasicLit); ok && lit.Kind == token.STRING && strings.Contains(lit.Value, literal) {
-					rel, _ := filepath.Rel(root, path)
-					found[filepath.ToSlash(rel)] = true
-				}
-				return true
-			})
-			return nil
-		})
+	for _, source := range srccensus.Tree(t, filepath.Join("..", ".."), 200) {
+		if !strings.HasPrefix(source.Name, "internal/") && !strings.HasPrefix(source.Name, "cmd/") {
+			continue
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), source.Name, source.Text, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			if lit, ok := n.(*ast.BasicLit); ok && lit.Kind == token.STRING && strings.Contains(lit.Value, literal) {
+				found[source.Name] = true
+			}
+			return true
+		})
 	}
 	if !found["internal/handlers/dialog_blocked.go"] {
 		t.Fatalf("dialog_blocked.go no longer owns the %q remedy: %v", literal, found)
