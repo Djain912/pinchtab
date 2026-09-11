@@ -57,11 +57,45 @@ func scribbleValue(v reflect.Value) int {
 	return 0
 }
 
-func TestWritingThroughEveryFileConfigReferenceLeavesTheRuntimeUnchanged(t *testing.T) {
+func emptyRuntimeReferences(path string, v reflect.Value) []string {
+	switch v.Kind() {
+	case reflect.Pointer:
+		if v.IsNil() {
+			return []string{path}
+		}
+		return emptyRuntimeReferences(path, v.Elem())
+	case reflect.Slice, reflect.Map:
+		if v.Len() == 0 {
+			return []string{path}
+		}
+	case reflect.Struct:
+		var empty []string
+		for i := 0; i < v.NumField(); i++ {
+			if v.Type().Field(i).IsExported() {
+				empty = append(empty, emptyRuntimeReferences(path+"."+v.Type().Field(i).Name, v.Field(i))...)
+			}
+		}
+		return empty
+	}
+	return nil
+}
+
+func aliasProbeRuntimeConfig(t *testing.T) *RuntimeConfig {
+	t.Helper()
 	cfg := populatedRuntimeConfig(t)
 	cfg.CookieSecure = ptr(true)
-	want := populatedRuntimeConfig(t)
-	want.CookieSecure = ptr(true)
+	cfg.AllowedDomains = []string{"allowed.example"}
+	cfg.Proxy.BypassList = []string{"bypass.example"}
+	cfg.Proxy.Geo = &BrowserProxyGeoConfig{Timezone: "Europe/Rome", Locale: "it-IT", WebRTCIP: "203.0.113.9", CountryISO: "IT"}
+	if empty := emptyRuntimeReferences("RuntimeConfig", reflect.ValueOf(cfg).Elem()); len(empty) > 0 {
+		t.Fatalf("the alias probe leaves these reference-typed runtime fields empty, so an alias through them is invisible: %v", empty)
+	}
+	return cfg
+}
+
+func TestWritingThroughEveryFileConfigReferenceLeavesTheRuntimeUnchanged(t *testing.T) {
+	cfg := aliasProbeRuntimeConfig(t)
+	want := aliasProbeRuntimeConfig(t)
 	if !reflect.DeepEqual(cfg, want) {
 		t.Fatal("populatedRuntimeConfig is not deterministic, so it cannot serve as the control")
 	}
