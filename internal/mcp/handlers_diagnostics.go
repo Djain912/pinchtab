@@ -28,16 +28,8 @@ func diagnosticsHandler(c *Client, path string) func(context.Context, mcp.CallTo
 			q.Set("tabId", tabID)
 		}
 		if clear, ok := optBool(r, "clear"); ok && clear {
-			body, code, err := c.Post(ctx, path+"/clear?"+q.Encode(), nil)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			return resultFromBytes(body, code)
+			return toolResult(c.Post(ctx, path+"/clear?"+q.Encode(), nil))
 		}
-		body, code, err := c.Get(ctx, path, q)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		return resultFromBytes(body, code)
+		return toolResult(c.Get(ctx, path, q))
 	}
 }

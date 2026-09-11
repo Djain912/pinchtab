@@ -68,9 +68,5 @@ func callWaitEndpoint(ctx context.Context, c *Client, r mcp.CallToolRequest, pay
 	if tabID := optString(r, "tabId"); tabID != "" {
 		payload["tabId"] = tabID
 	}
-	body, code, err := c.Post(ctx, routedPath(r, "/wait"), payload)
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-	return resultFromBytes(body, code)
+	return toolResult(c.Post(ctx, routedPath(r, "/wait"), payload))
 }

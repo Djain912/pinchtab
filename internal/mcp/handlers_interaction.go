@@ -326,11 +326,7 @@ func handleKeyboard(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.
 		if nodeID, ok := optInt(r, "nodeId"); ok && nodeID > 0 {
 			payload["nodeId"] = nodeID
 		}
-		body, code, err := c.Post(ctx, routedPathWithBody(r, "/action", payload), payload)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		return resultFromBytes(body, code)
+		return toolResult(c.Post(ctx, routedPathWithBody(r, "/action", payload), payload))
 	}
 }
 

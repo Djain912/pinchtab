@@ -20,11 +20,7 @@ func handleEval(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.Call
 		if tabID := optString(r, "tabId"); tabID != "" {
 			payload["tabId"] = tabID
 		}
-		body, code, err := c.Post(ctx, "/evaluate", payload)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		return resultFromBytes(body, code)
+		return toolResult(c.Post(ctx, "/evaluate", payload))
 	}
 }
 
@@ -43,11 +39,7 @@ func handlePDF(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.CallT
 		if pr := optString(r, "pageRanges"); pr != "" {
 			q.Set("pageRanges", pr)
 		}
-		body, code, err := c.Get(ctx, "/pdf", q)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		return resultFromBytes(body, code)
+		return toolResult(c.Get(ctx, "/pdf", q))
 	}
 }
 

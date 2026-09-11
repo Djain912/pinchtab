@@ -246,6 +246,13 @@ func resolveXY(r mcp.CallToolRequest) (float64, float64, bool) {
 	return 0, 0, false
 }
 
+func toolResult(body []byte, code int, err error) (*mcp.CallToolResult, error) {
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return resultFromBytes(body, code)
+}
+
 func resultFromBytes(body []byte, code int) (*mcp.CallToolResult, error) {
 	if code >= 400 {
 		return mcp.NewToolResultError(fmt.Sprintf("HTTP %d: %s", code, string(body))), nil

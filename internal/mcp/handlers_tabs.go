@@ -12,11 +12,7 @@ import (
 
 func handleListTabs(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		body, code, err := c.Get(ctx, "/tabs", nil)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		return resultFromBytes(body, code)
+		return toolResult(c.Get(ctx, "/tabs", nil))
 	}
 }
 
@@ -26,11 +22,7 @@ func handleCloseTab(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.
 		if tabID := optTrimmedString(r, "tabId"); tabID != "" {
 			payload["tabId"] = tabID
 		}
-		body, code, err := c.Post(ctx, "/close", payload)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		return resultFromBytes(body, code)
+		return toolResult(c.Post(ctx, "/close", payload))
 	}
 }
 
@@ -51,11 +43,7 @@ func handleHandoff(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.C
 		if timeoutMs, ok := optInt(r, "timeoutMs"); ok {
 			payload["timeoutMs"] = timeoutMs
 		}
-		body, code, err := c.Post(ctx, tabRoutePath(tabID, "handoff"), payload)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		return resultFromBytes(body, code)
+		return toolResult(c.Post(ctx, tabRoutePath(tabID, "handoff"), payload))
 	}
 }
 
@@ -69,11 +57,7 @@ func handleResume(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.Ca
 		if status := optTrimmedString(r, "status"); status != "" {
 			payload["status"] = status
 		}
-		body, code, err := c.Post(ctx, tabRoutePath(tabID, "resume"), payload)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		return resultFromBytes(body, code)
+		return toolResult(c.Post(ctx, tabRoutePath(tabID, "resume"), payload))
 	}
 }
 
@@ -83,21 +67,13 @@ func handleHandoffStatus(c *Client) func(context.Context, mcp.CallToolRequest) (
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		body, code, err := c.Get(ctx, tabRoutePath(tabID, "handoff"), nil)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		return resultFromBytes(body, code)
+		return toolResult(c.Get(ctx, tabRoutePath(tabID, "handoff"), nil))
 	}
 }
 
 func handleHealth(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		body, code, err := c.Get(ctx, "/health", nil)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		return resultFromBytes(body, code)
+		return toolResult(c.Get(ctx, "/health", nil))
 	}
 }
 
@@ -107,11 +83,7 @@ func handleCookies(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.C
 		if tabID := optString(r, "tabId"); tabID != "" {
 			q.Set("tabId", tabID)
 		}
-		body, code, err := c.Get(ctx, "/cookies", q)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		return resultFromBytes(body, code)
+		return toolResult(c.Get(ctx, "/cookies", q))
 	}
 }
 
