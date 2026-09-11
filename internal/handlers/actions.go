@@ -141,11 +141,11 @@ func (h *Handlers) mapDialogBlockingError(err error, kind, tabID string) (string
 	return "", nil, false
 }
 
-func (h *Handlers) dialogAwareActionError(err error, kind, tabID, fallback string) string {
+func (h *Handlers) failedStep(index int, kind, tabID string, err error, fallback string) actionResult {
 	if message, _, ok := h.mapDialogBlockingError(err, kind, tabID); ok {
-		return dialogBlockedStepError(message)
+		fallback = dialogBlockedStepError(message)
 	}
-	return fallback
+	return actionResult{Index: index, Success: false, Error: fallback}
 }
 
 // runResolvedActionStep executes one already-resolved action (selector resolution,
@@ -181,11 +181,7 @@ func (h *Handlers) runResolvedActionStep(
 		}
 	}
 	if err != nil {
-		return actionResult{
-			Index:   index,
-			Success: false,
-			Error:   h.dialogAwareActionError(err, step.Kind, nextTabID, errFallback(err)),
-		}, nextCtx, nextTabID
+		return h.failedStep(index, step.Kind, nextTabID, err, errFallback(err)), nextCtx, nextTabID
 	}
 	return actionResult{Index: index, Success: true, Result: res}, nextCtx, nextTabID
 }
@@ -822,7 +818,7 @@ func (h *Handlers) runBatchStep(
 ) (actionResult, context.Context, string) {
 	selectorResolution, resolveErr := h.resolveActionRequestSelector(tCtx, resolvedTabID, action)
 	if resolveErr != nil {
-		return actionResult{Index: index, Success: false, Error: resolveErr.Error()}, ctx, resolvedTabID
+		return h.failedStep(index, action.Kind, resolvedTabID, resolveErr, resolveErr.Error()), ctx, resolvedTabID
 	}
 	if action.Kind == "" {
 		return actionResult{Index: index, Success: false, Error: "missing required field 'kind'"}, ctx, resolvedTabID
@@ -1052,7 +1048,7 @@ func (h *Handlers) HandleMacro(w http.ResponseWriter, r *http.Request) {
 		selectorResolution, resolveErr := h.resolveActionRequestSelector(selectorCtx, resolvedTabID, &step)
 		selectorCancel()
 		if resolveErr != nil {
-			run.record(actionResult{Index: i, Success: false, Error: resolveErr.Error()})
+			run.record(h.failedStep(i, step.Kind, resolvedTabID, resolveErr, resolveErr.Error()))
 			continue
 		}
 
