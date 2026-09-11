@@ -12,8 +12,9 @@ import (
 )
 
 type healthInstanceInfo struct {
-	ID     string `json:"id"`
-	Status string `json:"status"`
+	ID             string `json:"id"`
+	Status         string `json:"status"`
+	Responsiveness string `json:"responsiveness"`
 }
 
 type healthSecurityInfo struct {
@@ -26,21 +27,37 @@ type healthSecurityInfo struct {
 }
 
 type healthEnvelope struct {
-	Status              string               `json:"status"`
-	Mode                string               `json:"mode"`
-	Version             string               `json:"version"`
-	Uptime              int64                `json:"uptime"`
-	AuthRequired        bool                 `json:"authRequired"`
-	Profiles            int                  `json:"profiles"`
-	TemporaryProfiles   int                  `json:"temporaryProfiles"`
-	QuarantinedProfiles int                  `json:"quarantinedProfiles"`
-	Instances           int                  `json:"instances"`
-	DefaultInstance     *healthInstanceInfo  `json:"defaultInstance,omitempty"`
-	Agents              int                  `json:"agents"`
-	RestartRequired     bool                 `json:"restartRequired"`
-	RestartReasons      []string             `json:"restartReasons,omitempty"`
-	Security            *healthSecurityInfo  `json:"security,omitempty"`
-	Crashes             *bridge.CrashSummary `json:"crashes,omitempty"`
+	Status                string               `json:"status"`
+	Mode                  string               `json:"mode"`
+	Version               string               `json:"version"`
+	Uptime                int64                `json:"uptime"`
+	AuthRequired          bool                 `json:"authRequired"`
+	Profiles              int                  `json:"profiles"`
+	TemporaryProfiles     int                  `json:"temporaryProfiles"`
+	QuarantinedProfiles   int                  `json:"quarantinedProfiles"`
+	Instances             int                  `json:"instances"`
+	DefaultInstance       *healthInstanceInfo  `json:"defaultInstance,omitempty"`
+	Agents                int                  `json:"agents"`
+	RestartRequired       bool                 `json:"restartRequired"`
+	RestartReasons        []string             `json:"restartReasons,omitempty"`
+	Security              *healthSecurityInfo  `json:"security,omitempty"`
+	Crashes               *bridge.CrashSummary `json:"crashes,omitempty"`
+	UnresponsiveInstances []string             `json:"unresponsiveInstances,omitempty"`
+}
+
+const (
+	healthStatusOK       = "ok"
+	healthStatusDegraded = "degraded"
+)
+
+func unresponsiveInstanceIDs(instances []bridge.Instance) []string {
+	var ids []string
+	for _, inst := range instances {
+		if inst.Responsiveness == bridge.ResponsivenessUnresponsive {
+			ids = append(ids, inst.ID)
+		}
+	}
+	return ids
 }
 
 type crashReporter interface {
@@ -75,17 +92,30 @@ func (c *ConfigAPI) healthInfo(includeSecurity bool) (healthEnvelope, error) {
 		}
 	}
 
+	var crashes *bridge.CrashSummary
+	if reporter, ok := c.instances.(crashReporter); ok {
+		if summary := reporter.CrashSummary(); summary.Total > 0 {
+			crashes = &summary
+		}
+	}
 	instanceCount := 0
 	var defaultInst *healthInstanceInfo
+	var unresponsive []string
 	if c.instances != nil {
 		instances := c.instances.List()
 		instanceCount = len(instances)
+		unresponsive = unresponsiveInstanceIDs(instances)
 		if len(instances) > 0 {
 			defaultInst = &healthInstanceInfo{
-				ID:     instances[0].ID,
-				Status: instances[0].Status,
+				ID:             instances[0].ID,
+				Status:         instances[0].Status,
+				Responsiveness: instances[0].Responsiveness,
 			}
 		}
+	}
+	status := healthStatusOK
+	if len(unresponsive) > 0 {
+		status = healthStatusDegraded
 	}
 	agentCount := 0
 	if c.agents != nil {
@@ -93,28 +123,25 @@ func (c *ConfigAPI) healthInfo(includeSecurity bool) (healthEnvelope, error) {
 	}
 	cfg := c.cfg()
 	out := healthEnvelope{
-		Status:              "ok",
-		Mode:                "dashboard",
-		Version:             c.version,
-		Uptime:              int64(time.Since(c.startedAt).Milliseconds()),
-		AuthRequired:        cfg != nil && strings.TrimSpace(cfg.Token) != "",
-		Profiles:            profileCount,
-		TemporaryProfiles:   temporaryCount,
-		QuarantinedProfiles: quarantinedCount,
-		Instances:           instanceCount,
-		DefaultInstance:     defaultInst,
-		Agents:              agentCount,
-		RestartRequired:     len(restartReasons) > 0,
-		RestartReasons:      restartReasons,
+		Status:                status,
+		Mode:                  "dashboard",
+		Version:               c.version,
+		Uptime:                int64(time.Since(c.startedAt).Milliseconds()),
+		AuthRequired:          cfg != nil && strings.TrimSpace(cfg.Token) != "",
+		Profiles:              profileCount,
+		TemporaryProfiles:     temporaryCount,
+		QuarantinedProfiles:   quarantinedCount,
+		Instances:             instanceCount,
+		DefaultInstance:       defaultInst,
+		Agents:                agentCount,
+		RestartRequired:       len(restartReasons) > 0,
+		RestartReasons:        restartReasons,
+		Crashes:               crashes,
+		UnresponsiveInstances: unresponsive,
 	}
 	if includeSecurity {
 		security := runtimeSecurityInfo(cfg)
 		out.Security = &security
-	}
-	if reporter, ok := c.instances.(crashReporter); ok {
-		if crashes := reporter.CrashSummary(); crashes.Total > 0 {
-			out.Crashes = &crashes
-		}
 	}
 	return out, nil
 }

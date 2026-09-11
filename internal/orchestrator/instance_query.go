@@ -1,11 +1,13 @@
 package orchestrator
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pinchtab/pinchtab/internal/api/types"
@@ -35,6 +37,7 @@ func (o *Orchestrator) List() []bridge.Instance {
 	for _, inst := range o.instances {
 		copyInst := inst.Instance
 		copyInst.Status = effectiveInstanceStatus(copyInst.Status, instanceIsActive(inst))
+		copyInst.Responsiveness = bridge.NormalizeResponsiveness(copyInst.Responsiveness)
 		if crashes, ok := o.crashes[inst.ID]; ok && crashes.Total > 0 {
 			summary := crashes
 			copyInst.Crashes = &summary
@@ -44,10 +47,34 @@ func (o *Orchestrator) List() []bridge.Instance {
 	return result
 }
 
-// RefreshCrashes asks every live instance for its crash record and keeps the
-// answers, so List can carry them and CrashSummary can merge them. Browser
-// crashes are recorded by the process that owns the browser, which in server
-// mode is never this one.
+type instanceProbe struct {
+	crashes        *bridge.CrashSummary
+	responsiveness string
+}
+
+func (o *Orchestrator) probeInstance(inst *InstanceInternal) instanceProbe {
+	ctx, cancel := context.WithTimeout(context.Background(), responsivenessProbeBudget)
+	defer cancel()
+	var tabsErr error
+	done := make(chan struct{})
+	go func() {
+		tabsErr = o.probeTabs(ctx, inst)
+		close(done)
+	}()
+	crashes, healthErr := o.fetchCrashes(ctx, inst)
+	<-done
+	if crashes != nil {
+		for i := range crashes.Recent {
+			crashes.Recent[i].InstanceID = inst.ID
+		}
+	}
+	return instanceProbe{crashes: crashes, responsiveness: classifyResponsiveness(healthErr, tabsErr)}
+}
+
+// RefreshCrashes asks every live instance for its crash record and probes its
+// tabs route, so List can carry both and CrashSummary can merge the crashes.
+// Browser crashes are recorded by the process that owns the browser, which in
+// server mode is never this one.
 func (o *Orchestrator) RefreshCrashes() map[string]bridge.CrashSummary {
 	o.mu.RLock()
 	instances := make([]*InstanceInternal, 0, len(o.instances))
@@ -58,24 +85,32 @@ func (o *Orchestrator) RefreshCrashes() map[string]bridge.CrashSummary {
 	}
 	o.mu.RUnlock()
 
-	fresh := make(map[string]bridge.CrashSummary, len(instances))
-	for _, inst := range instances {
-		crashes, err := o.fetchCrashes(inst)
-		if err != nil || crashes == nil {
-			continue
-		}
-		for i := range crashes.Recent {
-			crashes.Recent[i].InstanceID = inst.ID
-		}
-		fresh[inst.ID] = *crashes
+	probes := make([]instanceProbe, len(instances))
+	var wg sync.WaitGroup
+	for i, inst := range instances {
+		wg.Add(1)
+		go func(i int, inst *InstanceInternal) {
+			defer wg.Done()
+			probes[i] = o.probeInstance(inst)
+		}(i, inst)
 	}
+	wg.Wait()
 
+	fresh := make(map[string]bridge.CrashSummary, len(instances))
 	o.mu.Lock()
 	if o.crashes == nil {
 		o.crashes = map[string]bridge.CrashSummary{}
 	}
-	for id, crashes := range fresh {
-		o.crashes[id] = crashes
+	for _, inst := range o.instances {
+		inst.Responsiveness = bridge.ResponsivenessUnknown
+	}
+	for i, inst := range instances {
+		inst.Responsiveness = probes[i].responsiveness
+		if probes[i].crashes == nil {
+			continue
+		}
+		fresh[inst.ID] = *probes[i].crashes
+		o.crashes[inst.ID] = *probes[i].crashes
 	}
 	o.mu.Unlock()
 	return fresh

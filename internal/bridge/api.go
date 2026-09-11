@@ -329,12 +329,30 @@ type Instance struct {
 	FallbackReason string `json:"fallbackReason,omitempty"`
 
 	Crashes *CrashSummary `json:"crashes,omitempty"`
+
+	Responsiveness string `json:"responsiveness"`
+}
+
+const (
+	ResponsivenessResponsive   = "responsive"
+	ResponsivenessUnresponsive = "unresponsive"
+	ResponsivenessUnknown      = "unknown"
+)
+
+func NormalizeResponsiveness(value string) string {
+	switch value {
+	case ResponsivenessResponsive, ResponsivenessUnresponsive:
+		return value
+	default:
+		return ResponsivenessUnknown
+	}
 }
 
 func (i Instance) MarshalJSON() ([]byte, error) {
 	type alias Instance
 	copy := alias(i)
 	copy.Mode = normalizeInstanceMode(copy.Mode, copy.Headless)
+	copy.Responsiveness = NormalizeResponsiveness(copy.Responsiveness)
 	return json.Marshal(copy)
 }
 

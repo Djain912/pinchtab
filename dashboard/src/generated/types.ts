@@ -59,6 +59,7 @@ export interface Instance {
   fallbackFrom?: string;
   fallbackReason?: string;
   crashes?: CrashSummary;
+  responsiveness: string; // responsive/unresponsive/unknown
 }
 export interface CrashEvent {
   time: string;

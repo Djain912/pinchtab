@@ -57,6 +57,8 @@ type Instance struct {
 	FallbackReason string `json:"fallbackReason,omitempty"`
 
 	Crashes *CrashSummary `json:"crashes,omitempty"`
+
+	Responsiveness string `json:"responsiveness"` // responsive/unresponsive/unknown
 }
 
 type CrashEvent struct {
