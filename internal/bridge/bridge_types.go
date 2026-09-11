@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/pinchtab/pinchtab/internal/browserops"
@@ -25,10 +26,11 @@ type TabEntry struct {
 	CreatorScope          string
 	UsedByOtherScope      bool
 
-	idleTimer  *time.Timer
-	idleGen    uint64
-	frozen     bool
-	awakeHolds int
+	idleTimer   *time.Timer
+	idleGen     uint64
+	frozen      bool
+	awakeHolds  int
+	lifecycleMu sync.Mutex
 }
 
 type RefTarget struct {

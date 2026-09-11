@@ -9,7 +9,6 @@ import (
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 	"github.com/pinchtab/pinchtab/internal/config"
-	"github.com/pinchtab/pinchtab/internal/ids"
 	"github.com/pinchtab/pinchtab/internal/testbrowser"
 )
 
@@ -53,13 +52,6 @@ func TestFreezeIdleFreezesARealTabAndAnActionUnfreezesIt(t *testing.T) {
 	tm := NewTabManager(browserCtx, &config.RuntimeConfig{TabLifecyclePolicy: "freeze_idle", TabCloseDelay: 50 * time.Millisecond}, nil, nil, nil)
 	tabID := string(raw)
 	tm.tabs[tabID] = &TabEntry{Ctx: tabCtx, CDPID: tabID, CreatedAt: time.Now(), LastUsed: time.Now()}
-
-	b := &Bridge{TabManager: tm, IdMgr: ids.NewManager()}
-	release := b.holdTabAwake(tabCtx)
-	if tm.tabs[tabID].awakeHolds != 1 {
-		t.Fatal("a screencast on the tab context did not hold the tab awake")
-	}
-	release()
 
 	tm.ScheduleIdleLifecycle(tabID)
 	deadline := time.Now().Add(5 * time.Second)

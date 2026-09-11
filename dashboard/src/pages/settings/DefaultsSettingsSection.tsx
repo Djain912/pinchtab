@@ -142,7 +142,7 @@ export function DefaultsSettingsSection({
       </SettingRow>
       <SettingRow
         label="Tab lifecycle"
-        description="Optionally close or freeze idle tabs after a /text, /snapshot, or /action response. The timer resets on each subsequent request and is cancelled by /navigate; a frozen tab unfreezes on its next request."
+        description="Close idle closes a tab after a /text, /snapshot, or /action response once the delay passes; /navigate cancels it. Freeze idle freezes any tab no request has touched for the delay and unfreezes it on its next request."
       >
         <Select
           value={backendConfig.instanceDefaults.tabPolicy?.lifecycle ?? "keep"}

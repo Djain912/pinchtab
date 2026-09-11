@@ -28,6 +28,7 @@ func (h *Handlers) tabContext(r *http.Request, tabID string) (context.Context, s
 		return nil, "", noCurrentTabError(scope.Description())
 	}
 	if err == nil {
+		h.holdTabAwakeForRequest(r, resolvedID)
 		h.setCurrentTabForRequest(r, resolvedID)
 		h.recordActivity(r, activity.Update{TabID: resolvedID})
 	}
@@ -78,6 +79,18 @@ func (h *Handlers) recordResolvedURL(r *http.Request, url string) {
 
 func (h *Handlers) recordResolvedTab(r *http.Request, tabID string) {
 	h.recordActivity(r, activity.Update{TabID: tabID})
+}
+
+type tabAwakeHolder interface {
+	HoldAwakeUntil(ctx context.Context, tabID string)
+}
+
+var _ tabAwakeHolder = (*bridge.Bridge)(nil)
+
+func (h *Handlers) holdTabAwakeForRequest(r *http.Request, tabID string) {
+	if holder, ok := h.Bridge.(tabAwakeHolder); ok {
+		holder.HoldAwakeUntil(r.Context(), tabID)
+	}
 }
 
 type tabScopeTracker interface {

@@ -123,7 +123,9 @@ func (tm *TabManager) adoptExistingTarget(targetID target.ID, enforceLimit bool)
 		if entry == nil || entry.Ctx == nil {
 			return "", fmt.Errorf("tab %s has no active context", tabID)
 		}
-		tm.touchTab(tabID)
+		if err := tm.touchTab(tabID); err != nil {
+			return "", err
+		}
 		return tabID, nil
 	}
 

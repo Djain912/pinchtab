@@ -23,29 +23,10 @@ import (
 // mode. Polling is used for headless browsers and providers whose CDP proxy
 // does not support Page.startScreencast (e.g. Cloak).
 func (b *Bridge) StartScreencast(ctx context.Context, opts ScreencastOpts) (*ScreencastStream, error) {
-	release := b.holdTabAwake(ctx)
-	start := b.startScreencastEventDriven
 	if b.shouldUsePollingScreencast() {
-		start = b.startScreencastPolling
+		return b.startScreencastPolling(ctx, opts)
 	}
-	stream, err := start(ctx, opts)
-	if err != nil {
-		release()
-		return nil, err
-	}
-	go func() {
-		<-stream.Done()
-		release()
-	}()
-	return stream, nil
-}
-
-func (b *Bridge) holdTabAwake(ctx context.Context) (release func()) {
-	c := chromedp.FromContext(ctx)
-	if b.TabManager == nil || c == nil || c.Target == nil {
-		return func() {}
-	}
-	return b.HoldAwake(b.IdMgr.TabIDFromCDPTarget(string(c.Target.TargetID)))
+	return b.startScreencastEventDriven(ctx, opts)
 }
 
 func (b *Bridge) shouldUsePollingScreencast() bool {

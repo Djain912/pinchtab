@@ -481,8 +481,8 @@ func TestHandleAction_AutoCloseArmedAfterActionError(t *testing.T) {
 	}
 }
 
-func TestHandleAction_IdleLifecycleArmedUnderEveryIdlePolicy(t *testing.T) {
-	for _, policy := range []string{"close_idle", "freeze_idle"} {
+func TestHandleAction_OnlyCloseIdleIsArmedByTheHandler(t *testing.T) {
+	for policy, want := range map[string]int{"close_idle": 1, "freeze_idle": 0, "keep": 0} {
 		t.Run(policy, func(t *testing.T) {
 			mb := &mockBridge{}
 			h := New(mb, &config.RuntimeConfig{ActionTimeout: time.Second, TabLifecyclePolicy: policy}, nil, nil, nil)
@@ -490,8 +490,8 @@ func TestHandleAction_IdleLifecycleArmedUnderEveryIdlePolicy(t *testing.T) {
 
 			h.HandleAction(httptest.NewRecorder(), req)
 
-			if got := mb.autoCloseArmed; len(got) != 1 || got[0] != "tab1" {
-				t.Fatalf("idle timer armed for %#v, want [tab1]", got)
+			if got := len(mb.autoCloseArmed); got != want {
+				t.Fatalf("handler armed the idle timer %d times, want %d", got, want)
 			}
 		})
 	}

@@ -9,11 +9,11 @@ import (
 	"github.com/chromedp/cdproto/target"
 )
 
-func (tm *TabManager) markAccessed(tabID string) {
-	tm.touchTab(tabID)
+func (tm *TabManager) markAccessed(tabID string) error {
 	tm.mu.Lock()
 	tm.currentTab = tabID
 	tm.mu.Unlock()
+	return tm.touchTab(tabID)
 }
 
 func (tm *TabManager) CurrentTabID() string {
@@ -128,8 +128,9 @@ func (tm *TabManager) TabContext(tabID string) (context.Context, string, error) 
 		return nil, "", fmt.Errorf("tab %s has no active context", tabID)
 	}
 
-	tm.markAccessed(tabID)
-
+	if err := tm.markAccessed(tabID); err != nil {
+		return nil, "", err
+	}
 	return entry.Ctx, tabID, nil
 }
 

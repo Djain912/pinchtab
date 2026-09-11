@@ -50,7 +50,6 @@ type TabManager struct {
 	guardOnce         sync.Once
 	guardActive       bool
 	mu                sync.RWMutex
-	lifecycleMu       sync.Mutex
 	freezeVeto        func(tabID string) bool
 	setFrozen         func(ctx context.Context, frozen bool) error
 

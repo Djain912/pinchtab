@@ -237,19 +237,19 @@ func (h *Handlers) ensureBrowserOrRespond(w http.ResponseWriter, cfg *config.Run
 }
 
 func (h *Handlers) armIdleLifecycle(tabID string) {
-	if h.idleLifecycleActive(tabID) {
+	if h.closesIdleTabs(tabID) {
 		h.Bridge.ScheduleIdleLifecycle(tabID)
 	}
 }
 
 func (h *Handlers) cancelIdleLifecycle(tabID string) {
-	if h.idleLifecycleActive(tabID) {
+	if h.closesIdleTabs(tabID) {
 		h.Bridge.CancelIdleLifecycle(tabID)
 	}
 }
 
-func (h *Handlers) idleLifecycleActive(tabID string) bool {
-	return h != nil && h.Bridge != nil && tabID != "" && h.Config != nil && config.IdleTabLifecycle(h.Config.TabLifecyclePolicy)
+func (h *Handlers) closesIdleTabs(tabID string) bool {
+	return h != nil && h.Bridge != nil && tabID != "" && h.Config != nil && h.Config.TabLifecyclePolicy == "close_idle"
 }
 
 // clearTabFrameScope drops any active frame scope on a tab. Call from
