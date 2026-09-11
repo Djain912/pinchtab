@@ -55,7 +55,7 @@ The background daemon (`pinchtab daemon install`) is a convenience for persisten
 
 As an alternative to the daemon, run `pinchtab server` in the foreground — it stops when the terminal closes.
 
-Agent sessions expire after **30 minutes of idle** by default (`sessions.agent.idleTimeoutSec`), and tabs can auto-close via `tabPolicy.lifecycle: "close_idle"`.
+Agent sessions expire after **30 minutes of idle** by default (`sessions.agent.idleTimeoutSec`), and tabs can auto-close via `tabPolicy.lifecycle: "close_idle"` or freeze via `"freeze_idle"`.
 
 ## Builds & Verification
 

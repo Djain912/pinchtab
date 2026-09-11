@@ -134,7 +134,7 @@ func tabPolicyDefaultsFromRuntime(cfg *RuntimeConfig) *TabPolicyDefaults {
 	out := &TabPolicyDefaults{}
 	if hasLifecycle {
 		out.Lifecycle = cfg.TabLifecyclePolicy
-		if cfg.TabLifecyclePolicy == "close_idle" && cfg.TabCloseDelay > 0 && cfg.TabCloseDelay != 5*time.Minute {
+		if IdleTabLifecycle(cfg.TabLifecyclePolicy) && cfg.TabCloseDelay > 0 && cfg.TabCloseDelay != 5*time.Minute {
 			sec := int(cfg.TabCloseDelay / time.Second)
 			out.CloseDelaySec = &sec
 		}

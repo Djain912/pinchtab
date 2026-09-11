@@ -1022,6 +1022,7 @@ func TestValidateFileConfig_TabPolicyBlock(t *testing.T) {
 		{"all empty", TabPolicyDefaults{}, false},
 		{"valid lifecycle", TabPolicyDefaults{Lifecycle: "close_idle"}, false},
 		{"keep lifecycle", TabPolicyDefaults{Lifecycle: "keep"}, false},
+		{"freeze lifecycle", TabPolicyDefaults{Lifecycle: "freeze_idle"}, false},
 		{"valid eviction", TabPolicyDefaults{Eviction: "reject"}, false},
 		{"bad lifecycle", TabPolicyDefaults{Lifecycle: "burn"}, true},
 		{"bad eviction", TabPolicyDefaults{Eviction: "drop"}, true},

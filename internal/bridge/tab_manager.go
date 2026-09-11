@@ -50,6 +50,9 @@ type TabManager struct {
 	guardOnce         sync.Once
 	guardActive       bool
 	mu                sync.RWMutex
+	lifecycleMu       sync.Mutex
+	freezeVeto        func(tabID string) bool
+	setFrozen         func(ctx context.Context, frozen bool) error
 
 	// pendingClicks tracks in-flight click actions that may open a popup.
 	// Keyed by the opener tab's raw CDP target ID. Read by the popup guard
@@ -76,6 +79,7 @@ func NewTabManager(browserCtx context.Context, cfg *config.RuntimeConfig, idMgr 
 		onTabSetup: onTabSetup,
 		logStore:   logStore,
 		executor:   NewTabExecutor(maxParallel),
+		setFrozen:  setTabFrozen,
 	}
 }
 
@@ -356,7 +360,7 @@ func (tm *TabManager) FocusTab(tabID string) error {
 	if tm == nil {
 		return fmt.Errorf("tab manager not initialized")
 	}
-	ctx, resolvedID, err := tm.TabContext(tabID)
+	ctx, _, err := tm.TabContext(tabID)
 	if err != nil {
 		return err
 	}
@@ -366,14 +370,6 @@ func (tm *TabManager) FocusTab(tabID string) error {
 	})); err != nil {
 		return fmt.Errorf("bring to front: %w", err)
 	}
-
-	tm.mu.Lock()
-	tm.currentTab = resolvedID
-	if entry, ok := tm.tabs[resolvedID]; ok {
-		entry.LastUsed = time.Now()
-	}
-	tm.mu.Unlock()
-
 	return nil
 }
 

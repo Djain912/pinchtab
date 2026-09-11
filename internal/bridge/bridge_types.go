@@ -25,10 +25,10 @@ type TabEntry struct {
 	CreatorScope          string
 	UsedByOtherScope      bool
 
-	// Lifecycle auto-close timer. autoCloseGen is bumped on every (re)schedule
-	// so a fire that races with a reset/cancel can detect itself and bail.
-	autoCloseTimer *time.Timer
-	autoCloseGen   uint64
+	idleTimer  *time.Timer
+	idleGen    uint64
+	frozen     bool
+	awakeHolds int
 }
 
 type RefTarget struct {

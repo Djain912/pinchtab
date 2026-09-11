@@ -481,6 +481,22 @@ func TestHandleAction_AutoCloseArmedAfterActionError(t *testing.T) {
 	}
 }
 
+func TestHandleAction_IdleLifecycleArmedUnderEveryIdlePolicy(t *testing.T) {
+	for _, policy := range []string{"close_idle", "freeze_idle"} {
+		t.Run(policy, func(t *testing.T) {
+			mb := &mockBridge{}
+			h := New(mb, &config.RuntimeConfig{ActionTimeout: time.Second, TabLifecyclePolicy: policy}, nil, nil, nil)
+			req := httptest.NewRequest("POST", "/action", bytes.NewReader([]byte(`{"kind":"click"}`)))
+
+			h.HandleAction(httptest.NewRecorder(), req)
+
+			if got := mb.autoCloseArmed; len(got) != 1 || got[0] != "tab1" {
+				t.Fatalf("idle timer armed for %#v, want [tab1]", got)
+			}
+		})
+	}
+}
+
 func TestHandleAction_PostRejectsInvalidDialogAction(t *testing.T) {
 	h := New(&mockBridge{}, &config.RuntimeConfig{}, nil, nil, nil)
 	req := httptest.NewRequest("POST", "/action", bytes.NewReader([]byte(`{"kind":"click","selector":"#btn","dialogAction":"maybe"}`)))

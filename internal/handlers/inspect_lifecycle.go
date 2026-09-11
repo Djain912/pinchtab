@@ -96,7 +96,7 @@ func (h *Handlers) inspectElement(w http.ResponseWriter, r *http.Request, tabID 
 	if !ok {
 		return
 	}
-	defer h.armAutoCloseIfEnabled(resolvedTabID)
+	defer h.armIdleLifecycle(resolvedTabID)
 
 	tCtx, tCancel := context.WithTimeout(ctx, h.Config.ActionTimeout)
 	defer tCancel()

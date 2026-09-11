@@ -193,8 +193,12 @@ curl -X POST http://localhost:9867/close \
 By default, tabs use the `keep` lifecycle policy and are not auto-closed after
 reads or actions. Set `instanceDefaults.tabPolicy.lifecycle` to `close_idle` to
 auto-close a tab after an authorized `/text`, `/snapshot`, or `/action` request
-finishes. `instanceDefaults.tabPolicy.closeDelaySec` adjusts the idle delay
-when `close_idle` is enabled.
+finishes. Set it to `freeze_idle` to freeze the tab instead: its timers and
+JavaScript stop, while its DOM, session and URL survive, and the next request
+that touches the tab unfreezes it before running. A tab paused for handoff,
+streaming a screencast, or holding network interception rules is never frozen.
+`instanceDefaults.tabPolicy.closeDelaySec` adjusts the idle delay when
+`close_idle` or `freeze_idle` is enabled.
 
 ### Are tabs persistent?
 

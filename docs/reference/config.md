@@ -511,8 +511,8 @@ You can change or clear that default with `browser.extensionPaths`.
 ```
 
 - `eviction` controls what happens when `maxTabs` is reached: `close_lru`, `close_oldest`, or `reject`.
-- `lifecycle` controls idle lifecycle behavior: `keep` disables lifecycle auto-close and is the default; `close_idle` auto-closes a tab after it handles an authorized `/text`, `/snapshot`, or `/action` request.
-- `closeDelaySec` is the idle delay for `close_idle`. The default is `300` seconds when auto-close is enabled.
+- `lifecycle` controls idle lifecycle behavior: `keep` disables lifecycle auto-close and is the default; `close_idle` auto-closes a tab after it handles an authorized `/text`, `/snapshot`, or `/action` request; `freeze_idle` freezes it at the same point instead (timers and JavaScript stop, the page and session stay), and any later request on the tab unfreezes it first. Tabs paused for handoff, streaming a screencast, or holding network interception rules are never frozen.
+- `closeDelaySec` is the idle delay for `close_idle` and `freeze_idle`. The default is `300` seconds when either is enabled.
 - `restore` controls whether session tabs are restored on startup. The default is `false`.
 
 `instanceDefaults.tabEvictionPolicy` is still accepted for compatibility. New configs should use `instanceDefaults.tabPolicy.eviction`.
@@ -770,7 +770,7 @@ Valid enum values:
 | `instanceDefaults.stealthLevel` | `light`, `medium`, `full` |
 | `instanceDefaults.tabEvictionPolicy` | `reject`, `close_oldest`, `close_lru` |
 | `instanceDefaults.tabPolicy.eviction` | `reject`, `close_oldest`, `close_lru` |
-| `instanceDefaults.tabPolicy.lifecycle` | `keep`, `close_idle` |
+| `instanceDefaults.tabPolicy.lifecycle` | `keep`, `close_idle`, `freeze_idle` |
 | `multiInstance.strategy` | `simple`, `explicit`, `simple-autorestart`, `always-on`, `no-instance` |
 | `multiInstance.allocationPolicy` | `fcfs`, `round_robin`, `random` |
 | `security.attach.allowSchemes` | `ws`, `wss`, `http`, `https` |

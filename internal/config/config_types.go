@@ -102,8 +102,8 @@ type RuntimeConfig struct {
 	Humanize               bool // when true, mouse moves and clicks use a humanized bezier path with per-step jitter and pre-press delays; default false (raw, fast input)
 	StealthLevel           string
 	TabEvictionPolicy      string        // "close_lru" (default), "reject", "close_oldest" — fires on MaxTabs pressure
-	TabLifecyclePolicy     string        // "keep" (default), "close_idle" — fires on idle after read/action
-	TabCloseDelay          time.Duration // applies when TabLifecyclePolicy == "close_idle" (default 5m when enabled)
+	TabLifecyclePolicy     string        // "keep" (default), "close_idle", "freeze_idle" — fires on idle after read/action
+	TabCloseDelay          time.Duration // applies when TabLifecyclePolicy is close_idle or freeze_idle (default 5m when enabled)
 	TabRestore             bool          // restore previously open tabs from sessions.json on startup (default false)
 
 	ActionTimeout   time.Duration
@@ -429,8 +429,8 @@ type InstanceDefaultsConfig struct {
 // in instance-defaults configs. Either sub-field may be omitted.
 type TabPolicyDefaults struct {
 	Eviction      string `json:"eviction,omitempty"`      // "close_lru" | "reject" | "close_oldest"
-	Lifecycle     string `json:"lifecycle,omitempty"`     // "keep" | "close_idle"
-	CloseDelaySec *int   `json:"closeDelaySec,omitempty"` // applies to close_idle; default 300 when enabled
+	Lifecycle     string `json:"lifecycle,omitempty"`     // "keep" | "close_idle" | "freeze_idle"
+	CloseDelaySec *int   `json:"closeDelaySec,omitempty"` // applies to close_idle and freeze_idle; default 300 when enabled
 	Restore       *bool  `json:"restore,omitempty"`       // restore tabs from sessions.json on startup; default false
 }
 

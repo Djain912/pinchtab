@@ -32,10 +32,8 @@ type BridgeAPI interface {
 	CloseTab(tabID string) error
 	FocusTab(tabID string) error
 
-	// ScheduleAutoClose (re)arms the per-tab idle close timer when the
-	// lifecycle policy is "close_idle". No-op otherwise.
-	ScheduleAutoClose(tabID string)
-	CancelAutoClose(tabID string)
+	ScheduleIdleLifecycle(tabID string)
+	CancelIdleLifecycle(tabID string)
 
 	GetRefCache(tabID string) *RefCache
 	SetRefCache(tabID string, cache *RefCache)

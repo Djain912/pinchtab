@@ -106,10 +106,8 @@ func (tm *TabManager) purgeTrackedTabState(tabID, cdpTargetID string) bool {
 	}
 
 	tm.mu.Lock()
-	if entry, ok := tm.tabs[resolvedTabID]; ok && entry.autoCloseTimer != nil {
-		entry.autoCloseTimer.Stop()
-		entry.autoCloseTimer = nil
-		entry.autoCloseGen++
+	if entry, ok := tm.tabs[resolvedTabID]; ok {
+		entry.stopIdleTimer()
 	}
 	delete(tm.tabs, resolvedTabID)
 	delete(tm.snapshots, resolvedTabID)

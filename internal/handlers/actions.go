@@ -502,7 +502,7 @@ func (h *Handlers) HandleAction(w http.ResponseWriter, r *http.Request) {
 		if _, ok := h.applyTabGuards(w, r, ctx, resolvedTabID, guardDialogBlocked|guardDomainPolicy|guardHandoffPause); !ok {
 			return
 		}
-		defer h.armAutoCloseIfEnabled(resolvedTabID)
+		defer h.armIdleLifecycle(resolvedTabID)
 	}
 	h.recordResolvedTab(r, resolvedTabID)
 	w.Header().Set(activity.HeaderPTTabID, resolvedTabID)

@@ -236,29 +236,20 @@ func (h *Handlers) ensureBrowserOrRespond(w http.ResponseWriter, cfg *config.Run
 	return true
 }
 
-// armAutoCloseIfEnabled (re)arms the per-tab idle close timer when the
-// instance has lifecycle policy "close_idle". Call when an authorized
-// read/action request has finished using the tab.
-func (h *Handlers) armAutoCloseIfEnabled(tabID string) {
-	if h == nil || h.Bridge == nil || tabID == "" {
-		return
+func (h *Handlers) armIdleLifecycle(tabID string) {
+	if h.idleLifecycleActive(tabID) {
+		h.Bridge.ScheduleIdleLifecycle(tabID)
 	}
-	if h.Config == nil || h.Config.TabLifecyclePolicy != "close_idle" {
-		return
-	}
-	h.Bridge.ScheduleAutoClose(tabID)
 }
 
-// cancelAutoCloseIfEnabled stops a pending auto-close timer. Call from
-// /navigate to indicate fresh work on the tab.
-func (h *Handlers) cancelAutoCloseIfEnabled(tabID string) {
-	if h == nil || h.Bridge == nil || tabID == "" {
-		return
+func (h *Handlers) cancelIdleLifecycle(tabID string) {
+	if h.idleLifecycleActive(tabID) {
+		h.Bridge.CancelIdleLifecycle(tabID)
 	}
-	if h.Config == nil || h.Config.TabLifecyclePolicy != "close_idle" {
-		return
-	}
-	h.Bridge.CancelAutoClose(tabID)
+}
+
+func (h *Handlers) idleLifecycleActive(tabID string) bool {
+	return h != nil && h.Bridge != nil && tabID != "" && h.Config != nil && config.IdleTabLifecycle(h.Config.TabLifecyclePolicy)
 }
 
 // clearTabFrameScope drops any active frame scope on a tab. Call from

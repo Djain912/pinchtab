@@ -423,7 +423,8 @@
           "enum": [
             "",
             "keep",
-            "close_idle"
+            "close_idle",
+            "freeze_idle"
           ]
         },
         "closeDelaySec": {

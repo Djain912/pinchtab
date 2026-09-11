@@ -49,7 +49,7 @@ func (h *Handlers) HandleText(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	defer h.armAutoCloseIfEnabled(resolvedTabID)
+	defer h.armIdleLifecycle(resolvedTabID)
 	defer cancel()
 
 	targetFrameID := h.resolveTargetFrameID(r, resolvedTabID)

@@ -725,7 +725,7 @@ func applyInstanceDefaultsConfig(cfg *RuntimeConfig, d *InstanceDefaultsConfig) 
 			cfg.TabRestore = *tp.Restore
 		}
 	}
-	if cfg.TabLifecyclePolicy == "close_idle" && cfg.TabCloseDelay < time.Second {
+	if IdleTabLifecycle(cfg.TabLifecyclePolicy) && cfg.TabCloseDelay < time.Second {
 		cfg.TabCloseDelay = time.Second
 	}
 	if d.DialogAutoAccept != nil {

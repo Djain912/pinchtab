@@ -10,11 +10,8 @@ import (
 )
 
 func (tm *TabManager) markAccessed(tabID string) {
+	tm.touchTab(tabID)
 	tm.mu.Lock()
-	tm.accessed[tabID] = true
-	if entry, ok := tm.tabs[tabID]; ok {
-		entry.LastUsed = time.Now()
-	}
 	tm.currentTab = tabID
 	tm.mu.Unlock()
 }

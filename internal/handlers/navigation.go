@@ -440,7 +440,7 @@ func (h *Handlers) executeNavigate(w http.ResponseWriter, r *http.Request, req n
 	}
 	// Navigate signals fresh work on this tab — drop any pending auto-close
 	// timer; the next read/action will re-arm.
-	h.cancelAutoCloseIfEnabled(resolvedTabID)
+	h.cancelIdleLifecycle(resolvedTabID)
 
 	tCtx, tCancel := context.WithTimeout(ctx, navTimeout)
 	defer tCancel()

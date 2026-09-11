@@ -85,7 +85,7 @@ func (h *Handlers) handleInspect(w http.ResponseWriter, r *http.Request, kind in
 	if !ok {
 		return
 	}
-	defer h.armAutoCloseIfEnabled(resolvedTabID)
+	defer h.armIdleLifecycle(resolvedTabID)
 	defer cancel()
 
 	targetFrameID := h.resolveTargetFrameID(r, resolvedTabID)

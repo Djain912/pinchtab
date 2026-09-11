@@ -119,10 +119,10 @@ func (m *mockBridge) FocusTab(tabID string) error {
 	return nil
 }
 
-func (m *mockBridge) ScheduleAutoClose(tabID string) {
+func (m *mockBridge) ScheduleIdleLifecycle(tabID string) {
 	m.autoCloseArmed = append(m.autoCloseArmed, tabID)
 }
-func (m *mockBridge) CancelAutoClose(tabID string) {
+func (m *mockBridge) CancelIdleLifecycle(tabID string) {
 	m.autoCloseCanceled = append(m.autoCloseCanceled, tabID)
 }
 

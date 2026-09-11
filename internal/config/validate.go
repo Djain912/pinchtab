@@ -200,7 +200,7 @@ func ValidateFileConfig(fc *FileConfig) []error {
 		if tp.Lifecycle != "" && !isValidLifecyclePolicy(tp.Lifecycle) {
 			errs = append(errs, ValidationError{
 				Field:   "instanceDefaults.tabPolicy.lifecycle",
-				Message: fmt.Sprintf("invalid value %q (must be keep or close_idle)", tp.Lifecycle),
+				Message: fmt.Sprintf("invalid value %q (must be keep, close_idle, or freeze_idle)", tp.Lifecycle),
 			})
 		}
 		if tp.CloseDelaySec != nil && *tp.CloseDelaySec < 0 {
@@ -490,7 +490,7 @@ var (
 	cloakPlatforms     = []string{"windows", "macos", "linux"}
 	stealthLevels      = []string{"light", "medium", "full"}
 	evictionPolicies   = []string{"reject", "close_oldest", "close_lru"}
-	lifecyclePolicies  = []string{"keep", "close_idle"}
+	lifecyclePolicies  = []string{"keep", "close_idle", "freeze_idle"}
 	strategies         = []string{"simple", "explicit", "simple-autorestart", "always-on", "no-instance"}
 	allocationPolicies = []string{"fcfs", "round_robin", "random"}
 	attachSchemes      = []string{"ws", "wss", "http", "https"}
@@ -510,6 +510,10 @@ func isValidEvictionPolicy(policy string) bool {
 
 func isValidLifecyclePolicy(policy string) bool {
 	return slices.Contains(lifecyclePolicies, policy)
+}
+
+func IdleTabLifecycle(policy string) bool {
+	return policy == "close_idle" || policy == "freeze_idle"
 }
 
 func ValidLifecyclePolicies() []string {
