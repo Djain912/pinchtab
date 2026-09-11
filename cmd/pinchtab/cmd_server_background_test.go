@@ -460,37 +460,67 @@ func TestEveryFlagTheServerDeclaresTravelsToTheDetachedChild(t *testing.T) {
 		"background":            "the flag that spawns the child; forwarding it would fork forever",
 		backgroundChildFlagName: "the child marker, passed positionally by backgroundServerArgs itself",
 	}
-	args := backgroundServerArgs("marker", serverBackgroundOptions{
-		Yolo:       true,
-		Headed:     true,
-		Verbose:    true,
-		LogLevel:   "debug",
-		Extensions: []string{"/ext"},
-		Browser:    "chrome",
-		Bind:       "127.0.0.1",
-		Port:       "9999",
-	})
-	joined := " " + strings.Join(args, " ") + " "
-	checked := 0
-	serverCmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
-		if reason, ok := notForwarded[f.Name]; ok {
-			if reason == "" {
-				t.Errorf("--%s is exempt with no reason recorded", f.Name)
+	freshServerFlags := func() *pflag.FlagSet {
+		fs := pflag.NewFlagSet("server", pflag.ContinueOnError)
+		serverCmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+			switch f.Value.Type() {
+			case "bool":
+				fs.BoolP(f.Name, f.Shorthand, false, "")
+			case "string":
+				fs.StringP(f.Name, f.Shorthand, "", "")
+			case "stringArray":
+				fs.StringArrayP(f.Name, f.Shorthand, nil, "")
+			default:
+				t.Fatalf("--%s has flag type %q the census cannot drive", f.Name, f.Value.Type())
 			}
+		})
+		return fs
+	}
+
+	parent := freshServerFlags()
+	var argv []string
+	parent.VisitAll(func(f *pflag.Flag) {
+		if _, exempt := notForwarded[f.Name]; exempt {
+			return
+		}
+		if f.Value.Type() == "bool" {
+			argv = append(argv, "--"+f.Name)
+			return
+		}
+		argv = append(argv, "--"+f.Name, "value-of-"+f.Name)
+		if f.Value.Type() == "stringArray" {
+			argv = append(argv, "--"+f.Name, "second-value-of-"+f.Name)
+		}
+	})
+	if err := parent.Parse(argv); err != nil {
+		t.Fatalf("parse parent argv %v: %v", argv, err)
+	}
+
+	childArgv := backgroundServerArgs("marker", serverBackgroundOptionsFromFlags(parent))
+	child := freshServerFlags()
+	if err := child.Parse(childArgv[1:]); err != nil {
+		t.Fatalf("parse child argv %v: %v", childArgv, err)
+	}
+
+	checked := 0
+	parent.VisitAll(func(f *pflag.Flag) {
+		if _, exempt := notForwarded[f.Name]; exempt {
 			return
 		}
 		checked++
-		long := " --" + f.Name + " "
-		short := ""
-		if f.Shorthand != "" {
-			short = " -" + f.Shorthand + " "
-		}
-		if !strings.Contains(joined, long) && (short == "" || !strings.Contains(joined, short)) {
-			t.Errorf("--%s is declared by the server subcommand and applied by the parent, but backgroundServerArgs never forwards it; the detached child would start without it", f.Name)
+		got := child.Lookup(f.Name)
+		if !got.Changed || got.Value.String() != f.Value.String() {
+			t.Errorf("--%s=%s is declared by the server subcommand and applied by the parent, but the detached child parses it as %q (set=%v)", f.Name, f.Value, got.Value, got.Changed)
 		}
 	})
 	if checked < 6 {
 		t.Fatalf("checked only %d forwarded flags; this census would prove little", checked)
+	}
+	if got := child.Lookup(backgroundChildFlagName).Value.String(); got != "marker" {
+		t.Errorf("child marker = %q, want %q", got, "marker")
+	}
+	if child.Changed("background") {
+		t.Errorf("the detached child was handed --background and would fork again: %v", childArgv)
 	}
 	for _, inherited := range []string{"server", "agent-id"} {
 		if serverCmd.LocalFlags().Lookup(inherited) != nil {
