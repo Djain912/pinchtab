@@ -153,5 +153,5 @@ func handleNetworkRules(c *Client) func(context.Context, mcp.CallToolRequest) (*
 }
 
 func tabNetworkRoutePath(tabID string) string {
-	return "/tabs/" + url.PathEscape(tabID) + "/network/route"
+	return tabRoutePath(tabID, "network/route")
 }

@@ -78,7 +78,7 @@ func handleHistoryNav(c *Client, verb string) func(context.Context, mcp.CallTool
 		tabID := optString(r, "tabId")
 		path := "/" + verb
 		if tabID != "" {
-			path = "/tabs/" + url.PathEscape(tabID) + "/" + verb
+			path = tabRoutePath(tabID, verb)
 		}
 		body, code, err := c.Post(ctx, routedPath(r, path), nil)
 		if err != nil {
