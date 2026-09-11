@@ -14,6 +14,7 @@ import (
 	"github.com/pinchtab/pinchtab/internal/config"
 	"github.com/pinchtab/pinchtab/internal/daemon"
 	"github.com/pinchtab/pinchtab/internal/server"
+	"github.com/spf13/pflag"
 )
 
 func TestDetachedDaemonOwnershipTreatsUnsupportedOSAsNotInstalled(t *testing.T) {
@@ -447,5 +448,49 @@ func TestBackgroundServerArgsLogLevelForwarding(t *testing.T) {
 	want := []string{"server", "--background-child", "marker-123", "--log-level", "warn"}
 	if !reflect.DeepEqual(explicit, want) {
 		t.Errorf("backgroundServerArgs() = %#v, want %#v", explicit, want)
+	}
+}
+
+func TestEveryFlagTheServerDeclaresTravelsToTheDetachedChild(t *testing.T) {
+	notForwarded := map[string]string{
+		"background":            "the flag that spawns the child; forwarding it would fork forever",
+		backgroundChildFlagName: "the child marker, passed positionally by backgroundServerArgs itself",
+	}
+	args := backgroundServerArgs("marker", serverBackgroundOptions{
+		Yolo:       true,
+		Headed:     true,
+		Verbose:    true,
+		LogLevel:   "debug",
+		Extensions: []string{"/ext"},
+		Browser:    "chrome",
+		Bind:       "127.0.0.1",
+		Port:       "9999",
+	})
+	joined := " " + strings.Join(args, " ") + " "
+	checked := 0
+	serverCmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+		if reason, ok := notForwarded[f.Name]; ok {
+			if reason == "" {
+				t.Errorf("--%s is exempt with no reason recorded", f.Name)
+			}
+			return
+		}
+		checked++
+		long := " --" + f.Name + " "
+		short := ""
+		if f.Shorthand != "" {
+			short = " -" + f.Shorthand + " "
+		}
+		if !strings.Contains(joined, long) && (short == "" || !strings.Contains(joined, short)) {
+			t.Errorf("--%s is declared by the server subcommand and applied by the parent, but backgroundServerArgs never forwards it; the detached child would start without it", f.Name)
+		}
+	})
+	if checked < 6 {
+		t.Fatalf("checked only %d forwarded flags; this census would prove little", checked)
+	}
+	for _, inherited := range []string{"server", "agent-id"} {
+		if serverCmd.LocalFlags().Lookup(inherited) != nil {
+			t.Errorf("--%s is a root persistent flag yet reads as one the server declares; the census would then demand a client-side flag be forwarded to the server itself", inherited)
+		}
 	}
 }
