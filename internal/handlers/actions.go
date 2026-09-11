@@ -143,7 +143,7 @@ func (h *Handlers) mapDialogBlockingError(err error, kind, tabID string) (string
 
 func (h *Handlers) dialogAwareActionError(err error, kind, tabID, fallback string) string {
 	if message, _, ok := h.mapDialogBlockingError(err, kind, tabID); ok {
-		return message
+		return dialogBlockedStepError(message)
 	}
 	return fallback
 }

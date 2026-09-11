@@ -14,13 +14,11 @@ func (e *TabLimitError) Error() string {
 	return fmt.Sprintf("tab limit reached (%d/%d)", e.Current, e.Max)
 }
 
-// ErrDialogBlocking is returned when a click action is blocked by a
-// JavaScript dialog (alert/confirm/prompt) and no --dialog-action was provided.
 type ErrDialogBlocking struct {
 	DialogType    string
 	DialogMessage string
 }
 
 func (e *ErrDialogBlocking) Error() string {
-	return fmt.Sprintf("click blocked by JavaScript dialog (%s: %q) — use --dialog-action accept|dismiss", e.DialogType, e.DialogMessage)
+	return fmt.Sprintf("click blocked by JavaScript dialog (%s: %q)", e.DialogType, e.DialogMessage)
 }
