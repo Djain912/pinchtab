@@ -715,8 +715,10 @@ func (h *Handlers) writeUnknownActionKind(w http.ResponseWriter, kind string) {
 	message := fmt.Sprintf("%s: %s", bridge.ErrUnknownAction, kind)
 	var details map[string]any
 	if available := h.Bridge.AvailableActions(); len(available) > 0 {
-		message += " - valid values: " + strings.Join(available, ", ")
-		details = map[string]any{"validKinds": available}
+		kinds := append([]string(nil), available...)
+		sort.Strings(kinds)
+		message += " - valid values: " + strings.Join(kinds, ", ")
+		details = map[string]any{"validKinds": kinds}
 	}
 	httpx.ErrorCode(w, http.StatusBadRequest, "unknown_action_kind", message, false, details)
 }

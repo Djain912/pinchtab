@@ -63,6 +63,32 @@ func TestUnknownActionKindAnswersOneCodedRefusalFromEitherPath(t *testing.T) {
 	}
 }
 
+func TestUnknownActionKindListsTheValidKindsInAStableOrder(t *testing.T) {
+	available := []string{"type", "click", "hover"}
+	mb := &mockBridge{availableActions: available}
+	h := New(mb, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
+	w := postAction(t, h, `{"kind":"zap","tabId":"tab1"}`)
+	var body struct {
+		Error   string `json:"error"`
+		Details struct {
+			ValidKinds []string `json:"validKinds"`
+		} `json:"details"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v: %s", err, w.Body.String())
+	}
+	want := []string{"click", "hover", "type"}
+	if strings.Join(body.Details.ValidKinds, ",") != strings.Join(want, ",") {
+		t.Fatalf("validKinds = %v, want %v", body.Details.ValidKinds, want)
+	}
+	if !strings.HasSuffix(body.Error, "valid values: click, hover, type") {
+		t.Fatalf("message %q does not list the kinds sorted", body.Error)
+	}
+	if strings.Join(available, ",") != "type,click,hover" {
+		t.Fatalf("the bridge's own list was reordered in place: %v", available)
+	}
+}
+
 func TestAnUnwrappedUnknownActionMessageIsNoLongerRecoveredByPrefix(t *testing.T) {
 	mb := &mockBridge{availableActions: []string{}, executeActionErr: fmt.Errorf("unknown action: zap")}
 	h := New(mb, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
