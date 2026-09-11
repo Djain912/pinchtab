@@ -18,7 +18,7 @@ func notFoundEnvelope(mux *http.ServeMux) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		matched, pattern := mux.Handler(r)
 		if pattern != "" {
-			matched.ServeHTTP(w, r)
+			mux.ServeHTTP(w, r)
 			return
 		}
 

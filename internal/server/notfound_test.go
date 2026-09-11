@@ -136,3 +136,18 @@ func TestWrongMethodStaysA405Envelope(t *testing.T) {
 		t.Errorf("code = %q, want method_not_allowed", code)
 	}
 }
+
+func TestAMatchedWildcardRouteSeesItsPathValue(t *testing.T) {
+	mux := http.NewServeMux()
+	var seen string
+	mux.HandleFunc("GET /tabs/{id}/snapshot", func(_ http.ResponseWriter, r *http.Request) {
+		seen = r.PathValue("id")
+	})
+
+	w := httptest.NewRecorder()
+	notFoundEnvelope(mux).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/tabs/DEADBEEF/snapshot", nil))
+
+	if seen != "DEADBEEF" {
+		t.Fatalf("handler saw PathValue(\"id\") = %q through the envelope, want %q; every /tabs/{id} route would answer 'tab id required'", seen, "DEADBEEF")
+	}
+}
