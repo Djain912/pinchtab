@@ -60,10 +60,7 @@ func NetworkRoute(client *http.Client, base, token string, cmd *cobra.Command, p
 		req["method"] = method
 	}
 
-	path := "/network/route"
-	if tab, _ := cmd.Flags().GetString("tab"); tab != "" {
-		path = fmt.Sprintf("/tabs/%s/network/route", url.PathEscape(tab))
-	}
+	path := networkRoutePath(cmd)
 	result := requireMap(apiclient.DoPostQuiet(client, base, token, path, req), 1, "Failed to install route")
 
 	jsonOutput, _ := cmd.Flags().GetBool("json")
@@ -81,10 +78,7 @@ func NetworkUnroute(client *http.Client, base, token string, cmd *cobra.Command,
 	if pattern != "" {
 		params.Set("pattern", pattern)
 	}
-	path := "/network/route"
-	if tab, _ := cmd.Flags().GetString("tab"); tab != "" {
-		path = fmt.Sprintf("/tabs/%s/network/route", url.PathEscape(tab))
-	}
+	path := networkRoutePath(cmd)
 	result := requireMap(apiclient.DoDelete(client, base, token, path, params), 1, "Failed to remove route(s)")
 
 	jsonOutput, _ := cmd.Flags().GetBool("json")
@@ -100,10 +94,7 @@ func NetworkUnroute(client *http.Client, base, token string, cmd *cobra.Command,
 }
 
 func NetworkRules(client *http.Client, base, token string, cmd *cobra.Command) {
-	path := "/network/route"
-	if tab, _ := cmd.Flags().GetString("tab"); tab != "" {
-		path = fmt.Sprintf("/tabs/%s/network/route", url.PathEscape(tab))
-	}
+	path := networkRoutePath(cmd)
 	result := requireMap(apiclient.DoGet(client, base, token, path, nil), 1, "Failed to list routes")
 
 	jsonOutput, _ := cmd.Flags().GetBool("json")
@@ -133,4 +124,11 @@ func describeRouteRule(rule map[string]any) string {
 		line += fmt.Sprintf(" body=%d bytes", len(body))
 	}
 	return line
+}
+
+func networkRoutePath(cmd *cobra.Command) string {
+	if tab, _ := cmd.Flags().GetString("tab"); tab != "" {
+		return fmt.Sprintf("/tabs/%s/network/route", url.PathEscape(tab))
+	}
+	return "/network/route"
 }

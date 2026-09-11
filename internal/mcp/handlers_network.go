@@ -109,7 +109,7 @@ func handleNetworkRoute(c *Client) func(context.Context, mcp.CallToolRequest) (*
 			payload["method"] = method
 		}
 
-		path := "/tabs/" + url.PathEscape(tabID) + "/network/route"
+		path := tabNetworkRoutePath(tabID)
 		respBody, code, err := c.Post(ctx, path, payload)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
@@ -128,7 +128,7 @@ func handleNetworkUnroute(c *Client) func(context.Context, mcp.CallToolRequest) 
 		if pattern := optString(r, "pattern"); pattern != "" {
 			q.Set("pattern", pattern)
 		}
-		path := "/tabs/" + url.PathEscape(tabID) + "/network/route"
+		path := tabNetworkRoutePath(tabID)
 		respBody, code, err := c.Delete(ctx, path, q)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
@@ -143,11 +143,15 @@ func handleNetworkRules(c *Client) func(context.Context, mcp.CallToolRequest) (*
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		path := "/tabs/" + url.PathEscape(tabID) + "/network/route"
+		path := tabNetworkRoutePath(tabID)
 		respBody, code, err := c.Get(ctx, path, nil)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 		return resultFromBytes(respBody, code)
 	}
+}
+
+func tabNetworkRoutePath(tabID string) string {
+	return "/tabs/" + url.PathEscape(tabID) + "/network/route"
 }
