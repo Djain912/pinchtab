@@ -343,6 +343,10 @@ func (m *MockBridge) BrowserContext() context.Context {
 	return context.Background()
 }
 
+func (m *MockBridge) CurrentTabID() string {
+	return m.currentTabID
+}
+
 func (m *MockBridge) TabContext(tabID string) (*bridge.TabHandle, string, error) {
 	if tabID == "" && m.currentTabID != "" {
 		return bridge.NewTabHandle(context.Background()), m.currentTabID, nil

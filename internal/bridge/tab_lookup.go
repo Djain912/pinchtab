@@ -16,6 +16,25 @@ func (tm *TabManager) markAccessed(tabID string) {
 	tm.mu.Unlock()
 }
 
+func (tm *TabManager) CurrentTabID() string {
+	if tm == nil {
+		return ""
+	}
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+	return tm.selectCurrentTrackedTab()
+}
+
+func (tm *TabManager) TabLastUsed(tabID string) (time.Time, bool) {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+	entry, ok := tm.tabs[tabID]
+	if !ok {
+		return time.Time{}, false
+	}
+	return entry.LastUsed, true
+}
+
 // selectCurrentTrackedTab returns the current tab ID, falling back to the most
 // recently used tab if the explicit pointer is stale or unset.
 func (tm *TabManager) selectCurrentTrackedTab() string {

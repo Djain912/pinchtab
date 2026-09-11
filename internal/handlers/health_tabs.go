@@ -13,6 +13,28 @@ type tabHandoffReader interface {
 	TabHandoffState(tabID string) (bridge.TabHandoffState, bool)
 }
 
+type currentTabReader interface {
+	CurrentTabID() string
+}
+
+var _ currentTabReader = (*bridge.Bridge)(nil)
+
+func (h *Handlers) listedCurrentTabID(r *http.Request, targets []bridge.TabTarget) string {
+	if !currentTabScopeFromRequest(r).IsGlobal() {
+		tabID, _ := h.scopedCurrentTabForRequest(r)
+		return tabID
+	}
+	if reader, ok := h.Bridge.(currentTabReader); ok {
+		if tabID := reader.CurrentTabID(); tabID != "" {
+			return tabID
+		}
+	}
+	if len(targets) > 0 {
+		return targets[0].TargetID
+	}
+	return ""
+}
+
 func (h *Handlers) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	if h.Bridge == nil {
 		writeUnavailable(w, 503, "bridge_unavailable", "bridge not initialized")
@@ -160,14 +182,10 @@ func (h *Handlers) HandleTabs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentTabID := ""
-	if _, resolvedID, err := h.tabContext(r, ""); err == nil {
-		currentTabID = resolvedID
-	}
+	currentTabID := h.listedCurrentTabID(r, targets)
 
 	tabs := make([]map[string]any, 0, len(targets))
 	appendTab := func(t bridge.TabTarget) {
-		// Skip the initial about:blank tab that Chrome creates on launch
 		if bridge.IsTransientURL(t.URL, h.Config.Port) {
 			return
 		}
