@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/pinchtab/pinchtab/internal/bridge"
@@ -188,11 +190,11 @@ func (h *Handlers) handleNetworkUnrouteFor(w http.ResponseWriter, r *http.Reques
 	}
 
 	pattern := r.URL.Query().Get("pattern")
-	if pattern == "" && r.ContentLength > 0 {
+	if pattern == "" && httpx.MayHaveBody(r) {
 		var body struct {
 			Pattern string `json:"pattern"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 			httpx.Error(w, 400, fmt.Errorf("decode body: %w", err))
 			return
 		}

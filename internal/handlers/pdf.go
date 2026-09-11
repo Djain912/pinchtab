@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -241,8 +243,8 @@ func (h *Handlers) HandleTabPDF(w http.ResponseWriter, r *http.Request) {
 	provided := ""
 	if r.Method == http.MethodPost {
 		var body map[string]any
-		if r.ContentLength > 0 {
-			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodySize)).Decode(&body); err != nil {
+		if httpx.MayHaveBody(r) {
+			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodySize)).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 				httpx.Error(w, 400, fmt.Errorf("decode: %w", err))
 				return
 			}

@@ -163,6 +163,24 @@ netroute_full_server_tests() {
   end_test
 
   # ─────────────────────────────────────────────────────────────────
+  start_test "DELETE /tabs/{id}/network/route with a body pattern removes only that rule"
+
+  pt_post "/tabs/${TAB_ID}/network/route" -d '{"pattern":"body-a.invalid","action":"abort"}'
+  assert_ok "install first body-pattern rule"
+  pt_post "/tabs/${TAB_ID}/network/route" -d '{"pattern":"body-b.invalid","action":"abort"}'
+  assert_ok "install second body-pattern rule"
+
+  pinchtab DELETE "/tabs/${TAB_ID}/network/route" -d '{"pattern":"body-a.invalid"}'
+  assert_ok "remove by body pattern"
+  assert_json_eq "$RESULT" '.removed' '1' "the body pattern removed exactly one rule"
+
+  pt_get "/tabs/${TAB_ID}/network/route"
+  assert_json_eq "$RESULT" '[.rules[].pattern | select(. == "body-a.invalid")] | length' '0' "the named rule is gone"
+  assert_json_eq "$RESULT" '[.rules[].pattern | select(. == "body-b.invalid")] | length' '1' "the other rule survives"
+
+  end_test
+
+  # ─────────────────────────────────────────────────────────────────
   start_test "DELETE /tabs/{id}/network/route (no pattern) clears remaining rules"
 
   pt_delete "/tabs/${TAB_ID}/network/route"

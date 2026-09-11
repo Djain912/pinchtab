@@ -131,7 +131,7 @@ func (h *Handlers) HandleTabClose(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TabID string `json:"tabId"`
 	}
-	if r.Body != nil && r.Body != http.NoBody && r.ContentLength != 0 {
+	if httpx.MayHaveBody(r) {
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodySize)).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 			httpx.Error(w, 400, fmt.Errorf("decode: %w", err))
 			return

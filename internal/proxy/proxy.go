@@ -114,6 +114,10 @@ func Forward(w http.ResponseWriter, r *http.Request, targetURL *url.URL, opts Op
 	// Only a rewrite propagates a Host. Left alone, the transport derives the
 	// Host header from the URL as before, which spells a default port the way
 	// the wire expects rather than the way targetURL.Host holds it.
+	outReq.ContentLength = proxyReq.ContentLength
+	if proxyReq.ContentLength == 0 {
+		outReq.Body = http.NoBody
+	}
 	if proxyReq.Host != hostBeforeRewrite {
 		outReq.Host = proxyReq.Host
 	}

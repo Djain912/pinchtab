@@ -1,7 +1,6 @@
 package activity
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -272,15 +271,6 @@ func initialAction(r *http.Request) string {
 	return ""
 }
 
-// replayedBody hands the downstream handler the bytes already read followed by the
-// rest of the stream, and closes the original. It is a ReadCloser rather than a
-// NopCloser over a buffer because the request body is not fully in memory: only the
-// peek is.
-type replayedBody struct {
-	io.Reader
-	io.Closer
-}
-
 func initialURL(r *http.Request) string {
 	if u := strings.TrimSpace(r.URL.Query().Get("url")); u != "" {
 		return sanitizeActivityURL(u)
@@ -314,10 +304,7 @@ func EnrichRouteActivity(r *http.Request) {
 
 	original := r.Body
 	peeked, err := io.ReadAll(io.LimitReader(original, activityPeekBytes))
-	r.Body = replayedBody{
-		Reader: io.MultiReader(bytes.NewReader(peeked), original),
-		Closer: original,
-	}
+	r.Body = httpx.ReplayBody(peeked, original)
 	if err != nil || len(peeked) == 0 {
 		return
 	}
