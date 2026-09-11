@@ -1,6 +1,11 @@
 package bridge
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+var ErrUnknownAction = errors.New("unknown action")
 
 // TabLimitError is returned when a new tab cannot be created because
 // the configured limit has been reached and the eviction policy is "reject".

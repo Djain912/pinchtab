@@ -321,7 +321,7 @@ func (b *Bridge) ExecuteAction(ctx context.Context, kind string, req ActionReque
 	}
 	fn, ok := b.Actions[kind]
 	if !ok {
-		return nil, fmt.Errorf("unknown action: %s", kind)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownAction, kind)
 	}
 	urlReader := b.URLReader
 	if urlReader == nil {
