@@ -415,7 +415,7 @@ func serverConfigFromRuntime(cfg *RuntimeConfig) ServerConfig {
 		RetainNetworkBodies:       ptr(cfg.RetainNetworkBodies),
 		RetainNetworkBodyMaxBytes: ptr(cfg.RetainNetworkBodyMaxBytes),
 		TrustProxyHeaders:         ptr(cfg.TrustProxyHeaders),
-		CookieSecure:              cfg.CookieSecure,
+		CookieSecure:              cloneBoolPtr(cfg.CookieSecure),
 	}
 }
 
