@@ -46,7 +46,7 @@ func (h *Handlers) HandleTitle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) HandleTabTitle(w http.ResponseWriter, r *http.Request) {
-	h.forwardInspectTabRoute(w, r, h.HandleTitle)
+	h.withPathTabID(w, r, h.HandleTitle)
 }
 
 func (h *Handlers) HandleURL(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +54,7 @@ func (h *Handlers) HandleURL(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) HandleTabURL(w http.ResponseWriter, r *http.Request) {
-	h.forwardInspectTabRoute(w, r, h.HandleURL)
+	h.withPathTabID(w, r, h.HandleURL)
 }
 
 func (h *Handlers) HandleHTML(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +62,7 @@ func (h *Handlers) HandleHTML(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) HandleTabHTML(w http.ResponseWriter, r *http.Request) {
-	h.forwardInspectTabRoute(w, r, h.HandleHTML)
+	h.withPathTabID(w, r, h.HandleHTML)
 }
 
 func (h *Handlers) HandleStyles(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +70,7 @@ func (h *Handlers) HandleStyles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) HandleTabStyles(w http.ResponseWriter, r *http.Request) {
-	h.forwardInspectTabRoute(w, r, h.HandleStyles)
+	h.withPathTabID(w, r, h.HandleStyles)
 }
 
 func (h *Handlers) handleInspect(w http.ResponseWriter, r *http.Request, kind inspectKind) {
@@ -296,19 +296,4 @@ func sortCSSMap(css map[string]any) map[string]any {
 		out[k] = css[k]
 	}
 	return out
-}
-
-func (h *Handlers) forwardInspectTabRoute(w http.ResponseWriter, r *http.Request, next func(http.ResponseWriter, *http.Request)) {
-	tabID := r.PathValue("id")
-	if tabID == "" {
-		httpx.Error(w, 400, fmt.Errorf("tab id required"))
-		return
-	}
-	q := r.URL.Query()
-	q.Set("tabId", tabID)
-	req := r.Clone(r.Context())
-	u := *r.URL
-	u.RawQuery = q.Encode()
-	req.URL = &u
-	next(w, req)
 }

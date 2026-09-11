@@ -128,9 +128,8 @@ func (h *Handlers) pauseTabForHandoff(tabID, reason, source string, timeout time
 }
 
 func (h *Handlers) HandleTabHandoff(w http.ResponseWriter, r *http.Request) {
-	tabID := strings.TrimSpace(r.PathValue("id"))
-	if tabID == "" {
-		httpx.Error(w, 400, fmt.Errorf("tab id required"))
+	tabID, ok := requirePathTabID(w, r)
+	if !ok {
 		return
 	}
 
@@ -188,9 +187,8 @@ func (h *Handlers) HandleTabHandoff(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) HandleTabResume(w http.ResponseWriter, r *http.Request) {
-	tabID := strings.TrimSpace(r.PathValue("id"))
-	if tabID == "" {
-		httpx.Error(w, 400, fmt.Errorf("tab id required"))
+	tabID, ok := requirePathTabID(w, r)
+	if !ok {
 		return
 	}
 
@@ -249,9 +247,8 @@ func (h *Handlers) HandleTabResume(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) HandleTabHandoffStatus(w http.ResponseWriter, r *http.Request) {
-	tabID := strings.TrimSpace(r.PathValue("id"))
-	if tabID == "" {
-		httpx.Error(w, 400, fmt.Errorf("tab id required"))
+	tabID, ok := requirePathTabID(w, r)
+	if !ok {
 		return
 	}
 

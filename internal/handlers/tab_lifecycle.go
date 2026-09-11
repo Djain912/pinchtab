@@ -128,24 +128,18 @@ func (h *Handlers) createBlankTab(w http.ResponseWriter, r *http.Request, browse
 // equivalent of POST /close and exists so orchestrator dashboard commands can
 // use the common /tabs/{id}/... proxy path.
 func (h *Handlers) HandleTabClose(w http.ResponseWriter, r *http.Request) {
-	tabID := strings.TrimSpace(r.PathValue("id"))
-	if tabID == "" {
-		httpx.Error(w, 400, fmt.Errorf("tab id required"))
-		return
+	var req struct {
+		TabID string `json:"tabId"`
 	}
-
 	if r.Body != nil && r.Body != http.NoBody && r.ContentLength != 0 {
-		var req struct {
-			TabID string `json:"tabId"`
-		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodySize)).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 			httpx.Error(w, 400, fmt.Errorf("decode: %w", err))
 			return
 		}
-		if req.TabID != "" && req.TabID != tabID {
-			httpx.Error(w, 400, fmt.Errorf("tabId in body does not match path id"))
-			return
-		}
+	}
+	tabID, ok := h.requirePathTabIDMatch(w, r, req.TabID)
+	if !ok {
+		return
 	}
 
 	h.closeTab(w, r, tabID)

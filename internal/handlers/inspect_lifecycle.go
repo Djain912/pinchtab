@@ -8,21 +8,22 @@ import (
 	"github.com/pinchtab/pinchtab/internal/httpx"
 )
 
-// withPathTabID maps the {id} path value into the tabId query param and calls
-// root with a cloned request; writes 400 when the path id is empty.
 func (h *Handlers) withPathTabID(w http.ResponseWriter, r *http.Request, root http.HandlerFunc) {
-	tabID := r.PathValue("id")
-	if tabID == "" {
-		httpx.Error(w, 400, fmt.Errorf("tab id required"))
+	tabID, ok := requirePathTabID(w, r)
+	if !ok {
 		return
 	}
+	root(w, cloneWithTabIDQuery(r, tabID))
+}
+
+func cloneWithTabIDQuery(r *http.Request, tabID string) *http.Request {
 	q := r.URL.Query()
 	q.Set("tabId", tabID)
 	req := r.Clone(r.Context())
 	u := *r.URL
 	u.RawQuery = q.Encode()
 	req.URL = &u
-	root(w, req)
+	return req
 }
 
 // callOnResolvedElement resolves sel to a DOM node on tabID and runs jsFn on it,

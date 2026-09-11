@@ -64,9 +64,8 @@ func (h *Handlers) HandleNetworkRouteList(w http.ResponseWriter, r *http.Request
 //
 // @Endpoint POST /tabs/{id}/network/route
 func (h *Handlers) HandleTabNetworkRoute(w http.ResponseWriter, r *http.Request) {
-	tabID := r.PathValue("id")
-	if tabID == "" {
-		httpx.Error(w, 400, fmt.Errorf("tab id required"))
+	tabID, ok := requirePathTabID(w, r)
+	if !ok {
 		return
 	}
 	h.handleNetworkRouteFor(w, r, tabID)
@@ -76,9 +75,8 @@ func (h *Handlers) HandleTabNetworkRoute(w http.ResponseWriter, r *http.Request)
 //
 // @Endpoint DELETE /tabs/{id}/network/route
 func (h *Handlers) HandleTabNetworkUnroute(w http.ResponseWriter, r *http.Request) {
-	tabID := r.PathValue("id")
-	if tabID == "" {
-		httpx.Error(w, 400, fmt.Errorf("tab id required"))
+	tabID, ok := requirePathTabID(w, r)
+	if !ok {
 		return
 	}
 	h.handleNetworkUnrouteFor(w, r, tabID)
@@ -88,9 +86,8 @@ func (h *Handlers) HandleTabNetworkUnroute(w http.ResponseWriter, r *http.Reques
 //
 // @Endpoint GET /tabs/{id}/network/route
 func (h *Handlers) HandleTabNetworkRouteList(w http.ResponseWriter, r *http.Request) {
-	tabID := r.PathValue("id")
-	if tabID == "" {
-		httpx.Error(w, 400, fmt.Errorf("tab id required"))
+	tabID, ok := requirePathTabID(w, r)
+	if !ok {
 		return
 	}
 	h.handleNetworkRouteListFor(w, r, tabID)

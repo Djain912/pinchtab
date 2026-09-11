@@ -112,9 +112,8 @@ func (h *Handlers) HandleMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) HandleTabMetrics(w http.ResponseWriter, r *http.Request) {
-	tabID := r.PathValue("id")
-	if tabID == "" {
-		httpx.Error(w, 400, fmt.Errorf("missing tab id"))
+	tabID, ok := requirePathTabID(w, r)
+	if !ok {
 		return
 	}
 

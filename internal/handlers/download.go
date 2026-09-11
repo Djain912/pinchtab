@@ -269,23 +269,13 @@ func (h *Handlers) writeDownloadResponse(w http.ResponseWriter, body []byte, mim
 
 // @Endpoint GET /tabs/{id}/download
 func (h *Handlers) HandleTabDownload(w http.ResponseWriter, r *http.Request) {
-	tabID := r.PathValue("id")
-	if tabID == "" {
-		httpx.Error(w, 400, fmt.Errorf("tab id required"))
+	tabID, ok := requirePathTabID(w, r)
+	if !ok {
 		return
 	}
 	if _, _, err := h.tabContext(r, tabID); err != nil {
 		WriteTabContextError(w, err, 404)
 		return
 	}
-
-	q := r.URL.Query()
-	q.Set("tabId", tabID)
-
-	req := r.Clone(r.Context())
-	u := *r.URL
-	u.RawQuery = q.Encode()
-	req.URL = &u
-
-	h.HandleDownload(w, req)
+	h.HandleDownload(w, cloneWithTabIDQuery(r, tabID))
 }
