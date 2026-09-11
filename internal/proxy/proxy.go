@@ -74,6 +74,10 @@ func Forward(w http.ResponseWriter, r *http.Request, targetURL *url.URL, opts Op
 	proxyReq.Header = r.Header.Clone()
 	activity.PropagateHeaders(r.Context(), proxyReq)
 	hostBeforeRewrite := proxyReq.Host
+	inboundBody := &inboundRequestBody{ReadCloser: proxyReq.Body}
+	if proxyReq.Body != nil {
+		proxyReq.Body = inboundBody
+	}
 	if opts.RewriteRequest != nil {
 		opts.RewriteRequest(proxyReq)
 	}
@@ -114,9 +118,11 @@ func Forward(w http.ResponseWriter, r *http.Request, targetURL *url.URL, opts Op
 	// Only a rewrite propagates a Host. Left alone, the transport derives the
 	// Host header from the URL as before, which spells a default port the way
 	// the wire expects rather than the way targetURL.Host holds it.
-	outReq.ContentLength = proxyReq.ContentLength
-	if proxyReq.ContentLength == 0 {
-		outReq.Body = http.NoBody
+	if body, unchanged := proxyReq.Body.(*inboundRequestBody); unchanged && body == inboundBody {
+		outReq.ContentLength = proxyReq.ContentLength
+		if proxyReq.ContentLength == 0 {
+			outReq.Body = http.NoBody
+		}
 	}
 	if proxyReq.Host != hostBeforeRewrite {
 		outReq.Host = proxyReq.Host
@@ -240,4 +246,8 @@ func copyRequestHeaders(dst, src http.Header) {
 			dst.Add(k, v)
 		}
 	}
+}
+
+type inboundRequestBody struct {
+	io.ReadCloser
 }
