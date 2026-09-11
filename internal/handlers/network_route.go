@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -205,10 +204,6 @@ func (h *Handlers) handleNetworkUnrouteFor(w http.ResponseWriter, r *http.Reques
 
 	removed, err := h.Bridge.RemoveRouteRule(resolvedID, pattern)
 	if err != nil {
-		if errors.Is(err, bridge.ErrTabNotRouted) {
-			WriteTabContextError(w, err, 404)
-			return
-		}
 		httpx.Error(w, 500, err)
 		return
 	}
@@ -230,9 +225,6 @@ func (h *Handlers) handleNetworkRouteListFor(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		httpx.Error(w, 500, err)
 		return
-	}
-	if rules == nil {
-		rules = []bridge.RouteRule{}
 	}
 	httpx.JSON(w, 200, map[string]any{
 		"tabId": resolvedID,
