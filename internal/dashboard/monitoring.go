@@ -23,6 +23,7 @@ type MonitoringSource interface {
 	List() []bridge.Instance
 	AllTabs() []bridge.InstanceTab
 	AllMetrics() []apiTypes.InstanceMetrics
+	RefreshCrashes()
 }
 
 type MonitoringServerMetrics struct {
@@ -78,11 +79,7 @@ func (d *Dashboard) monitoringSnapshot(includeMemory bool) MonitoringSnapshot {
 	}
 
 	if d.monitoring != nil {
-		if refresher, ok := d.monitoring.(interface {
-			RefreshCrashes()
-		}); ok {
-			refresher.RefreshCrashes()
-		}
+		d.monitoring.RefreshCrashes()
 		snapshot.Instances = d.monitoring.List()
 		snapshot.Tabs = d.monitoring.AllTabs()
 		if includeMemory {
