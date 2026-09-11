@@ -63,7 +63,6 @@ All tool names are prefixed with `pinchtab_`.
 | `pinchtab_click` | Click element by selector. Required: `selector` or legacy `ref`. Optional: `waitNav`, `mode` (`dom` or `dispatch` as a broad low-level escape hatch), `tabId`. `mode` and `humanize` are mutually exclusive. |
 | `pinchtab_type` | Type text keystroke-by-keystroke. Required: `selector` or legacy `ref`, plus `text`. Optional: `tabId`. |
 | `pinchtab_fill` | Fill input via JS dispatch. Required: `selector` or legacy `ref`, plus `value` — send `value=""` to clear the field (omitting it is refused). Optional: `tabId`. |
-| `pinchtab_press` | Press a named key (`Enter`, `Tab`, `Escape`, etc.). Required: `key`. Optional: `tabId`. |
 | `pinchtab_hover` | Hover over element. Required: `selector` or legacy `ref`. Optional: `tabId`. |
 | `pinchtab_focus` | Focus an element. Required: `selector` or legacy `ref`. Optional: `tabId`. |
 | `pinchtab_select` | Select dropdown option. Required: `selector` or legacy `ref`, plus `value`. Optional: `tabId`. |
@@ -72,10 +71,7 @@ All tool names are prefixed with `pinchtab_`.
 ### Keyboard
 | Tool | Description |
 |------|-------------|
-| `pinchtab_keyboard_type` | Type text into the focused element with keystroke events. Required: `text`. Optional: `tabId`. |
-| `pinchtab_keyboard_inserttext` | Insert text into the focused element without key events. Required: `text`. Optional: `tabId`. |
-| `pinchtab_keydown` | Hold a key down. Required: `key`. Optional: `tabId`. |
-| `pinchtab_keyup` | Release a key. Required: `key`. Optional: `tabId`. |
+| `pinchtab_key` | Send keyboard input. Required: `action` (`press`, `down`, `up` need `key`; `type`, `insert` need `text`). Optional: `nodeId`, `tabId`. |
 
 ### Content
 | Tool | Description |
@@ -94,15 +90,17 @@ All tool names are prefixed with `pinchtab_`.
 | `pinchtab_cookies_set` | Set one cookie on the current page (session reuse). Required: `name`, `value`. Optional: `url` (defaults to the tab's current page), `domain`, `path`, `sameSite`, `secure`, `httpOnly`, `expires`, `tabId`. An empty `value` blanks the cookie. Requires `security.allowCookies: true`. |
 | `pinchtab_connect_profile` | Return connect status for a profile. Required: `profile`. |
 
+### Human Handoff
+| Tool | Description |
+|------|-------------|
+| `pinchtab_handoff` | Pause a tab so the user can finish a CAPTCHA, login or consent step; action tools on it are refused with `tab_paused_handoff` until resumed. Required: `tabId`. Optional: `reason`, `timeoutMs` (auto-resume). |
+| `pinchtab_resume` | Resume a paused tab. Call only after the user confirms they finished. Required: `tabId`. Optional: `status`. |
+| `pinchtab_handoff_status` | Report `paused_handoff` (with `reason`, `pausedAt`, `expiresAt`) or `active`. Required: `tabId`. |
+
 ### Utility
 | Tool | Description |
 |------|-------------|
-| `pinchtab_wait` | Wait N milliseconds. Required: `ms` (max 30000). |
-| `pinchtab_wait_for_selector` | Wait for selector to appear or disappear. Required: `selector`. Optional: `timeout`, `state`, `tabId`. |
-| `pinchtab_wait_for_text` | Wait for text to appear. Required: `text`. Optional: `timeout`, `tabId`. |
-| `pinchtab_wait_for_url` | Wait for a URL glob match. Required: `url`. Optional: `timeout`, `tabId`. |
-| `pinchtab_wait_for_load` | Wait for a load state. Required: `load`. Optional: `timeout`, `tabId`. |
-| `pinchtab_wait_for_function` | Wait for a JavaScript expression to become truthy. Required: `fn`. Optional: `timeout`, `tabId`. |
+| `pinchtab_wait` | Wait for a condition. Required: `for` (`ms`, `selector`, `text`, `url`, `load` or `function`) and `value` carrying it. Optional: `timeout`, `state`, `tabId`. |
 
 ### Network
 | Tool | Description |
@@ -110,7 +108,6 @@ All tool names are prefixed with `pinchtab_`.
 | `pinchtab_network` | List recent captured network requests. Optional: `tabId`, `filter`, `method`, `status`, `type`, `limit`, `bufferSize`. |
 | `pinchtab_network_detail` | Get one request's details. Required: `requestId`. Optional: `tabId`, `body`; inspect bodies only with explicit user approval. |
 | `pinchtab_network_clear` | Clear captured network data. Optional: `tabId`. |
-| `pinchtab_network_export` | Export captured data as HAR or NDJSON file. Optional: `tabId`, `format` (har/ndjson), `body`, `filter`, `method`, `status`, `type`, `limit`. Obtain explicit approval, preserve redaction, and delete the artifact after use. Returns `{path, entries, format}`. |
 
 ### Dialog
 | Tool | Description |

@@ -34,6 +34,63 @@ func handleCloseTab(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.
 	}
 }
 
+func tabRoutePath(tabID, verb string) string {
+	return "/tabs/" + url.PathEscape(tabID) + "/" + verb
+}
+
+func handleHandoff(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		tabID, err := r.RequireString("tabId")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		payload := map[string]any{}
+		if reason := optTrimmedString(r, "reason"); reason != "" {
+			payload["reason"] = reason
+		}
+		if timeoutMs, ok := optInt(r, "timeoutMs"); ok {
+			payload["timeoutMs"] = timeoutMs
+		}
+		body, code, err := c.Post(ctx, tabRoutePath(tabID, "handoff"), payload)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return resultFromBytes(body, code)
+	}
+}
+
+func handleResume(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		tabID, err := r.RequireString("tabId")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		payload := map[string]any{}
+		if status := optTrimmedString(r, "status"); status != "" {
+			payload["status"] = status
+		}
+		body, code, err := c.Post(ctx, tabRoutePath(tabID, "resume"), payload)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return resultFromBytes(body, code)
+	}
+}
+
+func handleHandoffStatus(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		tabID, err := r.RequireString("tabId")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		body, code, err := c.Get(ctx, tabRoutePath(tabID, "handoff"), nil)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return resultFromBytes(body, code)
+	}
+}
+
 func handleHealth(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		body, code, err := c.Get(ctx, "/health", nil)

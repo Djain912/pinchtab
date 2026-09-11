@@ -78,6 +78,14 @@ All element-action tools accept the unified `selector` and the legacy aliases `r
 | `pinchtab_cookies_set` | `name`, `value` required; `url`, `domain`, `path`, `sameSite`, `secure`, `httpOnly`, `expires`, `tabId` optional | Sets one cookie for session reuse; `url` defaults to the tab's current page and an empty `value` blanks the cookie; requires `security.allowCookies` |
 | `pinchtab_connect_profile` | `profile` required | Returns the connect URL and instance status for a profile |
 
+## Human Handoff
+
+| Tool | Key Parameters | Notes |
+| --- | --- | --- |
+| `pinchtab_handoff` | `tabId` required; `reason`, `timeoutMs` optional | Pauses the tab for a human (CAPTCHA, login, consent); action tools on it answer `409 tab_paused_handoff` until resumed; `timeoutMs` auto-resumes |
+| `pinchtab_resume` | `tabId` required; `status` optional | Resumes the tab; call only after the user confirms they finished the manual step |
+| `pinchtab_handoff_status` | `tabId` required | Reports `paused_handoff` with `reason`, `pausedAt` and `expiresAt`, or `active` |
+
 ## Wait Utilities
 
 | Tool | Key Parameters | Notes |

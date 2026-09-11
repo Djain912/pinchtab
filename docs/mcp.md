@@ -114,7 +114,7 @@ PINCHTAB_TOKEN=<that-host-token> pinchtab --server http://remote:9867 mcp
 
 ## Available Tools
 
-PinchTab currently exposes 39 tools:
+PinchTab currently exposes 42 tools:
 
 - Navigation: 9
 - Interaction: 8
@@ -123,6 +123,7 @@ PinchTab currently exposes 39 tools:
 - Recording: 1
 - Site: 1
 - Tab management: 5
+- Human handoff: 3
 - Wait utilities: 1
 - Network: 5
 - Diagnostics: 2
@@ -178,6 +179,12 @@ PinchTab currently exposes 39 tools:
 - `pinchtab_cookies_set` (requires `security.allowCookies`)
 - `pinchtab_connect_profile`
 
+### Human Handoff
+
+- `pinchtab_handoff` — pause a tab (`tabId` required; `reason`, `timeoutMs` optional) so a human can finish a CAPTCHA, login or consent step; every action tool on that tab is refused with `tab_paused_handoff` until it resumes
+- `pinchtab_resume` — resume the tab (`tabId` required; `status` optional). Call it only after the user confirms they finished
+- `pinchtab_handoff_status` — report `paused_handoff` (with `reason`, `pausedAt`, `expiresAt`) or `active`, so an agent can watch a `timeoutMs` auto-resume without resuming itself
+
 ### Wait Utilities
 
 - `pinchtab_wait` — `for` is `ms`, `selector`, `text`, `url`, `load` or `function`, and `value` carries the condition
@@ -219,7 +226,7 @@ The normal MCP browser loop is:
 1. Call `pinchtab_navigate` with a `url`
 2. Call `pinchtab_snapshot` to inspect page structure and collect refs
 3. Call `pinchtab_click`, `pinchtab_type`, or other action tools with structured arguments
-4. Call `pinchtab_wait_*` or `pinchtab_network` when needed
+4. Call `pinchtab_wait` or `pinchtab_network` when needed
 5. Call `pinchtab_back` to leave a dead end, or `pinchtab_reload` to retry the page
 
 `pinchtab_back`, `pinchtab_forward` and `pinchtab_reload` take an optional `tabId`

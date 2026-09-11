@@ -289,6 +289,19 @@ pinchtab_close_tab(tabId="...")  # Close a specific tab
 
 ---
 
+## Human Handoff
+
+```
+pinchtab_handoff(tabId="...", reason="captcha_manual")   # Pause the tab; action tools answer tab_paused_handoff
+pinchtab_handoff_status(tabId="...")                       # paused_handoff (reason, pausedAt, expiresAt) or active
+pinchtab_resume(tabId="...")                               # Only after the user confirms they finished
+```
+
+- When an action is refused with `tab_paused_handoff`, hand control to the user and ask them to finish in the browser.
+- Resume only once the user says they are done; a `timeoutMs` handoff resumes on its own, which `pinchtab_handoff_status` shows.
+
+---
+
 ## Waiting
 
 Use for async content (spinners, XHR, lazy-loaded elements):
