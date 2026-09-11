@@ -189,12 +189,12 @@ netroute_full_server_tests() {
   end_test
 
   # ─────────────────────────────────────────────────────────────────
-  start_test "DELETE /tabs/{id}/network/route again returns 404 (tab not routed)"
+  start_test "DELETE /tabs/{id}/network/route again is idempotent on a cleared tab"
 
-  # After clearing, the route manager forgets the tab. A second unroute should
-  # distinguish that from "rule matched nothing" by 404'ing.
   pt_delete "/tabs/${TAB_ID}/network/route"
-  assert_not_ok "second unroute on cleared tab returns error"
+  assert_ok "second unroute on cleared tab"
+  assert_json_eq "$RESULT" '.removed' '0' "nothing left to remove"
+  assert_json_eq "$RESULT" '.rules | tojson' '[]' "the rule list is an empty array"
 
   end_test
 

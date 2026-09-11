@@ -82,8 +82,10 @@ func TestEveryCappedReadIsClassified(t *testing.T) {
 	// The two sites this rule fixed carry its own idiom, so a revert is visible here
 	// as well as in the behaviour tests.
 	for name, want := range map[string]string{
-		"internal/mcp/client.go":       "MaxResponseBytes+1",
-		"internal/activity/context.go": "io.MultiReader",
+		"internal/mcp/client.go":               "MaxResponseBytes+1",
+		"internal/httpx/body.go":               "io.MultiReader",
+		"internal/activity/context.go":         "httpx.ReplayBody(peeked, original)",
+		"internal/orchestrator/tab_extract.go": "httpx.ReplayBody(buf, original)",
 	} {
 		if !fileText(t, name).Contains(want) {
 			t.Errorf("%s no longer carries %q; the classification above says it refuses or replays, and it does neither", name, want)
