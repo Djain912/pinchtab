@@ -76,15 +76,15 @@ export default defineConfig(() => {
     },
     build: {
       outDir: "dist",
-      rollupOptions: {
+      rolldownOptions: {
         output: {
-          manualChunks: {
-            "vendor-ui": ["recharts"],
-            "vendor-react": [
-              "react",
-              "react-dom",
-              "react-router-dom",
-              "zustand",
+          codeSplitting: {
+            groups: [
+              { name: "vendor-ui", test: /node_modules[\\/]recharts[\\/]/ },
+              {
+                name: "vendor-react",
+                test: /node_modules[\\/](react|react-dom|react-router|react-router-dom|zustand|scheduler)[\\/]/,
+              },
             ],
           },
         },
