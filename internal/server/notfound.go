@@ -28,11 +28,7 @@ func notFoundEnvelope(mux *http.ServeMux) http.Handler {
 		if status == 0 {
 			status = http.StatusNotFound
 		}
-		code := "not_found"
-		if status == http.StatusMethodNotAllowed {
-			code = "method_not_allowed"
-		}
-		httpx.ErrorCode(w, status, code, "no route for "+r.Method+" "+r.URL.Path, false, nil)
+		httpx.NoRoute(w, r, status)
 	})
 }
 

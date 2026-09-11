@@ -41,6 +41,7 @@ type Orchestrator struct {
 	// shutdown paths) can wait for them instead of leaking goroutines that
 	// race with stubbed package vars.
 	detachedStops sync.WaitGroup
+	sessionCloses sync.WaitGroup
 
 	// monitors tracks the per-instance startup monitors for the same reason.
 	// A monitor writes instance state for up to instanceStartupTimeout after

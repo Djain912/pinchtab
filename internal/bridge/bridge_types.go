@@ -22,6 +22,8 @@ type TabEntry struct {
 	Policy                TabPolicyState
 	Watching              bool
 	ConsoleCaptureEnabled bool
+	CreatorScope          string
+	LastScope             string
 
 	// Lifecycle auto-close timer. autoCloseGen is bumped on every (re)schedule
 	// so a fire that races with a reset/cancel can detect itself and bail.

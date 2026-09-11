@@ -66,6 +66,14 @@ func Error(w http.ResponseWriter, code int, err error) {
 	ErrorCode(w, code, "error", message, false, nil)
 }
 
+func NoRoute(w http.ResponseWriter, r *http.Request, status int) {
+	code := "not_found"
+	if status == http.StatusMethodNotAllowed {
+		code = "method_not_allowed"
+	}
+	ErrorCode(w, status, code, "no route for "+r.Method+" "+r.URL.Path, false, nil)
+}
+
 func ErrorCode(w http.ResponseWriter, status int, code, message string, retryable bool, details map[string]any) {
 	logFailureCause(w, status, code, message)
 	sanitized := SanitizeErrorMessage(message)

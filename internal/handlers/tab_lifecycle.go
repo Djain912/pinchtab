@@ -116,7 +116,7 @@ func (h *Handlers) createBlankTab(w http.ResponseWriter, r *http.Request, browse
 
 	h.setCurrentTabForRequest(r, newTabID)
 	h.recordActivity(r, activity.Update{Action: "tab.new", TabID: newTabID, URL: curURL})
-	markCreatedTab(w, newTabID)
+	h.markCreatedTab(w, r, newTabID)
 	response := map[string]any{"tabId": newTabID, "url": curURL, "title": title}
 	if browserContextID != "" {
 		response["browserContextId"] = browserContextID

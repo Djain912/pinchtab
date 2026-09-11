@@ -38,13 +38,20 @@ type memoryMetrics struct {
 }
 
 func (o *Orchestrator) instanceGet(ctx context.Context, inst *InstanceInternal, path string) (*http.Response, error) {
+	return o.instanceRequest(ctx, http.MethodGet, inst, path, nil)
+}
+
+func (o *Orchestrator) instanceRequest(ctx context.Context, method string, inst *InstanceInternal, path string, header http.Header) (*http.Response, error) {
 	target, err := o.instancePathURL(inst, path, "")
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, method, target.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+	for key, values := range header {
+		req.Header[key] = values
 	}
 	tagOrchestratorMonitoringRequest(req)
 	o.applyInstanceAuth(req, inst)

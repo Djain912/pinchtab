@@ -80,8 +80,27 @@ func (h *Handlers) recordResolvedTab(r *http.Request, tabID string) {
 	h.recordActivity(r, activity.Update{TabID: tabID})
 }
 
-func markCreatedTab(w http.ResponseWriter, tabID string) {
-	if w == nil || strings.TrimSpace(tabID) == "" {
+type tabScopeTracker interface {
+	RecordTabScope(tabID, scope string, created bool)
+	TabsOnlyUsedByCreator(scope string) []string
+}
+
+func (h *Handlers) tabScopes() (tabScopeTracker, bool) {
+	if h == nil {
+		return nil, false
+	}
+	tracker, ok := h.Bridge.(tabScopeTracker)
+	return tracker, ok
+}
+
+func (h *Handlers) markCreatedTab(w http.ResponseWriter, r *http.Request, tabID string) {
+	if strings.TrimSpace(tabID) == "" {
+		return
+	}
+	if tracker, ok := h.tabScopes(); ok {
+		tracker.RecordTabScope(tabID, currentTabScopeFromRequest(r).key, true)
+	}
+	if w == nil {
 		return
 	}
 	w.Header().Set(activity.HeaderPTTabID, tabID)
@@ -89,10 +108,17 @@ func markCreatedTab(w http.ResponseWriter, tabID string) {
 }
 
 func (h *Handlers) setCurrentTabForRequest(r *http.Request, tabID string) {
-	if h == nil || h.CurrentTabs == nil {
+	if h == nil {
 		return
 	}
-	h.CurrentTabs.Set(currentTabScopeFromRequest(r), tabID)
+	scope := currentTabScopeFromRequest(r)
+	if tracker, ok := h.tabScopes(); ok {
+		tracker.RecordTabScope(tabID, scope.key, false)
+	}
+	if h.CurrentTabs == nil {
+		return
+	}
+	h.CurrentTabs.Set(scope, tabID)
 }
 
 func (h *Handlers) clearCurrentTabReferences(tabID string) {

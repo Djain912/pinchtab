@@ -51,6 +51,7 @@ server refuses to load, so the repair does not need a hand edit.
 1. **Create** — `pinchtab session create --agent-id <id>` (or `POST /sessions` directly)
 2. **Use** — agent sends `Authorization: Session ses_...` with each request, or sets `PINCHTAB_SESSION`
 3. **Revoke** — `pinchtab session revoke <session-id>` (or `POST /sessions/{id}/revoke`)
+4. **End** — revoking, expiring or pruning a session closes the tabs it created on every instance, except a tab another caller has used since, a tab paused for human handoff and a locked tab
 
 ## Security
 

@@ -472,6 +472,7 @@ var specialCaseRoutes = []string{
 	"GET /action",
 	"GET /tabs/{id}/state",
 	"POST /shutdown",
+	"POST " + SessionTabsClosePath,
 }
 
 // registerBridgeRoutes registers the bridge API surface by walking the shared
@@ -521,6 +522,7 @@ func (h *Handlers) registerSpecialRoutes(mux muxRegistrar, doShutdown func()) {
 	// is the ungated lightweight tab-runtime readiness view, so it is not a
 	// TabScoped catalog entry and is registered explicitly here.
 	mux.HandleFunc("GET /tabs/{id}/state", h.HandleTabState)
+	mux.HandleFunc("POST "+SessionTabsClosePath, h.HandleSessionTabsClose)
 	if doShutdown != nil {
 		mux.HandleFunc("POST /shutdown", h.HandleShutdown(doShutdown))
 	}

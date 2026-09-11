@@ -332,7 +332,7 @@ func (h *Handlers) tryStaticFirstNavigate(w http.ResponseWriter, r *http.Request
 		}
 		h.setCurrentTabForRequest(r, navResult.TabID)
 		h.recordResolvedURL(r, navResult.URL)
-		markCreatedTab(w, navResult.TabID)
+		h.markCreatedTab(w, r, navResult.TabID)
 		httpx.JSON(w, 200, map[string]any{"tabId": navResult.TabID, "url": navResult.URL, "title": navResult.Title, "route": navRoute})
 		return staticFirstOutcome{handled: true}
 	}
@@ -565,7 +565,7 @@ func (h *Handlers) runNavigate(w http.ResponseWriter, r *http.Request, ex navExe
 		h.setCurrentTabForRequest(r, navResult.TabID)
 		if ex.isNewTab {
 			h.recordResolvedTab(r, navResult.TabID)
-			markCreatedTab(w, navResult.TabID)
+			h.markCreatedTab(w, r, navResult.TabID)
 		}
 		h.recordResolvedURL(r, navResult.URL)
 		httpx.JSON(w, 200, navResponse(navResult.TabID, navResult.URL, navResult.Title, route, !ex.isNewTab))
@@ -585,7 +585,7 @@ func (h *Handlers) runNavigate(w http.ResponseWriter, r *http.Request, ex navExe
 	h.setCurrentTabForRequest(r, ex.tabID)
 	if ex.isNewTab {
 		h.recordResolvedTab(r, ex.tabID)
-		markCreatedTab(w, ex.tabID)
+		h.markCreatedTab(w, r, ex.tabID)
 	}
 	h.recordResolvedURL(r, navURL)
 

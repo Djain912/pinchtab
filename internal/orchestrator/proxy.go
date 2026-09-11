@@ -335,9 +335,13 @@ func (o *Orchestrator) applyInstanceAuth(req *http.Request, inst *InstanceIntern
 	// honors X-PinchTab-* identity headers we propagate. Attached external
 	// bridges have their own auth domain and won't recognize the token,
 	// which is the desired behavior.
-	if inst.authToken == "" && o.internalToken != "" {
+	if o.hopIsTrusted(inst) {
 		req.Header.Set(handlers.InternalTokenHeader, o.internalToken)
 	}
+}
+
+func (o *Orchestrator) hopIsTrusted(inst *InstanceInternal) bool {
+	return inst.authToken == "" && o.internalToken != ""
 }
 
 func classifyLaunchError(err error) int {

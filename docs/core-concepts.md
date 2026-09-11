@@ -208,6 +208,11 @@ For managed instances started by the server:
 
 That means the persistent part is the **profile state**, not the tab list.
 
+A tab opened under an agent session ends with it. When the session is revoked, expires or
+is pruned, each instance closes the tabs that session created, as long as no other caller
+has used them since. It keeps a tab that is paused for human handoff or locked, and logs
+the tab id.
+
 ## Element references
 
 Snapshots return element references such as `e0`, `e1`, `e2`, and so on.

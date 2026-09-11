@@ -175,7 +175,7 @@ func (h *Handlers) runResolvedActionStep(
 			} else {
 				nextCtx = switchedCtx
 				nextTabID = switchedTabID
-				markCreatedTab(w, nextTabID)
+				h.markCreatedTab(w, r, nextTabID)
 				h.recordResolvedTab(r, nextTabID)
 			}
 		}
@@ -677,7 +677,7 @@ func (h *Handlers) HandleAction(w http.ResponseWriter, r *http.Request) {
 	}
 	if switched := switchedTabFromActionResult(result); switched != "" {
 		h.setCurrentTabForRequest(r, switched)
-		markCreatedTab(w, switched)
+		h.markCreatedTab(w, r, switched)
 		h.recordResolvedTab(r, switched)
 	}
 	actionRoute := routeMetadataFor(routing)
