@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pinchtab/pinchtab/internal/api/types"
 	"github.com/pinchtab/pinchtab/internal/authn"
 	"github.com/pinchtab/pinchtab/internal/bridge"
 	"github.com/pinchtab/pinchtab/internal/cli/report"
@@ -44,11 +45,6 @@ type healthEnvelope struct {
 	Crashes               *bridge.CrashSummary `json:"crashes,omitempty"`
 	UnresponsiveInstances []string             `json:"unresponsiveInstances,omitempty"`
 }
-
-const (
-	healthStatusOK       = "ok"
-	healthStatusDegraded = "degraded"
-)
 
 func unresponsiveInstanceIDs(instances []bridge.Instance) []string {
 	var ids []string
@@ -113,9 +109,9 @@ func (c *ConfigAPI) healthInfo(includeSecurity bool) (healthEnvelope, error) {
 			}
 		}
 	}
-	status := healthStatusOK
+	status := types.HealthStatusOK
 	if len(unresponsive) > 0 {
-		status = healthStatusDegraded
+		status = types.HealthStatusDegraded
 	}
 	agentCount := 0
 	if c.agents != nil {

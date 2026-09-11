@@ -405,18 +405,22 @@ func TestPortBusyErrorForeignListener(t *testing.T) {
 }
 
 func TestPortBusyErrorReadyPinchTab(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","mode":"dashboard","version":"dev"}`))
-	}))
-	defer srv.Close()
+	for _, status := range []string{"ok", "degraded"} {
+		t.Run(status, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"status":"` + status + `","mode":"dashboard","version":"dev"}`))
+			}))
+			defer srv.Close()
 
-	err := portBusyError(srv.URL, "/tmp/config.json")
-	if err == nil {
-		t.Fatal("expected an error for a busy port")
-	}
-	if !strings.Contains(err.Error(), "server already running") || !strings.Contains(err.Error(), "pinchtab server stop") {
-		t.Errorf("ready-server message lacks the stop command:\n%s", err)
+			err := portBusyError(srv.URL, "/tmp/config.json")
+			if err == nil {
+				t.Fatal("expected an error for a busy port")
+			}
+			if !strings.Contains(err.Error(), "server already running") || !strings.Contains(err.Error(), "pinchtab server stop") {
+				t.Errorf("ready-server message lacks the stop command:\n%s", err)
+			}
+		})
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pinchtab/pinchtab/internal/api/types"
 	"github.com/pinchtab/pinchtab/internal/server"
 )
 
@@ -79,7 +80,7 @@ func fetchHealthSnapshotWithToken(port, token string) (*healthSnapshot, healthSn
 	if err := json.Unmarshal(body, &snap); err != nil {
 		return nil, healthSnapshotInvalid
 	}
-	if snap.Status != "ok" || snap.Mode != "dashboard" || strings.TrimSpace(snap.Version) == "" {
+	if !types.HealthStatusServing(snap.Status) || snap.Mode != "dashboard" || strings.TrimSpace(snap.Version) == "" {
 		return nil, healthSnapshotInvalid
 	}
 	return &snap, healthSnapshotRunning
