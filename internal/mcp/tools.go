@@ -305,6 +305,10 @@ func allTools() []mcp.Tool {
 			requiredTabIDParam(),
 			mcp.WithString("pattern", mcp.Description("Pattern to remove (omit to clear all rules)")),
 		),
+		mcp.NewTool("pinchtab_network_rules",
+			mcp.WithDescription("List the interception rules installed on a tab: returns {tabId, rules:[{pattern, action, ...}]} where action is continue, abort or fulfill (with body, contentType, status, resourceType or method when set). Rules survive navigation, so check this on a tab you did not set up; an empty rules list means the tab mocks and blocks nothing."),
+			requiredTabIDParam(),
+		),
 
 		mcp.NewTool("pinchtab_console",
 			mcp.WithDescription("Read the tab's captured browser console logs (console.log/warn/error and friends). Check this when a page looks healthy in the snapshot but does not respond to actions — the log often says why. A payload full of error-level logs is still a successful call."),

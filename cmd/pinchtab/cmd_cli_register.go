@@ -43,7 +43,7 @@ func registerBrowserCommands() {
 	keyboardCmd.AddCommand(keyboardTypeCmd, keyboardInsertTextCmd)
 	dialogCmd.AddCommand(dialogAcceptCmd, dialogDismissCmd)
 	mouseCmd.AddCommand(mouseMoveCmd, mouseDownCmd, mouseUpCmd, mouseWheelCmd)
-	networkCmd.AddCommand(networkRouteCmd, networkUnrouteCmd)
+	networkCmd.AddCommand(networkRouteCmd, networkUnrouteCmd, networkRulesCmd)
 	recordCmd.AddCommand(recordStartCmd, recordStopCmd, recordStatusCmd)
 
 	configureBrowserFlags()
@@ -343,8 +343,8 @@ func configureBrowserFlags() {
 	networkRouteCmd.Flags().String("content-type", "", "(With --body) Response Content-Type (default application/json)")
 	networkRouteCmd.Flags().Int("status", 0, "(With --body) Response status code (default 200)")
 	networkRouteCmd.Flags().String("method", "", "Limit to an HTTP method (GET, POST, ...). Fulfill rules without --method skip OPTIONS preflights to avoid breaking CORS.")
-	addTabFlag(networkRouteCmd, networkUnrouteCmd)
-	addJSONFlag(networkRouteCmd, networkUnrouteCmd)
+	addTabFlag(networkRouteCmd, networkUnrouteCmd, networkRulesCmd)
+	addJSONFlag(networkRouteCmd, networkUnrouteCmd, networkRulesCmd)
 
 	networkCmd.Flags().String("filter", "", "URL pattern filter")
 	networkCmd.Flags().String("method", "", "HTTP method filter (GET, POST, etc)")

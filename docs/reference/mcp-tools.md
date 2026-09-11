@@ -93,6 +93,7 @@ All element-action tools accept the unified `selector` and the legacy aliases `r
 | `pinchtab_network_clear` | `tabId` | Clears one tab or all tabs when omitted |
 | `pinchtab_network_route` | `tabId` required, `pattern` required, `action`, `body`, `contentType`, `status`, `resourceType`, `method` | Install a request-interception rule on a tab. `action` is `continue` (default), `abort`, or `fulfill`. `fulfill` is blocked on hosts in `security.allowedDomains` and falls through to a real fetch on those hosts |
 | `pinchtab_network_unroute` | `tabId` required, `pattern` | Remove a tab's interception rule by pattern, or all rules when `pattern` is omitted |
+| `pinchtab_network_rules` | `tabId` required | List a tab's interception rules as `{tabId, rules}`, each rule naming its `pattern` and `action` (`continue`, `abort`, `fulfill`). Rules survive navigation; an empty `rules` list means the tab mocks and blocks nothing |
 
 ## Recording
 
