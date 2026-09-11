@@ -77,8 +77,8 @@ func inlineTailSites(fset *token.FileSet, files []*ast.File, methods map[string]
 				return true
 			}
 			for i := 0; i+2 < len(block.List); i++ {
-				body, code, ok := clientCallTriple(block.List[i], methods)
-				if ok && returnsErrorResult(block.List[i+1]) && returnsResultFromBytes(block.List[i+2], body, code) {
+				body, code, errName, ok := clientCallTriple(block.List[i], methods)
+				if ok && returnsErrorResult(block.List[i+1], errName) && returnsResultFromBytes(block.List[i+2], body, code) {
 					sites = append(sites, fset.Position(block.List[i].Pos()).String())
 				}
 			}
@@ -88,38 +88,38 @@ func inlineTailSites(fset *token.FileSet, files []*ast.File, methods map[string]
 	return sites
 }
 
-func clientCallTriple(stmt ast.Stmt, methods map[string]bool) (string, string, bool) {
+func clientCallTriple(stmt ast.Stmt, methods map[string]bool) (string, string, string, bool) {
 	assign, ok := stmt.(*ast.AssignStmt)
 	if !ok || len(assign.Lhs) != 3 || len(assign.Rhs) != 1 {
-		return "", "", false
+		return "", "", "", false
 	}
 	call, ok := assign.Rhs[0].(*ast.CallExpr)
 	if !ok {
-		return "", "", false
+		return "", "", "", false
 	}
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok || !methods[sel.Sel.Name] {
-		return "", "", false
+		return "", "", "", false
 	}
 	names := make([]string, 3)
 	for i, lhs := range assign.Lhs {
 		ident, ok := lhs.(*ast.Ident)
 		if !ok {
-			return "", "", false
+			return "", "", "", false
 		}
 		names[i] = ident.Name
 	}
-	return names[0], names[1], names[2] == "err"
+	return names[0], names[1], names[2], true
 }
 
-func returnsErrorResult(stmt ast.Stmt) bool {
+func returnsErrorResult(stmt ast.Stmt, errName string) bool {
 	ifStmt, ok := stmt.(*ast.IfStmt)
-	if !ok || ifStmt.Init != nil || ifStmt.Else != nil || exprString(ifStmt.Cond) != "err != nil" || len(ifStmt.Body.List) != 1 {
+	if !ok || ifStmt.Init != nil || ifStmt.Else != nil || exprString(ifStmt.Cond) != errName+" != nil" || len(ifStmt.Body.List) != 1 {
 		return false
 	}
 	ret, ok := ifStmt.Body.List[0].(*ast.ReturnStmt)
 	return ok && len(ret.Results) == 2 &&
-		exprString(ret.Results[0]) == "mcp.NewToolResultError(err.Error())" &&
+		exprString(ret.Results[0]) == "mcp.NewToolResultError("+errName+".Error())" &&
 		exprString(ret.Results[1]) == "nil"
 }
 
@@ -209,6 +209,13 @@ func vocab(c *Client) (*mcp.CallToolResult, error) {
 	}
 	return resultFromBytes(body, code)
 }
+func renamed(c *Client) (*mcp.CallToolResult, error) {
+	b, st, e := c.Delete(ctx, "/network", nil)
+	if e != nil {
+		return mcp.NewToolResultError(e.Error()), nil
+	}
+	return resultFromBytes(b, st)
+}
 func nearMiss(c *Client) (*mcp.CallToolResult, error) {
 	body, code, err := c.Get(ctx, "/cookies", nil)
 	if err != nil {
@@ -228,7 +235,7 @@ func nearMiss(c *Client) (*mcp.CallToolResult, error) {
 
 	sites := inlineTailSites(fset, []*ast.File{file}, methods)
 
-	if len(sites) != 3 {
-		t.Fatalf("census found %v in the planted source, want the three tails and not the near miss", sites)
+	if len(sites) != 4 {
+		t.Fatalf("census found %v in the planted source, want the four tails and not the near miss", sites)
 	}
 }
