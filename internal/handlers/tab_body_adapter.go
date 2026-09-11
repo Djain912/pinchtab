@@ -25,11 +25,6 @@ func decodeJSONBody[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
 	return req, true
 }
 
-// requirePathTabIDMatch validates the {id} path value (required) against an
-// optional body-provided tabId, returning the resolved path tabID. ok=false
-// means an error response was already written. For typed tab handlers that call
-// an internal func directly (no JSON re-marshal) — the typed sibling of
-// withPathTabIDBody.
 func requirePathTabID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	tabID := strings.TrimSpace(r.PathValue("id"))
 	if tabID == "" {
