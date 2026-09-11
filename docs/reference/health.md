@@ -76,7 +76,7 @@ Notes:
 - use `defaultInstance.status == "running"` when you want to confirm Chrome is ready
 - strategies such as `always-on` can create an instance automatically at startup
 - `status` does not degrade on a browser crash: the instance is relaunched and is serving again. The crash is history, so it rides beside `status` as `crashes`; a crashed-then-relaunched instance differs from one that never crashed by that key alone. Every tab the dead browser held is gone, and a call to one answers `404` with code `browser_crashed` and a `hint` saying so
-- `status` does degrade to `degraded` while an instance is unresponsive, because that condition is current: on every `/health` the front door probes each running instance's `/tabs` under a short budget beside its crash fetch, and an instance whose `/health` answers while `/tabs` exceeds the budget is named in `unresponsiveInstances`. Its own `status` stays `running` and nothing restarts it; the field is a report, not a remedy. See `responsiveness` on `GET /instances`
+- `status` does degrade to `degraded` while an instance is unresponsive, because that condition is current: every `/health` starts a probe of each running instance's `/tabs` under a short budget beside its crash fetch, or joins the one already in flight, and waits for it at most 250ms; a probe that takes longer finishes in the background, so that `/health` reports the last recorded result and a later one reports the new result. An instance whose `/health` answers while `/tabs` exceeds the budget is named in `unresponsiveInstances`. Its own `status` stays `running` and nothing restarts it; the field is a report, not a remedy. See `responsiveness` on `GET /instances`
 
 ## Related Pages
 

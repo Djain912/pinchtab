@@ -79,7 +79,7 @@ func (d *Dashboard) monitoringSnapshot(includeMemory bool) MonitoringSnapshot {
 
 	if d.monitoring != nil {
 		if refresher, ok := d.monitoring.(interface {
-			RefreshCrashes() map[string]bridge.CrashSummary
+			RefreshCrashes()
 		}); ok {
 			refresher.RefreshCrashes()
 		}

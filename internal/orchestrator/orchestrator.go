@@ -27,6 +27,8 @@ type EventHandler func(InstanceEvent)
 type Orchestrator struct {
 	instances     map[string]*InstanceInternal
 	crashes       map[string]bridge.CrashSummary
+	refreshMu     sync.Mutex
+	refreshDone   chan struct{}
 	baseDir       string
 	binary        string
 	profiles      *profiles.ProfileManager

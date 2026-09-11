@@ -118,7 +118,7 @@ Instance responses include:
 
 - `mode`: `"headless"` or `"headed"`
 - `headless`: boolean kept for compatibility
-- `responsiveness`: whether the instance's browser routes answer, measured on the last front-door `/health` or monitoring snapshot by probing the instance's `/tabs` under a short budget. `responsive` when it answered, `unresponsive` when its `/health` answered but `/tabs` did not within the budget, `unknown` when it has not been probed yet or the probe could not connect. It never changes `status`, which stays `running` for an unresponsive instance, and it triggers no restart. The front door's `/health` degrades while any instance is `unresponsive`
+- `responsiveness`: whether the instance's browser routes answer, measured by the latest completed probe of the instance's `/tabs` under a short budget, which a front-door `/health` or monitoring snapshot starts and waits for at most 250ms; a slower probe is reported by the next read. `responsive` when it answered, `unresponsive` when its `/health` answered but `/tabs` did not within the budget, `unknown` when it has not been probed yet or the probe could not connect. It never changes `status`, which stays `running` for an unresponsive instance, and it triggers no restart. The front door's `/health` degrades while any instance is `unresponsive`
 
 ## Get Instance Logs
 

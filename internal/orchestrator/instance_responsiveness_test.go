@@ -173,3 +173,110 @@ func TestTheTabsProbeReachesTheChildAsOrchestratorActivityNotClientActivity(t *t
 		}
 	}
 }
+
+func awaitRefresh(t *testing.T, o *Orchestrator) time.Time {
+	t.Helper()
+	o.refreshMu.Lock()
+	done := o.refreshDone
+	o.refreshMu.Unlock()
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("the crash fan-out never finished")
+		}
+	}
+	return time.Now()
+}
+
+func addStubInstance(o *Orchestrator, id, url string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.instances[id] = &InstanceInternal{
+		Instance: bridge.Instance{ID: id, ProfileName: id, Status: "running"},
+		URL:      url,
+	}
+}
+
+func TestAHangingTabsProbeReleasesTheRequestAtTheJoinWaitAndRecordsItsVerdictLater(t *testing.T) {
+	previous := responsivenessProbeBudget
+	responsivenessProbeBudget = 800 * time.Millisecond
+	t.Cleanup(func() { responsivenessProbeBudget = previous })
+	o, _ := orchestratorOverStubChild(t, stubChild(answerHealth, hangUntilClientGivesUp))
+
+	started := time.Now()
+	o.CrashSummary()
+	elapsed := time.Since(started)
+	if elapsed < refreshJoinWait || elapsed > refreshJoinWait+150*time.Millisecond || elapsed >= 500*time.Millisecond {
+		t.Fatalf("CrashSummary took %v with one hanging child, want the %v join wait, under the CLI's 500ms presence check", elapsed, refreshJoinWait)
+	}
+	if got := o.List()[0].Responsiveness; got != bridge.ResponsivenessUnknown {
+		t.Fatalf("responsiveness = %q before the probe finished, want unknown", got)
+	}
+	awaitRefresh(t, o)
+	if got := o.List()[0].Responsiveness; got != bridge.ResponsivenessUnresponsive {
+		t.Fatalf("responsiveness = %q after the probe finished, want unresponsive", got)
+	}
+}
+
+func TestConcurrentRefreshesShareOneFanOut(t *testing.T) {
+	previous := responsivenessProbeBudget
+	responsivenessProbeBudget = 800 * time.Millisecond
+	t.Cleanup(func() { responsivenessProbeBudget = previous })
+	var mu sync.Mutex
+	tabsHits := 0
+	o, _ := orchestratorOverStubChild(t, stubChild(answerHealth, func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		tabsHits++
+		mu.Unlock()
+		hangUntilClientGivesUp(w, r)
+	}))
+
+	o.RefreshCrashes()
+	o.RefreshCrashes()
+	awaitRefresh(t, o)
+	mu.Lock()
+	defer mu.Unlock()
+	if tabsHits != 1 {
+		t.Fatalf("two refreshes during one in-flight fan-out probed /tabs %d times, want 1", tabsHits)
+	}
+}
+
+func TestTheFanOutProbesInstancesInParallel(t *testing.T) {
+	budget := 300 * time.Millisecond
+	previous := responsivenessProbeBudget
+	responsivenessProbeBudget = budget
+	t.Cleanup(func() { responsivenessProbeBudget = previous })
+	o, _ := orchestratorOverStubChild(t, stubChild(answerHealth, hangUntilClientGivesUp))
+	o.mu.RLock()
+	url := o.instances[stubInstanceID].URL
+	o.mu.RUnlock()
+	addStubInstance(o, "inst_probe_2", url)
+
+	started := time.Now()
+	o.RefreshCrashes()
+	elapsed := awaitRefresh(t, o).Sub(started)
+	if elapsed > budget+150*time.Millisecond {
+		t.Fatalf("fan-out over two hanging instances took %v, want one %v budget: the probes ran serially", elapsed, budget)
+	}
+	for _, inst := range o.List() {
+		if inst.Responsiveness != bridge.ResponsivenessUnresponsive {
+			t.Fatalf("%s responsiveness = %q, want unresponsive", inst.ID, inst.Responsiveness)
+		}
+	}
+}
+
+func TestATabsProbeCutOffWithoutAnAnswerIsUnknownNotUnresponsive(t *testing.T) {
+	shortProbeBudget(t)
+	o, _ := orchestratorOverStubChild(t, stubChild(answerHealth, func(w http.ResponseWriter, _ *http.Request) {
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err == nil {
+			_ = conn.Close()
+		}
+	}))
+	o.RefreshCrashes()
+	awaitRefresh(t, o)
+	if got := o.List()[0].Responsiveness; got != bridge.ResponsivenessUnknown {
+		t.Fatalf("responsiveness = %q when /tabs dropped the connection, want unknown: only a probe that outlasts the budget is unresponsive", got)
+	}
+}

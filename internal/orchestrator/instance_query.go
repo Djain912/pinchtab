@@ -71,11 +71,40 @@ func (o *Orchestrator) probeInstance(inst *InstanceInternal) instanceProbe {
 	return instanceProbe{crashes: crashes, responsiveness: classifyResponsiveness(healthErr, tabsErr)}
 }
 
+var refreshJoinWait = 250 * time.Millisecond
+
 // RefreshCrashes asks every live instance for its crash record and probes its
 // tabs route, so List can carry both and CrashSummary can merge the crashes.
 // Browser crashes are recorded by the process that owns the browser, which in
 // server mode is never this one.
-func (o *Orchestrator) RefreshCrashes() map[string]bridge.CrashSummary {
+func (o *Orchestrator) RefreshCrashes() {
+	timer := time.NewTimer(refreshJoinWait)
+	defer timer.Stop()
+	select {
+	case <-o.startRefresh():
+	case <-timer.C:
+	}
+}
+
+func (o *Orchestrator) startRefresh() <-chan struct{} {
+	o.refreshMu.Lock()
+	defer o.refreshMu.Unlock()
+	if o.refreshDone != nil {
+		return o.refreshDone
+	}
+	done := make(chan struct{})
+	o.refreshDone = done
+	go func() {
+		o.refreshInstances()
+		o.refreshMu.Lock()
+		o.refreshDone = nil
+		o.refreshMu.Unlock()
+		close(done)
+	}()
+	return done
+}
+
+func (o *Orchestrator) refreshInstances() {
 	o.mu.RLock()
 	instances := make([]*InstanceInternal, 0, len(o.instances))
 	for _, inst := range o.instances {
@@ -96,7 +125,6 @@ func (o *Orchestrator) RefreshCrashes() map[string]bridge.CrashSummary {
 	}
 	wg.Wait()
 
-	fresh := make(map[string]bridge.CrashSummary, len(instances))
 	o.mu.Lock()
 	if o.crashes == nil {
 		o.crashes = map[string]bridge.CrashSummary{}
@@ -109,11 +137,9 @@ func (o *Orchestrator) RefreshCrashes() map[string]bridge.CrashSummary {
 		if probes[i].crashes == nil {
 			continue
 		}
-		fresh[inst.ID] = *probes[i].crashes
 		o.crashes[inst.ID] = *probes[i].crashes
 	}
 	o.mu.Unlock()
-	return fresh
 }
 
 // CrashSummary merges the instances' crash records into the shape bridge /health
