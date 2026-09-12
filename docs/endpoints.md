@@ -1033,8 +1033,8 @@ different kinds of answer and neither substitutes for the other:
   "code": "evaluate_disabled",
   "details": {
     "setting": "security.allowEvaluate",
-    "hint": "Enable security.allowEvaluate to use this feature.",
-    "remedy": "pinchtab config set security.allowEvaluate true && pinchtab server restart"
+    "hint": "Enable security.allowEvaluate to use this feature, then restart PinchTab to apply the change.",
+    "remedy": "pinchtab config set security.allowEvaluate true"
   }
 }
 ```

@@ -521,6 +521,47 @@ func TestConfigSetHintDoesNotNameServerRestartForBridge(t *testing.T) {
 	}
 }
 
+// A running instance whose token the CLI cannot present answers /health with
+// 401/403. It is still running and still needs a restart to apply the change, so
+// the hint must print — mode-neutral, since the mode is hidden. This pins the
+// regression where switching off CheckPinchTabRunning (any 200) to a strict probe
+// left a protected instance with no hint at all.
+func TestConfigSetHintsRestartForProtectedInstance(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	port := srv.URL[strings.LastIndex(srv.URL, ":")+1:]
+
+	configPath := filepath.Join(t.TempDir(), "pinchtab", "config.json")
+	t.Setenv("PINCHTAB_CONFIG", configPath)
+	configJSON := []byte(`{"configVersion":"0.8.0","server":{"port":"` + port + `","token":"test-token-for-restart-hint-00000"}}`)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(configPath, configJSON, 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+
+	stderr := captureStderr(t, func() {
+		_ = captureStdout(t, func() {
+			rootCmd.SetArgs([]string{"config", "set", "security.allowScreencast", "true"})
+			if err := rootCmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+		})
+	})
+
+	if !strings.Contains(stderr, "restart") {
+		t.Fatalf("a protected running instance got no restart hint: %q", stderr)
+	}
+	if strings.Contains(stderr, "pinchtab server restart") {
+		t.Fatalf("a protected instance's mode is unknown, so the hint must stay neutral: %q", stderr)
+	}
+}
+
 func TestIsSensitiveConfigPath(t *testing.T) {
 	cases := map[string]bool{
 		"server.token":                            true,

@@ -120,7 +120,7 @@ func (c *ConfigAPI) healthInfo(includeSecurity bool) (healthEnvelope, error) {
 	cfg := c.cfg()
 	out := healthEnvelope{
 		Status:                status,
-		Mode:                  "dashboard",
+		Mode:                  types.ModeDashboard,
 		Version:               c.version,
 		Uptime:                int64(time.Since(c.startedAt).Milliseconds()),
 		AuthRequired:          cfg != nil && strings.TrimSpace(cfg.Token) != "",

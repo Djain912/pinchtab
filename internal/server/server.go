@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pinchtab/pinchtab/internal/activity"
+	"github.com/pinchtab/pinchtab/internal/api/types"
 	"github.com/pinchtab/pinchtab/internal/authn"
 	"github.com/pinchtab/pinchtab/internal/bridge"
 	_ "github.com/pinchtab/pinchtab/internal/browsers/all"
@@ -286,7 +287,7 @@ func RunDashboard(cfg *config.RuntimeConfig, version string) {
 	mux.HandleFunc("GET /health/background", func(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]string{
 			"status":  "ok",
-			"mode":    "dashboard",
+			"mode":    types.ModeDashboard,
 			"version": version,
 			"marker":  cfg.BackgroundMarker,
 		})

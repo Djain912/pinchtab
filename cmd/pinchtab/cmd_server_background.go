@@ -414,7 +414,7 @@ func isPinchTabHealthReady(url, marker string) bool {
 	if err := json.Unmarshal(body, &health); err != nil {
 		return false
 	}
-	if !types.HealthStatusServing(health.Status) || health.Mode != "dashboard" || strings.TrimSpace(health.Version) == "" {
+	if !types.HealthStatusServing(health.Status) || health.Mode != types.ModeDashboard || strings.TrimSpace(health.Version) == "" {
 		return false
 	}
 	return marker == "" || health.Marker == marker

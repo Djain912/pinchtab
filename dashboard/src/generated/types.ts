@@ -36,6 +36,13 @@ export const HeaderSource = "X-PinchTab-Source";
 
 export const HealthStatusOK = "ok";
 export const HealthStatusDegraded = "degraded";
+/**
+ * ModeDashboard is the /health "mode" the front-door dashboard server reports. A
+ * bridge or instance server reports no mode, so a reader comparing against this
+ * const treats those as non-dashboard rather than by accident — and a rename
+ * stays one edit instead of a literal scattered across producers and readers.
+ */
+export const ModeDashboard = "dashboard";
 
 //////////
 // source: types.go
