@@ -315,10 +315,9 @@ _e2e_record_tab_baseline() {
 
 _e2e_close_leaked_tabs() {
   local id
-  # Skip only when the start-of-scenario snapshot FAILED: "close everything not in
-  # an unknown set" could close the only tab and tear the browser down. A
-  # successful empty baseline means the scenario began with no tabs, so every tab
-  # present now is one it opened and must be closed.
+  # Skip only when the start-of-scenario snapshot FAILED: an unknown baseline cannot
+  # say which tabs the scenario opened. A successful empty baseline means the
+  # scenario began with no tabs, so every tab present now is one it opened.
   [ "${SCENARIO_TAB_BASELINE_OK:-0}" = "1" ] || return 0
   while read -r id; do
     [ -n "$id" ] || continue

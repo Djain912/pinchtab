@@ -86,10 +86,52 @@ func TestCloseLeakedTabsClosesOnlyNonBaselineTabs(t *testing.T) {
 		}
 	})
 
-	t.Run("a failed start snapshot skips cleanup so it cannot close the only tab", func(t *testing.T) {
+	t.Run("a failed start snapshot skips cleanup because an unknown baseline cannot say which tabs the scenario opened", func(t *testing.T) {
 		got := runTabCleanup(t, "", "0", "T1")
 		if len(got) != 0 {
 			t.Fatalf("closed %v, want none (a failed baseline snapshot must skip cleanup)", got)
 		}
 	})
+}
+
+const tabBaselineHarness = `
+set -uo pipefail
+source helpers/base.sh >/dev/null 2>&1
+source helpers/api-http.sh >/dev/null 2>&1
+e2e_curl() {
+  [ "${STUB_CURL_FAILS:-0}" = "1" ] && return 7
+  printf '%s\n%s' "${STUB_BODY:-}" "${STUB_STATUS:-}"
+}
+_e2e_record_tab_baseline
+printf 'OK=%s BASELINE=[%s]' "${SCENARIO_TAB_BASELINE_OK}" "${SCENARIO_TAB_BASELINE% }"
+`
+
+func TestRecordTabBaselineSeparatesAnEmptySnapshotFromAFailedOne(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the helper under test is a bash function")
+	}
+	if _, err := exec.LookPath("jq"); err != nil {
+		t.Skip("the helper parses tab ids with jq")
+	}
+	for _, tc := range []struct {
+		name, body, status, fails, want string
+	}{
+		{"a 200 with tabs records them and marks the snapshot good", `{"tabs":[{"id":"T0"},{"id":"T1"}]}`, "200", "0", "OK=1 BASELINE=[T0 T1]"},
+		{"a 200 with no tabs is a good, empty baseline", `{"tabs":[]}`, "200", "0", "OK=1 BASELINE=[]"},
+		{"a non-200 answer is a failed snapshot", `{"error":"no instance"}`, "503", "0", "OK=0 BASELINE=[]"},
+		{"a curl failure is a failed snapshot", "", "", "1", "OK=0 BASELINE=[]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := exec.Command("bash", "-c", tabBaselineHarness)
+			cmd.Dir = "."
+			cmd.Env = append(os.Environ(), "STUB_BODY="+tc.body, "STUB_STATUS="+tc.status, "STUB_CURL_FAILS="+tc.fails)
+			raw, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("harness failed: %v\n%s", err, raw)
+			}
+			if got := strings.TrimSpace(string(raw)); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
 }
