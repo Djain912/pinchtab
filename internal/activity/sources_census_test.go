@@ -81,6 +81,20 @@ func bareSourceLiteralSites(t *testing.T, files []srccensus.SourceFile) []string
 				if isSourceSelector(node.Y) {
 					flag(node.X, ".Source comparison operand")
 				}
+			case *ast.AssignStmt:
+				for i, lhs := range node.Lhs {
+					if isSourceSelector(lhs) && i < len(node.Rhs) {
+						flag(node.Rhs[i], ".Source assignment value")
+					}
+				}
+			case *ast.SwitchStmt:
+				if node.Tag != nil && isSourceSelector(node.Tag) {
+					for _, stmt := range node.Body.List {
+						for _, expr := range stmt.(*ast.CaseClause).List {
+							flag(expr, "switch on .Source case")
+						}
+					}
+				}
 			case *ast.BasicLit:
 				if inActivityPkg {
 					flag(node, "bare literal in package activity")
@@ -112,6 +126,17 @@ func TestSourceCensusFlagsAPlantedComparison(t *testing.T) {
 	}
 	if len(bareSourceLiteralSites(t, planted)) == 0 {
 		t.Fatal("a bare evt.Source == \"scheduler\" comparison passed the census; the two predicates could silently drift again")
+	}
+}
+
+func TestSourceCensusFlagsAPlantedAssignmentAndSwitchCase(t *testing.T) {
+	for name, text := range map[string]string{
+		"assignment": "package server\nfunc f(evt *struct{ Source string }) { evt.Source = \"client\" }\n",
+		"switch":     "package server\nfunc f(evt struct{ Source string }) bool {\n\tswitch evt.Source {\n\tcase \"dashboard\":\n\t\treturn true\n\t}\n\treturn false\n}\n",
+	} {
+		if len(bareSourceLiteralSites(t, []srccensus.SourceFile{{Name: "internal/server/evil.go", Text: text}})) == 0 {
+			t.Errorf("a bare source literal in a .Source %s passed the census", name)
+		}
 	}
 }
 
