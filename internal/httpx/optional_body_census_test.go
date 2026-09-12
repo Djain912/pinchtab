@@ -23,18 +23,34 @@ func decodeEOFSites(t *testing.T, name, src string) []string {
 		t.Fatalf("parse %s: %v", name, err)
 	}
 	var sites []string
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
-			continue
-		}
-		decodeErrs := decodeErrorNames(fn.Body)
-		ast.Inspect(fn.Body, func(n ast.Node) bool {
+	scan := func(fnName string, body *ast.BlockStmt) {
+		decodeErrs := decodeErrorNames(body)
+		ast.Inspect(body, func(n ast.Node) bool {
 			if subject, ok := eofComparisonSubject(n); ok && decodeErrs[subject] {
-				sites = append(sites, name+"::"+fn.Name.Name)
+				sites = append(sites, name+"::"+fnName)
 			}
 			return true
 		})
+	}
+	for _, decl := range file.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			if d.Body != nil {
+				scan(d.Name.Name, d.Body)
+			}
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				value, ok := spec.(*ast.ValueSpec)
+				if !ok {
+					continue
+				}
+				for i, v := range value.Values {
+					if lit, ok := v.(*ast.FuncLit); ok && i < len(value.Names) {
+						scan(value.Names[i].Name, lit.Body)
+					}
+				}
+			}
+		}
 	}
 	return sites
 }
@@ -82,9 +98,24 @@ func isIOEOF(e ast.Expr) bool {
 func eofComparisonSubject(n ast.Node) (string, bool) {
 	switch e := n.(type) {
 	case *ast.BinaryExpr:
-		if (e.Op == token.EQL || e.Op == token.NEQ) && isIOEOF(e.Y) {
-			if ident, ok := e.X.(*ast.Ident); ok {
+		if e.Op != token.EQL && e.Op != token.NEQ {
+			break
+		}
+		for _, pair := range [][2]ast.Expr{{e.X, e.Y}, {e.Y, e.X}} {
+			if ident, ok := pair[0].(*ast.Ident); ok && isIOEOF(pair[1]) {
 				return ident.Name, true
+			}
+		}
+	case *ast.SwitchStmt:
+		ident, ok := e.Tag.(*ast.Ident)
+		if !ok {
+			break
+		}
+		for _, stmt := range e.Body.List {
+			for _, expr := range stmt.(*ast.CaseClause).List {
+				if isIOEOF(expr) {
+					return ident.Name, true
+				}
 			}
 		}
 	case *ast.CallExpr:
@@ -146,6 +177,25 @@ func lenient(r *http.Request) {
 		return
 	}
 }
+func reversed(r *http.Request) {
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil && io.EOF != err {
+		return
+	}
+}
+func switched(r *http.Request) {
+	err := json.NewDecoder(r.Body).Decode(&req)
+	switch err {
+	case nil, io.EOF:
+	default:
+		return
+	}
+}
+var packageLevel = func(w http.ResponseWriter, r *http.Request) {
+	if err := httpx.DecodeJSONBody(w, r, 0, &req); err != nil && !errors.Is(err, io.EOF) {
+		return
+	}
+}
 func read(r io.Reader) {
 	n, err := r.Read(buf)
 	if err == io.EOF {
@@ -161,7 +211,7 @@ func tokenizer(z *html.Tokenizer) {
 `
 	got := decodeEOFSites(t, "planted.go", planted)
 
-	if strings.Join(got, ",") != "planted.go::strict,planted.go::lenient" {
-		t.Fatalf("census found %v, want the two planted decode copies and neither the read nor the tokenizer", got)
+	if strings.Join(got, ",") != "planted.go::strict,planted.go::lenient,planted.go::reversed,planted.go::switched,planted.go::packageLevel" {
+		t.Fatalf("census found %v, want the five planted decode copies and neither the read nor the tokenizer", got)
 	}
 }
