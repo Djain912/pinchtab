@@ -17,6 +17,7 @@ const (
 var containerRoles = map[string]bool{"list": true, "table": true, "rowgroup": true, "grid": true, "feed": true}
 
 type group struct {
+	v         view
 	container int
 	items     []int
 	columns   []int
@@ -44,7 +45,7 @@ func resolveArray(prop Property, v view, opts Options) (FieldResult, any, bool) 
 			break
 		}
 		data = append(data, res.Data)
-		fr.Items = append(fr.Items, ItemResult{Ref: v.nodes[item].Ref, Fields: res.Fields})
+		fr.Items = append(fr.Items, ItemResult{Ref: g.v.nodes[item].Ref, Fields: res.Fields})
 	}
 	if len(data) < prop.MinItems {
 		return FieldResult{Ref: fr.Ref, Score: fr.Score, Confidence: fr.Confidence, Reason: reasonTooFewItems}, nil, false
@@ -54,23 +55,23 @@ func resolveArray(prop Property, v view, opts Options) (FieldResult, any, bool) 
 
 func chooseGroup(prop Property, v view, opts Options) (group, FieldResult, bool) {
 	var candidates []group
-	if prop.scope.kind != targetNone {
+	scoped := prop.scope.kind != targetNone
+	if scoped {
 		node, fr, ok := matchTarget(prop.scope, "", v, opts)
 		if !ok {
 			fr.Reason = reasonScopeNotFound
 			return group{}, fr, false
 		}
-		g, ok := groupAt(v, v.index[node.Ref], 1)
-		if !ok {
+		candidates = scopedGroups(v.subtree(v.index[node.Ref]))
+		if len(candidates) == 0 {
 			return group{}, FieldResult{Ref: node.Ref, Confidence: semantic.CalibrateConfidence(0), Reason: reasonNoRepeatedGroup}, false
 		}
-		candidates = []group{g}
 	} else {
 		candidates = detectGroups(v)
 	}
 
 	for i := range candidates {
-		candidates[i].resolver = newItemResolver(candidates[i], *prop.Items, v, opts)
+		candidates[i].resolver = newItemResolver(candidates[i], *prop.Items, opts)
 		candidates[i].score = scoreGroup(candidates[i], *prop.Items)
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
@@ -83,11 +84,24 @@ func chooseGroup(prop Property, v view, opts Options) (group, FieldResult, bool)
 		}
 		return a.container < b.container
 	})
-	if len(candidates) == 0 || (prop.scope.kind == targetNone && candidates[0].score == 0) {
+	if len(candidates) == 0 || (!scoped && candidates[0].score == 0) {
 		return group{}, FieldResult{Confidence: semantic.CalibrateConfidence(0), Reason: reasonNoRepeatedGroup}, false
 	}
 	best := candidates[0]
-	return best, FieldResult{Ref: v.nodes[best.container].Ref, Score: best.score, Confidence: semantic.CalibrateConfidence(best.score)}, true
+	return best, FieldResult{Ref: best.v.nodes[best.container].Ref, Score: best.score, Confidence: semantic.CalibrateConfidence(best.score)}, true
+}
+
+func scopedGroups(v view) []group {
+	groups := detectGroups(v)
+	for _, g := range groups {
+		if g.container == 0 {
+			return groups
+		}
+	}
+	if g, ok := groupAt(v, 0, 1); ok {
+		groups = append(groups, g)
+	}
+	return groups
 }
 
 func detectGroups(v view) []group {
@@ -110,7 +124,7 @@ func groupAt(v view, container, min int) (group, bool) {
 	if count < min || count == 0 {
 		return group{}, false
 	}
-	g := group{container: container}
+	g := group{v: v, container: container}
 	for _, c := range children {
 		if role(v.nodes[c]) == dominant && !v.isHeaderRow(c) {
 			g.items = append(g.items, c)
@@ -191,7 +205,8 @@ type columnField struct {
 	field FieldResult
 }
 
-func newItemResolver(g group, schema Schema, v view, opts Options) itemResolver {
+func newItemResolver(g group, schema Schema, opts Options) itemResolver {
+	v := g.v
 	r := itemResolver{schema: schema, v: v, opts: opts}
 	if g.columns == nil {
 		return r

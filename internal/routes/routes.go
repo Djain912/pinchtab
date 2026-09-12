@@ -132,6 +132,7 @@ var coreEndpoints = []Endpoint{
 	{"POST", "/dialog", "Handle dialog", CapNone, true},
 	{"POST", "/wait", "Wait for condition", CapNone, true},
 	{"POST", "/find", "Find elements", CapNone, true},
+	{"POST", "/extract", "Extract schema-typed data from the page", CapNone, true},
 
 	{"POST", "/tab", "Create or focus tab", CapNone, false},
 	{"POST", "/close", "Close tab", CapNone, true},

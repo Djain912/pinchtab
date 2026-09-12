@@ -1,0 +1,69 @@
+#!/bin/bash
+# extract-extended.sh — /extract under IDPI warn and strict modes, and the browse grant.
+
+GROUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${GROUP_DIR}/../../helpers/api.sh"
+
+secure_post() {
+  with_server "$E2E_SECURE_SERVER" pt_post "$@"
+}
+
+INJECT_SCHEMA='{"type":"object","properties":{"headline":{"type":"string","description":"page heading","x-pinchtab-hint":"role:heading"}}}'
+
+# ─────────────────────────────────────────────────────────────────
+start_test "extract: injection page carries the IDPI warning in warn mode"
+
+pt_post /navigate -d "{\"url\":\"${FIXTURES_URL}/idpi-inject.html\"}"
+assert_ok "navigate to idpi-inject.html"
+
+HEADERS=$(e2e_curl -s -D - -o /dev/null -X POST "${E2E_SERVER}/extract" -H "Content-Type: application/json" -d "{\"schema\":${INJECT_SCHEMA}}")
+if echo "$HEADERS" | grep -qi "^X-IDPI-Warning:"; then
+  pass_assert "X-IDPI-Warning header present"
+else
+  fail_assert "X-IDPI-Warning header missing: $HEADERS"
+fi
+
+pt_post /extract -d "{\"schema\":${INJECT_SCHEMA}}"
+assert_ok "extract answers in warn mode"
+assert_json_exists "$RESULT" ".idpiWarning" "idpiWarning present in the body"
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
+start_test "extract: strict mode blocks the injection page like /find"
+
+strict_extract_and_find() {
+  pt_post /navigate -d "{\"url\":\"${FIXTURES_URL}/idpi-inject.html\"}"
+  assert_ok "navigate to the injection page in strict mode"
+  pt_post /extract -d "{\"schema\":${INJECT_SCHEMA}}"
+  assert_http_status 403 "extract blocked by IDPI"
+  assert_contains "$RESULT" "idpi" "block names the scanner"
+  pt_post /find -d '{"query":"heading"}'
+  assert_http_status 403 "find blocked the same way"
+}
+
+if e2e_curl -sf "${E2E_SECURE_SERVER}/health" >/dev/null 2>&1; then
+  with_server "$E2E_SECURE_SERVER" strict_extract_and_find
+else
+  skip_test "no strict-mode server in this suite (the IDPI guard is built at startup, so a config PUT cannot flip it); strict mode is pinned by the handlers unit test"
+fi
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
+start_test "extract: a session minted without the browse grant is refused"
+
+pt_post /sessions '{"agentId":"e2e-extract-agent","grants":["clipboard"]}'
+assert_ok "session created without browse"
+NO_BROWSE_TOKEN=$(echo "$RESULT" | jq -r '.sessionToken')
+
+STATUS=$(e2e_curl --token "" -s -o /dev/null -w "%{http_code}" -X POST "${E2E_SERVER}/extract" \
+  -H "Authorization: Session ${NO_BROWSE_TOKEN}" -H "Content-Type: application/json" -d "{\"schema\":${INJECT_SCHEMA}}")
+if [ "$STATUS" = "403" ]; then
+  pass_assert "no-browse session refused on /extract"
+else
+  fail_assert "no-browse session got $STATUS on /extract, want 403"
+fi
+
+end_test
+

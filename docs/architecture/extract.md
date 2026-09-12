@@ -116,9 +116,11 @@ on those three derivations and nothing else.
 
 1. **Scope.** If the property carries `x-pinchtab-scope`, that selector is
    resolved over the whole node list exactly like a hint (`ref:` verbatim, the
-   semantic kinds through the matcher) and the matched node is the container.
-   A scope that matches nothing leaves the property missing with reason
-   `scope_not_found`; no detection runs in its place.
+   semantic kinds through the matcher) and detection runs inside the matched
+   node's subtree only, the node itself admitted as a candidate with as few as
+   one item, so a scope on a `table` yields its rows and a scope on a `list`
+   its items. A scope that matches nothing leaves the property missing with
+   reason `scope_not_found`; no detection runs outside it.
 2. **Detection.** Otherwise every node is a candidate whose direct children
    share a dominant role (the most frequent role among them) at least **three**
    times, or at least **two** times when the node's own role is `list`,

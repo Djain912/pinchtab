@@ -538,6 +538,19 @@
         "audit",
         "visualdiff"
       ]
+    },
+    "api/extract-basic.sh": {
+      "tags": [
+        "extract",
+        "pr"
+      ]
+    },
+    "api/extract-extended.sh": {
+      "tags": [
+        "extract",
+        "idpi",
+        "security"
+      ]
     }
   }
 }

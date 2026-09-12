@@ -167,12 +167,14 @@ func TestResolveArray_ScopeForcesContainer(t *testing.T) {
 		t.Errorf("links = %v, want 4 nav items", list)
 	}
 
-	byRef := mustSchema(t, `{"type":"object","properties":{
-		"rows":{"type":"array","x-pinchtab-scope":"ref:e64","items":{"type":"object","properties":{
-			"order":{"type":"integer","description":"order number"}}}}}}`)
-	got = Resolve(byRef, nodes, Options{})
-	if got.Fields["rows"].Ref != "e64" || len(items(t, got, "rows")) != 5 {
-		t.Errorf("ref scope = %+v data=%v", got.Fields["rows"], got.Data["rows"])
+	for _, scope := range []string{"ref:e63", "ref:e64"} {
+		byRef := mustSchema(t, `{"type":"object","properties":{
+			"rows":{"type":"array","x-pinchtab-scope":"`+scope+`","items":{"type":"object","properties":{
+				"order":{"type":"integer","description":"order number"}}}}}}`)
+		got = Resolve(byRef, nodes, Options{})
+		if got.Fields["rows"].Ref != "e64" || len(items(t, got, "rows")) != 5 {
+			t.Errorf("scope %s = %+v data=%v, want the 5 rows under the table", scope, got.Fields["rows"], got.Data["rows"])
+		}
 	}
 
 	absent := mustSchema(t, `{"type":"object","required":["rows"],"properties":{

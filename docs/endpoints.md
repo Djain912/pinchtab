@@ -174,6 +174,8 @@ GET  /visible
 GET  /tabs/{id}/visible
 POST /find
 POST /tabs/{id}/find
+POST /extract
+POST /tabs/{id}/extract
 POST /evaluate
 POST /tabs/{id}/evaluate
 ```

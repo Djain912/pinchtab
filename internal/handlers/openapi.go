@@ -94,6 +94,52 @@ func (h *Handlers) openAPIDocument(description string) map[string]any {
 			op["requestBody"] = evaluateRequestBody
 		}
 	}
+	extractRequestBody := map[string]any{
+		"required": true,
+		"content": map[string]any{
+			"application/json": map[string]any{
+				"schema": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"tabId":     map[string]any{"type": "string", "description": "Optional tab ID for top-level /extract requests"},
+						"schema":    map[string]any{"type": "object", "description": "JSON schema: an object with string/number/integer/boolean properties or arrays of such objects; x-pinchtab-hint pins a field, x-pinchtab-scope pins an array's container"},
+						"threshold": map[string]any{"type": "number", "description": "Minimum match score per field (default 0.3)"},
+						"maxItems":  map[string]any{"type": "integer", "description": "Cap on array items (default 100)"},
+					},
+					"required": []string{"schema"},
+				},
+			},
+		},
+	}
+	extractResponses := map[string]any{
+		"200": map[string]any{
+			"description": "Typed data with per-field diagnostics",
+			"content": map[string]any{
+				"application/json": map[string]any{
+					"schema": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"data":          map[string]any{"type": "object", "description": "Values coerced to the schema types; arrays hold one object per repeated group"},
+							"fields":        map[string]any{"type": "object", "description": "Per property: ref, score, confidence, source, reason, and for arrays items plus truncated"},
+							"missing":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+							"truncated":     map[string]any{"type": "boolean"},
+							"latency_ms":    map[string]any{"type": "integer"},
+							"element_count": map[string]any{"type": "integer"},
+							"idpiWarning":   map[string]any{"type": "string"},
+						},
+					},
+				},
+			},
+		},
+		"400": map[string]any{"description": "Missing or unsupported schema; the message names the offending path"},
+		"404": map[string]any{"description": "Tab not found"},
+	}
+	for _, p := range []string{"/extract", "/tabs/{id}/extract"} {
+		if op, ok := paths[p]["post"].(map[string]any); ok {
+			op["requestBody"] = extractRequestBody
+			op["responses"] = extractResponses
+		}
+	}
 	if op, ok := paths["/text"]["get"].(map[string]any); ok {
 		op["parameters"] = []map[string]any{
 			{"name": "maxChars", "in": "query", "schema": map[string]string{"type": "integer"}},

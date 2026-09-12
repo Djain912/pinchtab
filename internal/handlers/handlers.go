@@ -363,6 +363,7 @@ func (h *Handlers) bridgeBindings() []routeBinding {
 		{pattern: "POST /dialog", root: h.HandleDialog, tab: h.HandleTabDialog, guards: guardHandoffPause},
 		{pattern: "POST /wait", root: h.HandleWait, tab: h.HandleTabWait, guards: guardDialogBlocked | guardDomainPolicy},
 		{pattern: "POST /find", root: h.HandleFind, tab: h.HandleFind, guards: guardDialogBlocked | guardDomainPolicy},
+		{pattern: "POST /extract", root: h.HandleExtract, tab: h.HandleTabExtract, guards: guardDialogBlocked | guardDomainPolicy},
 		{pattern: "POST /tab", root: h.HandleTab, guards: guardNone},
 		{pattern: "POST /close", root: h.HandleClose, tab: h.HandleTabClose, guards: guardNone},
 		{pattern: "POST /lock", root: h.HandleTabLock, tab: h.HandleTabLockByID, guards: guardNone},
