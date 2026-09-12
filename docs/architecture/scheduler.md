@@ -74,11 +74,11 @@ Across agents:
 
 The result store keeps snapshots of tasks and evicts terminal tasks after the configured TTL.
 
-### ManagerResolver
+### Resolver
 
-The resolver maps a `tabId` to the owning instance port through `instance.Manager.FindInstanceByTabID`.
+The scheduler takes the orchestrator directly as its `InstanceResolver`: `ResolveTabInstance(tabId)` maps a `tabId` to the owning instance port, which is how the scheduler knows where to forward execution.
 
-This is how the scheduler knows where to forward execution.
+The orchestrator also implements `RequestAuthorizer`. Before dispatch the executor calls `AuthorizeTabRequest(tabId, req)`, which routes through the orchestrator's single hop-auth owner `applyInstanceAuth`: the request carries the instance's bearer token and, on a trusted child hop, the internal token. That is what lets the instance honor the `X-PinchTab-*` identity headers instead of stripping them at ingress, so the action records as `scheduler` rather than `client`. A resolver that does not implement `RequestAuthorizer` leaves the request unauthorized.
 
 ## Dispatch Lifecycle
 
