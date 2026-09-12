@@ -225,6 +225,12 @@ func handleConfigSchema(printSchema bool) {
 	fmt.Println(schemaURL)
 }
 
+func emitDefaultConfigHint() {
+	if text := config.DefaultConfigHint(); text != "" {
+		output.Advisory(text)
+	}
+}
+
 func hintRestartIfRunning() {
 	cfg := loadLocalConfig()
 	if server.CheckPinchTabRunning(cfg.Port, cfg.Token) {

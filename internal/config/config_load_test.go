@@ -32,6 +32,55 @@ func TestEnvOr(t *testing.T) {
 	}
 }
 
+func TestDefaultConfigHint(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	defaultPath := DefaultConfigPath()
+	if err := os.MkdirAll(filepath.Dir(defaultPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("unset returns empty", func(t *testing.T) {
+		t.Setenv("HOME", home)
+		_ = os.Unsetenv("PINCHTAB_CONFIG")
+		if got := DefaultConfigHint(); got != "" {
+			t.Errorf("DefaultConfigHint() = %q, want \"\"", got)
+		}
+	})
+
+	t.Run("equals default returns empty", func(t *testing.T) {
+		t.Setenv("HOME", home)
+		t.Setenv("PINCHTAB_CONFIG", defaultPath)
+		if got := DefaultConfigHint(); got != "" {
+			t.Errorf("DefaultConfigHint() = %q, want \"\"", got)
+		}
+	})
+
+	t.Run("elsewhere but no default file returns empty", func(t *testing.T) {
+		t.Setenv("HOME", home)
+		t.Setenv("PINCHTAB_CONFIG", filepath.Join(t.TempDir(), "custom.json"))
+		if got := DefaultConfigHint(); got != "" {
+			t.Errorf("DefaultConfigHint() = %q, want \"\" (no default file on disk)", got)
+		}
+	})
+
+	t.Run("elsewhere with default file returns hint", func(t *testing.T) {
+		t.Setenv("HOME", home)
+		t.Setenv("PINCHTAB_CONFIG", filepath.Join(t.TempDir(), "custom.json"))
+		if err := os.WriteFile(defaultPath, []byte("{}"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.Remove(defaultPath) }()
+		got := DefaultConfigHint()
+		if got == "" {
+			t.Fatal("DefaultConfigHint() = \"\", want non-empty")
+		}
+		if !strings.Contains(got, defaultPath) {
+			t.Errorf("DefaultConfigHint() = %q, want it to name %q", got, defaultPath)
+		}
+	})
+}
+
 func TestLoadConfigDefaults(t *testing.T) {
 	clearConfigEnvVars(t)
 	setCloakBrowserDiscovery(t, "")

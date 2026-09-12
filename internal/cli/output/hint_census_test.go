@@ -34,19 +34,20 @@ var hintSites = map[string]struct {
 	calls int
 	why   string
 }{
-	"../actions/actions_navigate.go:Navigate":                          {advisory, 1, "no agent session: a steady state, and on a bridge one the caller cannot leave"},
-	"../actions/actions_navigate.go:reportFallbackNewTab":              {occurrence, 2, "this navigation's tab was gone and a new one was opened"},
-	"../actions/actions_element.go:printActionResult":                  {occurrence, 2, "this action's refs went stale, or this submit is still pending"},
-	"../actions/actions_element.go:printStaleRefsHint":                 {occurrence, 1, "this action invalidated the snapshot the caller is holding"},
-	"../actions/actions_capture.go:Capture":                            {occurrence, 1, "this page tripped the IDPI guard"},
-	"../actions/actions_text.go:Text":                                  {occurrence, 1, "readability collapsed on this page"},
-	"../actions/actions_tabs.go:TabHandoff":                            {occurrence, 1, "the reason this handoff carried"},
-	"../actions/actions_tabs.go:TabHandoffStatus":                      {occurrence, 1, "the reason this handoff carried"},
-	"../../../cmd/pinchtab/cmd_cli_runtime.go:resolveCLIBase":          {advisory, 2, "the caller's own --server/PINCHTAB_SERVER is redundant: their setting, not an event"},
-	"../../../cmd/pinchtab/cmd_config_actions.go:hintRestartIfRunning": {occurrence, 1, "this edit needs a restart to reach the running server"},
-	"../../../cmd/pinchtab/cmd_session.go:printSessionCreated":         {occurrence, 1, "the id of the session just created"},
-	"../../../cmd/pinchtab/cmd_session.go:init":                        {occurrence, 2, "attached to a failure that exits"},
-	"../../../cmd/pinchtab/cmd_session.go:exitSessionUnavailable":      {occurrence, 2, "attached to a failure that exits"},
+	"../actions/actions_navigate.go:Navigate":                           {advisory, 1, "no agent session: a steady state, and on a bridge one the caller cannot leave"},
+	"../actions/actions_navigate.go:reportFallbackNewTab":               {occurrence, 2, "this navigation's tab was gone and a new one was opened"},
+	"../actions/actions_element.go:printActionResult":                   {occurrence, 2, "this action's refs went stale, or this submit is still pending"},
+	"../actions/actions_element.go:printStaleRefsHint":                  {occurrence, 1, "this action invalidated the snapshot the caller is holding"},
+	"../actions/actions_capture.go:Capture":                             {occurrence, 1, "this page tripped the IDPI guard"},
+	"../actions/actions_text.go:Text":                                   {occurrence, 1, "readability collapsed on this page"},
+	"../actions/actions_tabs.go:TabHandoff":                             {occurrence, 1, "the reason this handoff carried"},
+	"../actions/actions_tabs.go:TabHandoffStatus":                       {occurrence, 1, "the reason this handoff carried"},
+	"../../../cmd/pinchtab/cmd_cli_runtime.go:resolveCLIBase":           {advisory, 2, "the caller's own --server/PINCHTAB_SERVER is redundant: their setting, not an event"},
+	"../../../cmd/pinchtab/cmd_config_actions.go:emitDefaultConfigHint": {advisory, 1, "a default config exists beside PINCHTAB_CONFIG: a steady state the caller chose, not an event"},
+	"../../../cmd/pinchtab/cmd_config_actions.go:hintRestartIfRunning":  {occurrence, 1, "this edit needs a restart to reach the running server"},
+	"../../../cmd/pinchtab/cmd_session.go:printSessionCreated":          {occurrence, 1, "the id of the session just created"},
+	"../../../cmd/pinchtab/cmd_session.go:init":                         {occurrence, 2, "attached to a failure that exits"},
+	"../../../cmd/pinchtab/cmd_session.go:exitSessionUnavailable":       {occurrence, 2, "attached to a failure that exits"},
 }
 
 func TestEveryHintCallSiteIsClassified(t *testing.T) {
