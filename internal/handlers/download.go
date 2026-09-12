@@ -117,7 +117,7 @@ func (h *Handlers) enforceDownloadTabPolicy(w http.ResponseWriter, r *http.Reque
 		httpx.ErrorCode(w, http.StatusLocked, "tab_locked", err.Error(), false, nil)
 		return false
 	}
-	currentURL, ok := h.applyTabGuards(w, r, ctx, resolvedTabID, guardDomainPolicy|guardHandoffPause)
+	currentURL, ok := h.applyTabGuards(w, r, ctx, resolvedTabID, guardDialogBlocked|guardDomainPolicy|guardHandoffPause)
 	if !ok {
 		return false
 	}

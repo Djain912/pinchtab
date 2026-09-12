@@ -59,3 +59,13 @@ func (h *Handlers) refuseIfDialogBlocked(w http.ResponseWriter, tabID string) bo
 	writeDialogBlocked(w, tabID, dialog, "")
 	return true
 }
+
+func dialogBlockedActionResult(index int, tabID string, dialog *bridge.DialogState) actionResult {
+	return actionResult{
+		Index:   index,
+		Success: false,
+		Error:   dialogBlockedStepError(dialogBlockedMessage(tabID, dialog)),
+		Code:    dialogBlockedCode,
+		Details: dialogBlockedDetails(tabID, dialog),
+	}
+}

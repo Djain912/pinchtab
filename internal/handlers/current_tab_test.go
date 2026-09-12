@@ -36,6 +36,8 @@ func newScopedCurrentTabBridge() *scopedCurrentTabBridge {
 	}
 }
 
+func (b *scopedCurrentTabBridge) GetDialogManager() *bridge.DialogManager { return nil }
+
 func (b *scopedCurrentTabBridge) TabContext(tabID string) (*bridge.TabHandle, string, error) {
 	if tabID == "" {
 		tabID = b.globalTab

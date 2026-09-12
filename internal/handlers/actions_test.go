@@ -117,6 +117,8 @@ func (m *failMockBridge) AvailableActions() []string {
 	return []string{bridge.ActionClick, bridge.ActionType}
 }
 
+func (m *failMockBridge) GetDialogManager() *bridge.DialogManager { return nil }
+
 func (m *failMockBridge) Evaluate(ctx context.Context, expression string, result any, opts bridge.EvalOpts) error {
 	return nil
 }

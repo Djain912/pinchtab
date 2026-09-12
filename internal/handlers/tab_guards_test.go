@@ -483,3 +483,148 @@ func TestRootStorageMethodDispatchSplitsTheGuard(t *testing.T) {
 		})
 	}
 }
+
+var mustDeclareDialogGuard = []string{
+	"POST /navigate", "POST /back", "POST /forward", "POST /reload",
+	"GET /snapshot", "GET /screenshot", "GET /annotate", "GET /capture", "GET /text", "GET /title", "GET /url", "GET /html", "GET /styles",
+	"GET /value", "GET /attr", "GET /count", "GET /box", "GET /visible", "GET /enabled", "GET /checked",
+	"GET /pdf", "POST /pdf", "GET /timing", "GET /a11y/audit",
+	"POST /action", "POST /actions", "POST /macro", "POST /wait", "POST /find", "POST /evaluate",
+	"POST /upload", "POST /solve", "POST /solve/{name}", "GET /download",
+	"POST /emulation/viewport", "POST /emulation/geolocation", "POST /emulation/offline",
+	"POST /emulation/headers", "POST /emulation/credentials", "POST /emulation/media",
+}
+
+var dialogGuardAllowList = map[string]string{
+	"POST /dialog":               "dialog",
+	"GET /frame":                 "frame",
+	"POST /frame":                "frame",
+	"POST /tab":                  "tabs",
+	"POST /close":                "tabs",
+	"POST /lock":                 "tabs",
+	"POST /unlock":               "tabs",
+	"POST /handoff":              "handoff",
+	"POST /resume":               "handoff",
+	"GET /handoff":               "handoff",
+	"POST /audit/page":           "own-tab",
+	"POST /audit":                "own-tab",
+	"POST /scrape":               "own-tab",
+	"GET /cookies":               "browser-side",
+	"POST /cookies":              "browser-side",
+	"DELETE /cookies":            "browser-side",
+	"GET /metrics":               "browser-side",
+	"GET /network/route":         "browser-side",
+	"POST /network/route":        "browser-side",
+	"DELETE /network/route":      "browser-side",
+	"POST /cache/clear":          "browser-side",
+	"GET /cache/status":          "browser-side",
+	"GET /stealth/status":        "browser-side",
+	"GET /solvers":               "browser-side",
+	"GET /config/autosolver":     "browser-side",
+	"GET /screencast/tabs":       "browser-side",
+	"GET /record/status":         "browser-side",
+	"GET /state/list":            "browser-side",
+	"GET /state/show":            "browser-side",
+	"DELETE /state":              "browser-side",
+	"POST /state/clean":          "browser-side",
+	"GET /network":               "buffer",
+	"GET /network/stream":        "buffer",
+	"GET /network/export":        "buffer",
+	"GET /network/export/stream": "buffer",
+	"GET /network/{requestId}":   "buffer",
+	"POST /network/clear":        "buffer",
+	"GET /console":               "buffer",
+	"POST /console/clear":        "buffer",
+	"GET /errors":                "buffer",
+	"POST /errors/clear":         "buffer",
+	"GET /clipboard/read":        "unprobed",
+	"POST /clipboard/write":      "unprobed",
+	"POST /clipboard/copy":       "unprobed",
+	"GET /clipboard/paste":       "unprobed",
+	"POST /fingerprint/rotate":   "unprobed",
+	"GET /storage":               "unprobed",
+	"POST /storage":              "unprobed",
+	"DELETE /storage":            "unprobed",
+	"GET /state":                 "unprobed",
+	"POST /state/save":           "unprobed",
+	"POST /state/load":           "unprobed",
+	"GET /screencast":            "unprobed",
+	"POST /record/start":         "unprobed",
+	"POST /record/stop":          "unprobed",
+}
+
+func TestEveryBindingIsPlacedForTheDialogGuard(t *testing.T) {
+	must := map[string]bool{}
+	for _, route := range mustDeclareDialogGuard {
+		must[route] = true
+		if _, listed := dialogGuardAllowList[route]; listed {
+			t.Errorf("%s is both in the must-declare set and the allow-list", route)
+		}
+	}
+	seen := map[string]bool{}
+	for _, b := range (*Handlers)(nil).bridgeBindings() {
+		seen[b.pattern] = true
+		declared := b.guards&guardDialogBlocked != 0
+		reason, allowed := dialogGuardAllowList[b.pattern]
+		switch {
+		case must[b.pattern] && !declared:
+			t.Errorf("%s drives the page through CDP but does not declare guardDialogBlocked", b.pattern)
+		case allowed && declared:
+			t.Errorf("%s declares guardDialogBlocked but is allow-listed (%s); move it to the must-declare set", b.pattern, reason)
+		case allowed && reason == "":
+			t.Errorf("%s is allow-listed without a reason", b.pattern)
+		case !must[b.pattern] && !allowed:
+			t.Errorf("%s is in neither the must-declare set nor the allow-list; place it with a one-word reason", b.pattern)
+		}
+	}
+	for route := range must {
+		if !seen[route] {
+			t.Errorf("must-declare route %s has no binding", route)
+		}
+	}
+	for route := range dialogGuardAllowList {
+		if !seen[route] {
+			t.Errorf("allow-listed route %s has no binding", route)
+		}
+	}
+}
+
+type dialogMidBatchBridge struct {
+	mockBridge
+	dialogs *bridge.DialogManager
+}
+
+func (b *dialogMidBatchBridge) GetDialogManager() *bridge.DialogManager { return b.dialogs }
+
+func (b *dialogMidBatchBridge) ExecuteAction(context.Context, string, bridge.ActionRequest) (map[string]any, error) {
+	b.dialogs.SetPending("tab1", &bridge.DialogState{Type: "alert", Message: "opened by step 1"})
+	return map[string]any{"ok": true}, nil
+}
+
+func TestActionsBatchStopsOnADialogOpenedMidRun(t *testing.T) {
+	b := &dialogMidBatchBridge{dialogs: bridge.NewDialogManager()}
+	h := New(b, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
+	body := `{"actions":[{"kind":"press","key":"Enter"},{"kind":"press","key":"Enter"},{"kind":"press","key":"Enter"}]}`
+	req := httptest.NewRequest("POST", "/actions", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.HandleActions(w, req)
+
+	var resp struct {
+		Results []actionResult `json:"results"`
+		Total   int            `json:"total"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v\n%s", err, w.Body.String())
+	}
+	if w.Code != http.StatusOK || len(resp.Results) != 2 || resp.Total != 3 {
+		t.Fatalf("status=%d results=%d total=%d, want 200 with the run stopped after the second step\n%s", w.Code, len(resp.Results), resp.Total, w.Body.String())
+	}
+	if !resp.Results[0].Success {
+		t.Errorf("step 1 should have run: %+v", resp.Results[0])
+	}
+	second := resp.Results[1]
+	if second.Success || second.Code != dialogBlockedCode || second.Details["remedy"] == nil || !strings.Contains(second.Error, "opened by step 1") {
+		t.Errorf("step 2 = %+v, want a failed step carrying %s with the remedy", second, dialogBlockedCode)
+	}
+}

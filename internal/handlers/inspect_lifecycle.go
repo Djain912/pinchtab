@@ -92,7 +92,7 @@ func (h *Handlers) inspectElement(w http.ResponseWriter, r *http.Request, tabID 
 		return
 	}
 
-	ctx, resolvedTabID, ok := h.guardedTabContextWithHeader(w, r, tabID, guardDomainPolicy)
+	ctx, resolvedTabID, ok := h.guardedTabContextWithHeader(w, r, tabID, guardDialogBlocked|guardDomainPolicy)
 	if !ok {
 		return
 	}

@@ -75,7 +75,7 @@ func (h *Handlers) HandleSolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := h.applyTabGuards(w, r, ctx, resolvedTabID, guardDomainPolicy|guardHandoffPause); !ok {
+	if _, ok := h.applyTabGuards(w, r, ctx, resolvedTabID, guardDialogBlocked|guardDomainPolicy|guardHandoffPause); !ok {
 		return
 	}
 

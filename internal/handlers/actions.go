@@ -858,6 +858,9 @@ func (h *Handlers) handleActionsBatch(w http.ResponseWriter, r *http.Request, re
 			return
 		}
 	}
+	if _, ok := h.applyTabGuards(w, r, ctx, resolvedTabID, guardDialogBlocked); !ok {
+		return
+	}
 
 	run := newMultiStepRun(len(req.Actions), req.StopOnError)
 	for i := 0; i < len(req.Actions) && !run.stopped; i++ {
@@ -878,6 +881,10 @@ func (h *Handlers) handleActionsBatch(w http.ResponseWriter, r *http.Request, re
 		}
 		if _, ok := h.applyTabGuards(w, r, ctx, resolvedTabID, guardDomainPolicy); !ok {
 			return
+		}
+		if dialog := pendingTabDialog(h.Bridge, resolvedTabID); dialog != nil {
+			run.stop(dialogBlockedActionResult(i, resolvedTabID, dialog))
+			continue
 		}
 		if err := h.enforceTabNotPausedForHandoff(resolvedTabID); err != nil {
 			run.record(h.handoffPausedActionResult(i, resolvedTabID, err))
@@ -928,6 +935,11 @@ func (m *multiStepRun) record(result actionResult) {
 	if !result.Success && m.stopOnError {
 		m.stopped = true
 	}
+}
+
+func (m *multiStepRun) stop(result actionResult) {
+	m.results = append(m.results, result)
+	m.stopped = true
 }
 
 func (h *Handlers) runMultiStepActionTail(
@@ -1115,6 +1127,9 @@ func (h *Handlers) HandleMacro(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if _, ok := h.applyTabGuards(w, r, ctx, resolvedTabID, guardDialogBlocked); !ok {
+		return
+	}
 
 	run := newMultiStepRun(len(req.Steps), req.StopOnError)
 	for i := 0; i < len(req.Steps) && !run.stopped; i++ {
@@ -1124,6 +1139,10 @@ func (h *Handlers) HandleMacro(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, ok := h.applyTabGuards(w, r, ctx, resolvedTabID, guardDomainPolicy); !ok {
 			return
+		}
+		if dialog := pendingTabDialog(h.Bridge, resolvedTabID); dialog != nil {
+			run.stop(dialogBlockedActionResult(i, resolvedTabID, dialog))
+			continue
 		}
 		if err := h.enforceTabNotPausedForHandoff(resolvedTabID); err != nil {
 			run.record(h.handoffPausedActionResult(i, resolvedTabID, err))

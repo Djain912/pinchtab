@@ -24,6 +24,7 @@ type findMockBridge struct {
 	refCache *bridge.RefCache
 }
 
+func (m *findMockBridge) GetDialogManager() *bridge.DialogManager        { return nil }
 func (m *findMockBridge) EnsureBrowser(cfg *config.RuntimeConfig) error  { return nil }
 func (m *findMockBridge) RestartBrowser(cfg *config.RuntimeConfig) error { return nil }
 

@@ -68,7 +68,7 @@ func handlersOverAPendingAlert(t *testing.T) *Handlers {
 	return New(b, cfg, nil, nil, nil)
 }
 
-func TestAStepWhoseSelectorResolutionTimesOutBehindADialogCarriesTheRemedyOnce(t *testing.T) {
+func TestABatchOverAPendingDialogIsRefusedBeforeAnyStep(t *testing.T) {
 	h := handlersOverAPendingAlert(t)
 	for _, tc := range []struct{ name, path, body string }{
 		{"batch", "/actions", `{"tabId":"` + pendingAlertTab + `","actions":[{"kind":"click","selector":"#c"}]}`},
@@ -83,19 +83,19 @@ func TestAStepWhoseSelectorResolutionTimesOutBehindADialogCarriesTheRemedyOnce(t
 			} else {
 				h.HandleActions(rec, req)
 			}
-			var envelope batchEnvelope
+			var envelope struct {
+				Code    string         `json:"code"`
+				Error   string         `json:"error"`
+				Details map[string]any `json:"details"`
+			}
 			if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
 				t.Fatalf("decode: %v: %s", err, rec.Body.String())
 			}
-			if len(envelope.Results) != 1 || envelope.Results[0].Success {
-				t.Fatalf("want one failed result: %s", rec.Body.String())
+			if rec.Code != http.StatusConflict || envelope.Code != dialogBlockedCode {
+				t.Fatalf("want 409 %s before any step runs, got %d: %s", dialogBlockedCode, rec.Code, rec.Body.String())
 			}
-			got := envelope.Results[0].Error
-			if !strings.Contains(got, "timed out") || !strings.Contains(got, `"hi"`) {
-				t.Fatalf("step error does not name the blocking dialog: %q", got)
-			}
-			if n := strings.Count(got, dialogBlockedStepRemedy); n != 1 {
-				t.Fatalf("remedy sentence appears %d times, want 1: %q", n, got)
+			if remedy, _ := envelope.Details["remedy"].(string); !strings.Contains(envelope.Error, `"hi"`) || remedy == "" {
+				t.Fatalf("refusal does not name the dialog with its remedy: %s", rec.Body.String())
 			}
 		})
 	}
