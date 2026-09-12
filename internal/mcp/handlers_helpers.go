@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/pinchtab/pinchtab/internal/remedy"
 	"github.com/pinchtab/pinchtab/internal/selector"
 )
 
@@ -255,12 +256,70 @@ func toolResult(body []byte, code int, err error) (*mcp.CallToolResult, error) {
 
 func resultFromBytes(body []byte, code int) (*mcp.CallToolResult, error) {
 	if code >= 400 {
-		return mcp.NewToolResultError(fmt.Sprintf("HTTP %d: %s", code, string(body))), nil
+		message := fmt.Sprintf("HTTP %d: %s", code, string(body))
+		if guidance := mcpRemedyGuidance(body); guidance != "" {
+			message = guidance + "\n" + message
+		}
+		return mcp.NewToolResultError(message), nil
 	}
 	if reason := reportsNoSuccess(body); reason != "" {
 		return mcp.NewToolResultError(reason), nil
 	}
 	return mcp.NewToolResultText(string(body)), nil
+}
+
+// mcpRemedyGuidance turns a refusal's details.remedy — one pinchtab CLI line the CLI
+// renders verbatim — into guidance an MCP agent can act on, which runs tools rather than
+// a shell. It fires for any remedy whose verb has a matching tool (resume → pinchtab_resume),
+// so every future single-command remedy is served, not just handoff; a verb with no matching
+// tool, or a multi-command remedy, yields nothing and the raw body stands alone.
+func mcpRemedyGuidance(body []byte) string {
+	segments := remedy.Segments(remedyLine(body))
+	if len(segments) != 1 {
+		return ""
+	}
+	words := segments[0]
+	if len(words) < 2 {
+		return ""
+	}
+	tool := "pinchtab_" + words[1]
+	if !isRegisteredTool(tool) {
+		return ""
+	}
+	if arg := firstPositional(words[2:]); arg != "" {
+		return fmt.Sprintf("call %s with tabId %s", tool, arg)
+	}
+	return "call " + tool
+}
+
+func remedyLine(body []byte) string {
+	var envelope struct {
+		Details struct {
+			Remedy string `json:"remedy"`
+		} `json:"details"`
+	}
+	if json.Unmarshal(body, &envelope) != nil {
+		return ""
+	}
+	return envelope.Details.Remedy
+}
+
+func firstPositional(words []string) string {
+	for _, word := range words {
+		if !strings.HasPrefix(word, "-") {
+			return word
+		}
+	}
+	return ""
+}
+
+func isRegisteredTool(name string) bool {
+	for _, tool := range allTools() {
+		if tool.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // reportsNoSuccess is the funnel's body-level failure rule: an endpoint that answers 200

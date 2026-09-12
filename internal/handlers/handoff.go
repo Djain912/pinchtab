@@ -10,6 +10,7 @@ import (
 	"github.com/pinchtab/pinchtab/internal/bridge"
 	"github.com/pinchtab/pinchtab/internal/dashboard"
 	"github.com/pinchtab/pinchtab/internal/httpx"
+	"github.com/pinchtab/pinchtab/internal/remedy"
 )
 
 type tabHandoffController interface {
@@ -29,11 +30,14 @@ const handoffHintMessage = "return control to the user and ask them to manually 
 
 const handoffPausedCode = "tab_paused_handoff"
 
+var resumeRemedy = remedy.Declare("pinchtab resume <tab-id>")
+
 // handoffErrorDetails builds the details payload attached to 409 responses
 // when an action hits a tab that is paused for handoff. Always includes the
-// agent hint; when known, also includes the current reason and pausedAt.
+// agent hint and the resume remedy; when known, also includes the current
+// reason and pausedAt.
 func (h *Handlers) handoffErrorDetails(tabID string) map[string]any {
-	details := map[string]any{"hint": handoffHintMessage}
+	details := remedy.Details(handoffHintMessage, resumeRemedy.Fill(tabID))
 	if ctrl, ok := h.handoffController(); ok {
 		if state, exists := ctrl.TabHandoffState(tabID); exists {
 			if state.Reason != "" {
@@ -175,6 +179,9 @@ func (h *Handlers) HandleTabHandoff(w http.ResponseWriter, r *http.Request) {
 		"reason":    reason,
 		"timeoutMs": req.TimeoutMs,
 		"hint":      handoffHintMessage,
+	}
+	if line := resumeRemedy.Fill(resolvedTabID); !line.Empty() {
+		resp["remedy"] = line.String()
 	}
 	if timeout > 0 {
 		resp["expiresAt"] = time.Now().UTC().Add(timeout).Format(time.RFC3339)

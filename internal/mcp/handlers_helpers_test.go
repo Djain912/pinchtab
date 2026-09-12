@@ -213,3 +213,36 @@ func TestEveryFailedKeyProducerHasARecordedFunnelDecision(t *testing.T) {
 		t.Fatal("found no \"failed\" key producer at all; if the spelling moved, re-point this census rather than deleting it")
 	}
 }
+
+// A refusal's details.remedy is one pinchtab CLI line the CLI renders verbatim, but an
+// MCP agent runs tools, not a shell. The funnel must translate the remedy's verb into the
+// matching tool so the agent can recover; the handoff refusal is the case that shipped the
+// unrunnable "POST /tabs/{id}/resume" instruction to MCP.
+func TestMCPRefusalTranslatesTheRemedyIntoAToolCall(t *testing.T) {
+	body := []byte(`{"error":"tab tab1 is paused for human handoff (manual_handoff)",` +
+		`"code":"tab_paused_handoff",` +
+		`"details":{"hint":"...then call POST /tabs/{id}/resume to continue","remedy":"pinchtab resume tab1"}}`)
+
+	result, err := resultFromBytes(body, http.StatusConflict)
+	if err != nil {
+		t.Fatalf("resultFromBytes: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("a 409 refusal must reach the agent as an error")
+	}
+	text := resultText(t, result)
+	if !strings.Contains(text, "call pinchtab_resume with tabId tab1") {
+		t.Fatalf("MCP refusal does not name the resume tool: %q", text)
+	}
+
+	// The mapping is real, not a bare "pinchtab_"+verb: a remedy whose verb has no
+	// matching tool (nav → pinchtab_navigate, not pinchtab_nav) adds no guidance.
+	noTool := []byte(`{"code":"x","details":{"remedy":"pinchtab nav https://example.test"}}`)
+	noToolResult, err := resultFromBytes(noTool, http.StatusConflict)
+	if err != nil {
+		t.Fatalf("resultFromBytes: %v", err)
+	}
+	if quiet := resultText(t, noToolResult); strings.Contains(quiet, "call pinchtab_") {
+		t.Fatalf("a verb with no matching tool produced tool guidance: %q", quiet)
+	}
+}

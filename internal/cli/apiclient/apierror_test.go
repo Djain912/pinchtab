@@ -113,6 +113,21 @@ func TestRenderAPIErrorBodyShowsHintAndRemedy(t *testing.T) {
 	}
 }
 
+// A tab_paused_handoff refusal must name the CLI resume command, not the HTTP route the
+// hint prose carries: the CLI user runs `pinchtab resume`, not a POST. The server ships
+// the command as details.remedy; renderGuidance prints it in the Remedy slot.
+func TestHandoffRefusalRendersTheCLIResumeCommand(t *testing.T) {
+	body := `{"code":"tab_paused_handoff",` +
+		`"error":"tab tab1 is paused for human handoff (manual_handoff)",` +
+		`"details":{"hint":"...then call POST /tabs/{id}/resume to continue","remedy":"pinchtab resume tab1"}}`
+
+	out := renderAPIErrorBody(http.StatusConflict, []byte(body))
+
+	if !strings.Contains(out, "Remedy: pinchtab resume tab1") {
+		t.Errorf("rendered refusal does not name the CLI resume command:\n%s", out)
+	}
+}
+
 // cachedTabFile installs a cached-tab context pointing at a real file, so a render
 // that still performed the old os.Remove would be visible as a missing file rather
 // than as an assertion about a string.
