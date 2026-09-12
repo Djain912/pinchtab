@@ -144,6 +144,32 @@ func TestClientAuthHeaderAbsentWhenNoToken(t *testing.T) {
 	}
 }
 
+// Option 3: MCP calls the public front door with a bearer token, so the ingress strip layer
+// drops inbound X-PinchTab-* headers. It must not set X-PinchTab-Source (a silent no-op that
+// falsely claimed attribution) and correctly falls back to "client"; X-Agent-Id is not
+// stripped and must still identify the client. On HEAD this sent X-PinchTab-Source=mcp.
+func TestMCPDoesNotSetTheStrippedSourceHeader(t *testing.T) {
+	var gotSource, gotAgent string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotSource = r.Header.Get("X-PinchTab-Source")
+		gotAgent = r.Header.Get("X-Agent-Id")
+		w.WriteHeader(200)
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "tok")
+	if _, _, err := c.Post(context.Background(), "/action", map[string]any{"kind": "click"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotSource != "" {
+		t.Errorf("MCP set X-PinchTab-Source=%q; ingress strips it, so setting it is a silent no-op that must be removed", gotSource)
+	}
+	if gotAgent != "mcp" {
+		t.Errorf("X-Agent-Id = %q, want mcp (it is not stripped and must still identify the client)", gotAgent)
+	}
+}
+
 func TestClientProfileInstancePath(t *testing.T) {
 	c := NewClient("http://localhost:9867", "")
 	got := c.profileInstancePath("work profile")

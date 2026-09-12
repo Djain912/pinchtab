@@ -1,6 +1,90 @@
 package scheduler
 
-import "testing"
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"sync"
+	"testing"
+
+	"github.com/pinchtab/pinchtab/internal/activity"
+	"github.com/pinchtab/pinchtab/internal/handlers"
+)
+
+type captureRecorder struct {
+	mu     sync.Mutex
+	events []activity.Event
+}
+
+func (c *captureRecorder) Enabled() bool { return true }
+func (c *captureRecorder) Record(e activity.Event) error {
+	c.mu.Lock()
+	c.events = append(c.events, e)
+	c.mu.Unlock()
+	return nil
+}
+func (c *captureRecorder) Query(activity.Filter) ([]activity.Event, error) { return nil, nil }
+func (c *captureRecorder) last() (activity.Event, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.events) == 0 {
+		return activity.Event{}, false
+	}
+	return c.events[len(c.events)-1], true
+}
+
+type fixedResolver struct{ port string }
+
+func (f fixedResolver) ResolveTabInstance(string) (string, error) { return f.port, nil }
+
+// The scheduler must record its actions as "scheduler", not "client": it now carries the
+// trusted internal token so its X-PinchTab-Source and X-PinchTab-Tab-Id survive the ingress
+// strip layer. Driven through the real TrustedInternalProxyStripMiddleware (the layer the
+// bridge mounts) plus activity.Middleware (the recorder). On HEAD the executor sends no
+// token, the strip drops both headers, and the source falls back to "client".
+func TestSchedulerActionSurvivesIngressAndRecordsAsScheduler(t *testing.T) {
+	const secret = "test-internal-token"
+	t.Setenv("PINCHTAB_INTERNAL_TOKEN", secret)
+
+	var gotSource, gotTabID string
+	final := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotSource = r.Header.Get(activity.HeaderPTSource)
+		gotTabID = r.Header.Get(activity.HeaderPTTabID)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	rec := &captureRecorder{}
+	handler := handlers.TrustedInternalProxyStripMiddleware(secret)(activity.Middleware(rec, "fallback", final))
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	parsed, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec := &actionEndpointExecutor{resolver: fixedResolver{port: parsed.Port()}, client: srv.Client()}
+	if _, err := exec.Execute(context.Background(), &Task{Action: "click", Ref: "e5", TabID: "tab-42"}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if gotSource != "scheduler" {
+		t.Errorf("inbound X-PinchTab-Source = %q, want scheduler (the internal token must let it survive the strip layer)", gotSource)
+	}
+	if gotTabID != "tab-42" {
+		t.Errorf("inbound X-PinchTab-Tab-Id = %q, want tab-42 (the tab id header must survive, not fall back to the path)", gotTabID)
+	}
+	evt, ok := rec.last()
+	if !ok {
+		t.Fatal("no activity event recorded")
+	}
+	if evt.Source != "scheduler" {
+		t.Errorf("recorded activity source = %q, want scheduler", evt.Source)
+	}
+	if evt.TabID != "tab-42" {
+		t.Errorf("recorded activity tab id = %q, want tab-42", evt.TabID)
+	}
+}
 
 func TestBuildActionBodyEnvelope(t *testing.T) {
 	task := &Task{

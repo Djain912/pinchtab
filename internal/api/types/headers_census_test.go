@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -150,5 +151,170 @@ func TestCensusIgnoresHeadersNamedInComments(t *testing.T) {
 	}
 	if got := pinchtabHeaderLiterals(t, commentOnly)[headerKey(HeaderVocab)]; len(got) != 0 {
 		t.Fatalf("a header named only in a comment was counted as a spelling: %v", got)
+	}
+}
+
+const internalTokenHeaderValue = "X-PinchTab-Internal-Token"
+
+// knownHeaderConsts maps the X-PinchTab-* header constants (by their identifier name) to the
+// wire value, so a Set call using a constant is resolved the same as one using a literal.
+var knownHeaderConsts = map[string]string{
+	"HeaderVocab":         "X-PinchTab-Vocab",
+	"HeaderTabID":         "X-PinchTab-Tab-Id",
+	"HeaderSource":        "X-PinchTab-Source",
+	"HeaderPTSessionID":   "X-PinchTab-Session-Id",
+	"HeaderPTSource":      "X-PinchTab-Source",
+	"HeaderPTInstance":    "X-PinchTab-Instance-Id",
+	"HeaderPTProfileID":   "X-PinchTab-Profile-Id",
+	"HeaderPTProfile":     "X-PinchTab-Profile-Name",
+	"HeaderPTTabID":       "X-PinchTab-Tab-Id",
+	"HeaderPTTabCreated":  "X-PinchTab-Tab-Created",
+	"InternalTokenHeader": internalTokenHeaderValue,
+}
+
+// publicClientPackages originate outbound requests to a public PinchTab listener (bearer or
+// session auth, not orchestrator-proxied). An X-PinchTab-* request header they set is dropped
+// by the ingress strip layer unless the request also carries the internal token, so setting
+// one is a silent no-op — the failure PIN-376 and PIN-384 both hit. The server, the identity
+// helper (activity) and the trusted orchestrator hops are deliberately absent.
+var publicClientPackages = map[string]string{
+	"internal/cli/apiclient": "the CLI's HTTP transport",
+	"internal/mcp":           "the MCP server's client to the front door",
+	"cmd/pinchtab":           "CLI commands that build their own requests",
+	"internal/scheduler":     "the scheduler's action executor posting to an instance",
+}
+
+// publicClientExemptHeaders are the (package, header) pairs a public client may still set:
+// the CLI's Source is harmless because its bearer credential fallback records the same
+// 'client' label, so a stripped Source changes nothing. MCP is deliberately NOT here — its
+// Source set was removed (PIN-384), and the census forbids re-adding it.
+var publicClientExemptHeaders = map[string]map[string]string{
+	"internal/cli/apiclient": {"x-pinchtab-source": "harmless: bearer credential fallback records the same 'client' label"},
+	"cmd/pinchtab":           {"x-pinchtab-source": "harmless: same as the CLI apiclient — bearer fallback yields 'client'"},
+}
+
+func resolveHeaderName(arg ast.Expr) (string, bool) {
+	switch a := arg.(type) {
+	case *ast.BasicLit:
+		if a.Kind == token.STRING {
+			if v, err := strconv.Unquote(a.Value); err == nil {
+				return v, true
+			}
+		}
+	case *ast.Ident:
+		if v, ok := knownHeaderConsts[a.Name]; ok {
+			return v, true
+		}
+	case *ast.SelectorExpr:
+		if v, ok := knownHeaderConsts[a.Sel.Name]; ok {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+type headerSetSite struct{ pkg, header, site string }
+
+// pinchtabRequestHeaderSets finds request-side `x.Header.Set(<X-PinchTab-* header>, …)` calls
+// (field-access .Header, so `w.Header().Set` response writes are not counted) and, separately,
+// the packages that set the internal token — a trusted hop whose headers survive ingress.
+func pinchtabRequestHeaderSets(t *testing.T, files []srccensus.SourceFile) (sets []headerSetSite, tokenPkgs map[string]bool) {
+	t.Helper()
+	tokenPkgs = map[string]bool{}
+	for _, f := range files {
+		parsed, err := parser.ParseFile(token.NewFileSet(), f.Name, f.Text, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", f.Name, err)
+		}
+		pkg := path.Dir(f.Name)
+		ast.Inspect(parsed, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || sel.Sel.Name != "Set" {
+				return true
+			}
+			inner, ok := sel.X.(*ast.SelectorExpr)
+			if !ok || inner.Sel.Name != "Header" {
+				return true
+			}
+			if len(call.Args) == 0 {
+				return true
+			}
+			name, ok := resolveHeaderName(call.Args[0])
+			if !ok {
+				return true
+			}
+			key := headerKey(name)
+			if key == headerKey(internalTokenHeaderValue) {
+				tokenPkgs[pkg] = true
+				return true
+			}
+			if strings.HasPrefix(key, "x-pinchtab-") {
+				sets = append(sets, headerSetSite{pkg: pkg, header: key, site: f.Name})
+			}
+			return true
+		})
+	}
+	return sets, tokenPkgs
+}
+
+func strippedHeaderViolations(sets []headerSetSite, tokenPkgs map[string]bool) []string {
+	var violations []string
+	for _, s := range sets {
+		if _, isClient := publicClientPackages[s.pkg]; !isClient {
+			continue
+		}
+		if tokenPkgs[s.pkg] {
+			continue
+		}
+		if hdrs, ok := publicClientExemptHeaders[s.pkg]; ok {
+			if _, ok := hdrs[s.header]; ok {
+				continue
+			}
+		}
+		violations = append(violations, fmt.Sprintf("%s: %s sets request header %s, but the package sends no internal token, so ingress strips it (a silent no-op); carry the value in the body, send the internal token on a trusted hop, or exempt it with a reason", s.site, s.pkg, s.header))
+	}
+	sort.Strings(violations)
+	return violations
+}
+
+func TestPublicClientsDoNotSetStrippedRequestHeaders(t *testing.T) {
+	sets, tokenPkgs := pinchtabRequestHeaderSets(t, srccensus.Tree(t, moduleRoot, minModuleFiles))
+	if v := strippedHeaderViolations(sets, tokenPkgs); len(v) > 0 {
+		t.Errorf("public-client packages set X-PinchTab-* request headers the ingress strip layer drops:\n%s", strings.Join(v, "\n"))
+	}
+}
+
+func TestStrippedHeaderCensusFlagsAPublicClientSet(t *testing.T) {
+	planted := []srccensus.SourceFile{
+		{Name: "internal/mcp/evil.go", Text: "package mcp\nimport \"net/http\"\nfunc f(req *http.Request) { req.Header.Set(\"X-PinchTab-Source\", \"mcp\") }\n"},
+	}
+	sets, tokenPkgs := pinchtabRequestHeaderSets(t, planted)
+	if len(strippedHeaderViolations(sets, tokenPkgs)) == 0 {
+		t.Fatal("a public client setting a stripped X-PinchTab-* request header passed the census")
+	}
+}
+
+func TestStrippedHeaderCensusAllowsATrustedHopThatSendsTheToken(t *testing.T) {
+	planted := []srccensus.SourceFile{
+		{Name: "internal/scheduler/x.go", Text: "package scheduler\nimport \"net/http\"\nfunc f(req *http.Request) { req.Header.Set(\"X-PinchTab-Internal-Token\", \"s\"); req.Header.Set(\"X-PinchTab-Source\", \"scheduler\") }\n"},
+	}
+	sets, tokenPkgs := pinchtabRequestHeaderSets(t, planted)
+	if len(strippedHeaderViolations(sets, tokenPkgs)) != 0 {
+		t.Fatal("a package that sends the internal token was flagged; its headers survive ingress")
+	}
+}
+
+// A response-side write (w.Header().Set) is not a request header the strip layer can drop.
+func TestStrippedHeaderCensusIgnoresResponseWrites(t *testing.T) {
+	planted := []srccensus.SourceFile{
+		{Name: "internal/mcp/resp.go", Text: "package mcp\nimport \"net/http\"\nfunc f(w http.ResponseWriter) { w.Header().Set(\"X-PinchTab-Source\", \"mcp\") }\n"},
+	}
+	sets, _ := pinchtabRequestHeaderSets(t, planted)
+	if len(sets) != 0 {
+		t.Fatalf("a response-side w.Header().Set was counted as a request header: %v", sets)
 	}
 }

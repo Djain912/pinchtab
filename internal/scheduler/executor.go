@@ -9,8 +9,10 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 
 	"github.com/pinchtab/pinchtab/internal/activity"
+	"github.com/pinchtab/pinchtab/internal/handlers"
 )
 
 // TaskExecutor runs a single task and returns its result, decoupling dispatch
@@ -84,6 +86,15 @@ func (e *actionEndpointExecutor) Execute(ctx context.Context, t *Task) (any, err
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// The instance strips inbound X-PinchTab-* headers unless the request carries the
+	// trusted internal token, so the source and tab-id below would be a silent no-op
+	// without it. The scheduler runs in the instance process, which holds the same
+	// PINCHTAB_INTERNAL_TOKEN the ingress checks; when it is unset (single-instance,
+	// no trust configured) the strip is total by design and the action records as
+	// "client".
+	if tok := os.Getenv("PINCHTAB_INTERNAL_TOKEN"); tok != "" {
+		req.Header.Set(handlers.InternalTokenHeader, tok)
+	}
 	req.Header.Set(activity.HeaderPTSource, "scheduler")
 	req.Header.Set(activity.HeaderPTTabID, t.TabID)
 	if t.AgentID != "" {

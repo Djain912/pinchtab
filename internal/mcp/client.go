@@ -98,7 +98,10 @@ func (c *Client) doWithHeaders(req *http.Request) ([]byte, int, http.Header, err
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 	req.Header.Set(activity.HeaderAgentID, "mcp")
-	req.Header.Set(activity.HeaderPTSource, "mcp")
+	// No X-PinchTab-Source: MCP calls the public front door with a bearer token, so
+	// the ingress strip layer drops inbound X-PinchTab-* headers. Setting a source
+	// here would be a silent no-op; MCP correctly falls back to "client" until a
+	// per-client MCP credential exists.
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("request %s %s: %w", req.Method, req.URL.Path, err)
