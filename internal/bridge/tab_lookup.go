@@ -26,6 +26,9 @@ func (tm *TabManager) CurrentTabID() string {
 }
 
 func (tm *TabManager) TabLastUsed(tabID string) (time.Time, bool) {
+	if tm == nil {
+		return time.Time{}, false
+	}
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
 	entry, ok := tm.tabs[tabID]

@@ -139,3 +139,13 @@ func (a *BridgeAdapter) TabHandoffState(tabID string) (bridge.TabHandoffState, b
 	}
 	return bridge.TabHandoffState{}, false
 }
+
+func (a *BridgeAdapter) CurrentTabID() string {
+	type currentTabReader interface {
+		CurrentTabID() string
+	}
+	if r, ok := a.BridgeAPI.(currentTabReader); ok {
+		return r.CurrentTabID()
+	}
+	return ""
+}
