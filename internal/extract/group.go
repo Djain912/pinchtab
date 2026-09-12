@@ -21,6 +21,7 @@ type group struct {
 	items     []int
 	columns   []int
 	score     float64
+	resolver  itemResolver
 }
 
 func resolveArray(prop Property, v view, opts Options) (FieldResult, any, bool) {
@@ -28,20 +29,19 @@ func resolveArray(prop Property, v view, opts Options) (FieldResult, any, bool) 
 	if !ok {
 		return fr, nil, false
 	}
-	items := newItemResolver(g, *prop.Items, v, opts)
 	limit := opts.MaxItems
 	if prop.MaxItems > 0 && prop.MaxItems < limit {
 		limit = prop.MaxItems
 	}
 	data := []map[string]any{}
 	for _, item := range g.items {
+		res := g.resolver.resolve(item)
+		if len(res.Data) == 0 {
+			continue
+		}
 		if len(data) == limit {
 			fr.Truncated = true
 			break
-		}
-		res := items.resolve(item)
-		if len(res.Data) == 0 {
-			continue
 		}
 		data = append(data, res.Data)
 		fr.Items = append(fr.Items, ItemResult{Ref: v.nodes[item].Ref, Fields: res.Fields})
@@ -70,7 +70,8 @@ func chooseGroup(prop Property, v view, opts Options) (group, FieldResult, bool)
 	}
 
 	for i := range candidates {
-		candidates[i].score = scoreGroup(candidates[i], *prop.Items, v, opts)
+		candidates[i].resolver = newItemResolver(candidates[i], *prop.Items, v, opts)
+		candidates[i].score = scoreGroup(candidates[i], *prop.Items)
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
 		a, b := candidates[i], candidates[j]
@@ -166,15 +167,14 @@ func headerColumns(v view, container int) []int {
 	return nil
 }
 
-func scoreGroup(g group, schema Schema, v view, opts Options) float64 {
-	items := newItemResolver(g, schema, v, opts)
+func scoreGroup(g group, schema Schema) float64 {
 	sample := g.items
 	if len(sample) > sampleItems {
 		sample = sample[:sampleItems]
 	}
 	resolved := 0
 	for _, item := range sample {
-		resolved += len(items.resolve(item).Data)
+		resolved += len(g.resolver.resolve(item).Data)
 	}
 	return roundScore(float64(resolved) / float64(len(sample)*len(schema.Properties)))
 }
@@ -216,7 +216,7 @@ func newItemResolver(g group, schema Schema, v view, opts Options) itemResolver 
 
 func (r itemResolver) resolve(item int) Result {
 	if r.columns == nil {
-		return resolveObject(r.schema, r.v.descendants(item), r.opts)
+		return resolveObject(r.schema, r.v.subtree(item), r.opts)
 	}
 	cells := r.v.children(item)
 	result := Result{Data: map[string]any{}, Fields: map[string]FieldResult{}}
@@ -276,8 +276,8 @@ func (v view) children(i int) []int {
 	return children
 }
 
-func (v view) descendants(i int) view {
-	return newView(v.nodes[i+1 : v.subtreeEnd(i)])
+func (v view) subtree(i int) view {
+	return newView(v.nodes[i:v.subtreeEnd(i)])
 }
 
 func (v view) ancestors(i int) []int {

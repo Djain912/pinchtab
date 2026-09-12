@@ -252,8 +252,8 @@ func TestView_ChildrenAndSubtreeFromDepth(t *testing.T) {
 	if !reflect.DeepEqual(refs, []string{"e3", "e6", "e9", "e11"}) {
 		t.Errorf("children of e2 = %v", refs)
 	}
-	if got := v.descendants(v.index["e6"]).nodes; len(got) != 2 || got[0].Ref != "e7" || got[1].Ref != "e8" {
-		t.Errorf("descendants of e6 = %v", got)
+	if got := v.subtree(v.index["e6"]).nodes; len(got) != 3 || got[0].Ref != "e6" || got[2].Ref != "e8" {
+		t.Errorf("subtree of e6 = %v", got)
 	}
 	var anc []string
 	for _, a := range v.ancestors(v.index["e12"]) {
@@ -274,5 +274,37 @@ func TestResolveArray_GroupResolvingNoFieldIsNoRepeatedGroup(t *testing.T) {
 	}
 	if got.Fields["results"].Reason != reasonNoRepeatedGroup || got.Fields["results"].Ref != "" {
 		t.Errorf("field = %+v", got.Fields["results"])
+	}
+}
+
+func TestResolveArray_ItemNodeItselfCarriesTheField(t *testing.T) {
+	nodes := []observe.A11yNode{
+		{Ref: "e1", Role: "list", Depth: 0},
+		{Ref: "e2", Role: "link", Name: "Home", Depth: 1},
+		{Ref: "e3", Role: "link", Name: "Shop", Depth: 1},
+		{Ref: "e4", Role: "link", Name: "About", Depth: 1},
+		{Ref: "e5", Role: "link", Name: "Contact", Depth: 1},
+	}
+	schema := mustSchema(t, `{"type":"object","properties":{
+		"menu":{"type":"array","items":{"type":"object","properties":{
+			"title":{"type":"string","x-pinchtab-hint":"role:link"}}}}}}`)
+	got := Resolve(schema, nodes, Options{})
+	want := []map[string]any{{"title": "Home"}, {"title": "Shop"}, {"title": "About"}, {"title": "Contact"}}
+	if list := items(t, got, "menu"); !reflect.DeepEqual(list, want) {
+		t.Fatalf("menu = %v, want %v (%+v)", list, want, got.Fields["menu"])
+	}
+	if fr := got.Fields["menu"]; fr.Ref != "e1" || fr.Items[1].Ref != "e3" || fr.Items[1].Fields["title"].Ref != "e3" {
+		t.Errorf("refs = %+v", fr)
+	}
+}
+
+func TestResolveArray_CapReachedExactlyWithTrailingEmptyItemIsNotTruncated(t *testing.T) {
+	nodes := append(searchNodes(), observe.A11yNode{Ref: "e14", Role: "listitem", Depth: 2}, observe.A11yNode{Ref: "e15", Role: "text", Name: "Sponsored", Depth: 3})
+	schema := mustSchema(t, `{"type":"object","properties":{
+		"results":{"type":"array","maxItems":4,"items":{"type":"object","properties":{
+			"title":{"type":"string","x-pinchtab-hint":"role:link"}}}}}}`)
+	got := Resolve(schema, nodes, Options{})
+	if n := len(items(t, got, "results")); n != 4 || got.Fields["results"].Truncated {
+		t.Errorf("len=%d truncated=%v, want 4 items and no truncation when only an empty item follows", n, got.Fields["results"].Truncated)
 	}
 }

@@ -143,10 +143,11 @@ The items are the container's direct children carrying the dominant role
 
 Two per-item modes exist:
 
-- **Subtree.** The flat resolver runs over the item's descendants only (the
-  item node itself excluded), so `price` in item 3 can never match item 1 and a
-  field absent from one item stays missing there even when every other item
-  has it.
+- **Subtree.** The flat resolver runs over the item's own subtree only (the
+  item node included, since a pruned tree often leaves a menu's or result's
+  text on the item node itself), so `price` in item 3 can never match item 1
+  and a field absent from one item stays missing there even when every other
+  item has it.
 - **Columnar.** When the items are `row`s and the nearest enclosing `table` or
   `grid` (or the container itself) holds a header row, each field is resolved
   once against the header cells to a column index, and every row reads the cell
@@ -155,8 +156,9 @@ Two per-item modes exist:
   the field missing with `no_match`.
 
 Items where every field is missing are dropped. The output is capped at the
-smaller of the schema's `maxItems` and `Options.MaxItems` (default `100`); when
-unresolved items remain past the cap the field reports `truncated: true`.
+smaller of the schema's `maxItems` and `Options.MaxItems` (default `100`); the
+cap is tested after empties are dropped, so `truncated: true` is reported only
+when a non-empty item was actually left out.
 Fewer items than `minItems` leaves the property missing with reason
 `too_few_items`.
 
