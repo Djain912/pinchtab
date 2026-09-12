@@ -298,6 +298,19 @@ var batchActionQueryKeys = map[string]struct{}{
 	"owner": {},
 }
 
+// postActionQueryKeys is the accepted query-parameter set for POST /action. The body
+// is authoritative, so the handler reads nothing else from the query except owner
+// (resolveOwner) and browser — MCP's routedPathWithBody appends ?browser= to every
+// POST /action and the multi-instance router reads it to pick the instance, so
+// refusing it would 400 a browser-targeted MCP action. Every other query key would be
+// silently dropped — a mistargeted ?tab=/?tabId= running on the current tab, a typo —
+// so it is refused with the same message the batch route uses. Pinned as a subset of
+// actionQueryKeys by TestPostActionQueryKeysAreActionParameters.
+var postActionQueryKeys = map[string]struct{}{
+	"owner":   {},
+	"browser": {},
+}
+
 // unknownQueryFields names every supplied parameter not in the known set, sorted
 // so the refusal reads the same on every run. Presence follows the decoder's own
 // rule — a non-empty value — so ?_= is absent rather than an unknown request.
@@ -450,6 +463,15 @@ func decodeActionRequest(w http.ResponseWriter, r *http.Request) (bridge.ActionR
 			return bridge.ActionRequest{}, false
 		}
 		return req, true
+	}
+	// POST takes its parameters from the JSON body, so a query parameter here is
+	// silently dropped — a mistargeted ?tab=/?tabId= would run on the current tab, the
+	// same wrong-tab-write hazard the batch route refuses. Refuse any stray key before
+	// the action runs, matching the batch route's message and its owner/browser
+	// exceptions (browser is what MCP appends and the multi-instance router reads).
+	if unknown := unknownQueryFields(r.URL.Query(), postActionQueryKeys); len(unknown) > 0 {
+		httpx.Error(w, 400, unknownQueryFieldsError(unknown))
+		return bridge.ActionRequest{}, false
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodySize)).Decode(&req); err != nil {
 		httpx.Error(w, 400, fmt.Errorf("decode: %w", err))

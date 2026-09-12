@@ -358,6 +358,76 @@ func TestHandleActions_RejectsStrayQueryParam(t *testing.T) {
 	})
 }
 
+// PIN-416: POST /action reads its parameters from the JSON body, so a stray query
+// parameter is silently dropped — the same wrong-tab-write hazard the batch route
+// refuses. It must be refused 400 before the action runs, while the two keys that are
+// legitimately sent on the query (owner, and browser which MCP appends) still pass.
+func TestHandleAction_POST_RejectsStrayQueryParam(t *testing.T) {
+	body := `{"kind":"click","nodeId":42,"tabId":"tab1"}`
+
+	postAction := func(t *testing.T, query string) *httptest.ResponseRecorder {
+		t.Helper()
+		h := New(&mockBridge{}, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
+		url := "/action"
+		if query != "" {
+			url += "?" + query
+		}
+		req := httptest.NewRequest("POST", url, bytes.NewReader([]byte(body)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		h.HandleAction(w, req)
+		return w
+	}
+
+	for _, tc := range []struct{ name, query string }{
+		{"stray tab", "tab=tab_fixture"},
+		{"mistargeted tabId", "tabId=tab_other"},
+		{"unknown key", "bogusparam=1"},
+	} {
+		t.Run(tc.name+" is refused", func(t *testing.T) {
+			w := postAction(t, tc.query)
+			if w.Code != 400 {
+				t.Fatalf("expected 400 for ?%s, got %d: %s", tc.query, w.Code, w.Body.String())
+			}
+			var resp map[string]string
+			if json.Unmarshal(w.Body.Bytes(), &resp) == nil && !strings.Contains(resp["error"], "silently dropped") {
+				t.Errorf("error should carry the drop guidance: %q", resp["error"])
+			}
+		})
+	}
+
+	t.Run("a clean POST is unaffected", func(t *testing.T) {
+		if w := postAction(t, ""); w.Code == 400 {
+			t.Fatalf("a clean POST /action was refused: %s", w.Body.String())
+		}
+	})
+
+	// browser (MCP's routedPathWithBody appends ?browser=) and owner (resolveOwner)
+	// are the keys legitimately carried on a POST query; refusing them would 400 a
+	// browser-targeted MCP action, so they must pass the guard.
+	for _, tc := range []struct{ name, query string }{
+		{"browser (MCP appends this)", "browser=cloak"},
+		{"owner", "owner=agent"},
+	} {
+		t.Run(tc.name+" is accepted", func(t *testing.T) {
+			if w := postAction(t, tc.query); w.Code == 400 {
+				t.Fatalf("?%s must not be refused on POST /action: %s", tc.query, w.Body.String())
+			}
+		})
+	}
+}
+
+// The POST accepted set must stay a subset of the action-family vocabulary, so a key
+// added here cannot silently permit something the query allow-list would name as not
+// a parameter of /action.
+func TestPostActionQueryKeysAreActionParameters(t *testing.T) {
+	for key := range postActionQueryKeys {
+		if _, ok := actionQueryKeys[key]; !ok {
+			t.Errorf("postActionQueryKeys has %q, which is not an /action parameter", key)
+		}
+	}
+}
+
 // The batch accepted set must stay a subset of the action-family vocabulary, so a
 // key added here cannot silently permit something /action itself would refuse.
 func TestBatchActionQueryKeysAreActionParameters(t *testing.T) {
