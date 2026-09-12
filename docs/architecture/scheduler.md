@@ -80,6 +80,15 @@ The scheduler takes the orchestrator directly as its `InstanceResolver`: `Resolv
 
 The orchestrator also implements `RequestAuthorizer`. Before dispatch the executor calls `AuthorizeTabRequest(tabId, req)`, which routes through the orchestrator's single hop-auth owner `applyInstanceAuth`: the request carries the instance's bearer token and, on a trusted child hop, the internal token. That is what lets the instance honor the `X-PinchTab-*` identity headers instead of stripping them at ingress, so the instance attributes the action to `scheduler` rather than `client`. Managed child instances run with activity recording off, so that attribution is persisted only by an instance that records activity. A resolver that does not implement `RequestAuthorizer` sends no credential, and an instance that requires one refuses the task with `401`.
 
+### Activity Recording
+
+The scheduler runs in the same process as the server's activity recorder, so it records each dispatched task there directly through an `ActivitySink` (`internal/server` passes the dashboard-feed recorder into `New`). One event per task carries source `scheduler`, the task's `agentId` and `tabId`, the action kind, and the outcome status and duration once the executor returns.
+
+This sink is the single source of a scheduled action in the dashboard feed, recorded once and independent of any instance-level recording:
+
+- Managed child instances run with activity recording off, so the child never records the forwarded action and there is no duplicate.
+- An attached external bridge records the forwarded action into its own recorder and feed, not the server's, so it does not double-count in the dashboard stream either.
+
 ## Dispatch Lifecycle
 
 A task moves through these internal states:

@@ -43,7 +43,7 @@ func newBlockingScheduler(t *testing.T, perAgent, global, workers int) (*Schedul
 	cfg.WorkerCount = workers
 	cfg.MaxInflight = global
 	cfg.MaxPerAgentFlight = perAgent
-	s := New(cfg, &mockResolver{port: "9999"})
+	s := New(cfg, &mockResolver{port: "9999"}, nil)
 	exec := newBlockingExecutor(workers + 2)
 	s.executor = exec
 	t.Cleanup(func() {

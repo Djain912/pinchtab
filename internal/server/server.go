@@ -275,7 +275,7 @@ func RunDashboard(cfg *config.RuntimeConfig, version string) {
 	if cfg.Scheduler.Enabled {
 		schedCfg := scheduler.ConfigFromRuntime(cfg.Scheduler)
 
-		sched = scheduler.New(schedCfg, orch)
+		sched = scheduler.New(schedCfg, orch, liveActivity)
 		sched.RegisterHandlers(mux)
 		slog.Info("scheduler enabled (on-demand)", "strategy", schedCfg.Strategy, "workers", schedCfg.WorkerCount)
 	}

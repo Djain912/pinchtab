@@ -8,8 +8,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pinchtab/pinchtab/internal/activity"
 	"github.com/pinchtab/pinchtab/internal/config"
 )
+
+// ActivitySink records one activity event per dispatched task into the process
+// recorder that feeds the dashboard stream.
+type ActivitySink interface {
+	Enabled() bool
+	Record(activity.Event) error
+}
 
 // InstanceResolver finds the localhost port for a given tab ID.
 type InstanceResolver interface {
@@ -109,6 +117,7 @@ type Scheduler struct {
 	queue    *TaskQueue
 	results  *ResultStore
 	executor TaskExecutor
+	activity ActivitySink
 	metrics  *Metrics
 
 	// tracks all live tasks (queued + in-flight) for lookup by ID.
@@ -127,8 +136,9 @@ type Scheduler struct {
 	noAutoStart bool // testing only: suppress ensureRunning from Submit
 }
 
-// New creates a scheduler with the given config and instance resolver.
-func New(cfg Config, resolver InstanceResolver) *Scheduler {
+// New creates a scheduler with the given config, instance resolver, and activity
+// sink. A nil sink disables per-task activity recording.
+func New(cfg Config, resolver InstanceResolver, sink ActivitySink) *Scheduler {
 	withDefaults(&cfg)
 
 	return &Scheduler{
@@ -136,6 +146,7 @@ func New(cfg Config, resolver InstanceResolver) *Scheduler {
 		queue:    NewTaskQueue(cfg.MaxQueueSize, cfg.MaxPerAgent),
 		results:  NewResultStore(cfg.ResultTTL),
 		executor: &actionEndpointExecutor{resolver: resolver, client: &http.Client{Timeout: 60 * time.Second}},
+		activity: sink,
 		metrics:  newMetrics(),
 		live:     make(map[string]*Task),
 		cancels:  make(map[string]context.CancelFunc),
@@ -408,7 +419,35 @@ func (s *Scheduler) dispatch(t *Task) {
 		slog.Info("task completed", "task", t.ID, "agent", t.AgentID, "action", t.Action, "latencyMs", latency.Milliseconds())
 	}
 
+	s.recordActivity(t, execErr, latency)
 	s.finishTask(t)
+}
+
+func (s *Scheduler) recordActivity(t *Task, execErr error, latency time.Duration) {
+	if s.activity == nil || !s.activity.Enabled() {
+		return
+	}
+	status := http.StatusOK
+	var errMsg string
+	if execErr != nil {
+		status = http.StatusBadGateway
+		errMsg = execErr.Error()
+	}
+	if err := s.activity.Record(activity.Event{
+		Timestamp:  timeNow().UTC(),
+		Source:     "scheduler",
+		AgentID:    t.AgentID,
+		Method:     http.MethodPost,
+		Path:       fmt.Sprintf("/tabs/%s/action", t.TabID),
+		Status:     status,
+		DurationMs: latency.Milliseconds(),
+		TabID:      t.TabID,
+		Action:     t.Action,
+		Ref:        t.Ref,
+		Error:      errMsg,
+	}); err != nil {
+		slog.Warn("scheduler activity recording failed", "task", t.ID, "err", err)
+	}
 }
 
 // finishTask publishes a task's terminal state. It does NOT release an in-flight

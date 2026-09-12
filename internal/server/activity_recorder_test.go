@@ -78,6 +78,30 @@ func TestDashboardActivityRecorderBroadcastsClientEvents(t *testing.T) {
 	}
 }
 
+func TestDashboardActivityRecorderBroadcastsSchedulerEvents(t *testing.T) {
+	base := &stubRecorder{}
+	dash := dashboard.NewDashboard(nil)
+	rec := newDashboardActivityRecorder(base, dash)
+
+	err := rec.Record(activity.Event{
+		Timestamp:  time.Now().UTC(),
+		Source:     "scheduler",
+		Method:     http.MethodPost,
+		Path:       "/tabs/tab_1/action",
+		AgentID:    "agent-1",
+		TabID:      "tab_1",
+		Action:     "click",
+		Status:     http.StatusOK,
+		DurationMs: 12,
+	})
+	if err != nil {
+		t.Fatalf("Record() error = %v", err)
+	}
+	if len(dash.RecentEvents()) != 1 {
+		t.Fatalf("dashboard recent events = %d, want 1", len(dash.RecentEvents()))
+	}
+}
+
 // failingRecorder stands in for a store that cannot reach its disk.
 type failingRecorder struct {
 	calls int

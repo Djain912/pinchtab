@@ -45,5 +45,5 @@ func (r dashboardActivityRecorder) Query(filter activity.Filter) ([]activity.Eve
 }
 
 func shouldBroadcastDashboardActivity(evt activity.Event) bool {
-	return evt.Source == "client"
+	return evt.Source == "client" || evt.Source == "scheduler"
 }
