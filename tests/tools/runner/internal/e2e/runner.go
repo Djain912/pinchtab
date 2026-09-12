@@ -31,6 +31,7 @@ type Runner struct {
 	logsMode  string
 	overall   overallReportData
 	overrides *providerOverrides
+	mem       *suiteMemory
 }
 
 type overallReportData struct {
@@ -532,9 +533,17 @@ func (r *Runner) runSinglePlanWithCompose(plan suitePlan, composeFile string) in
 		return 1
 	}
 
+	var probe *memoryProbe
+	if !r.args.DryRun {
+		probe = r.startMemorySampler()
+	}
 	code := r.runLoggedCommand("running "+def.Name+" suite", def.Output, command)
+	if probe != nil {
+		r.applyMemoryResult(probe.finish())
+	}
 	duration := time.Since(started)
 	summary := r.writeSuiteReports(def, duration, code)
+	r.mem = nil
 	r.recordOverallSummary(summary)
 	r.printSuiteSummary(def, summary, duration)
 	if code != 0 {
@@ -1019,6 +1028,103 @@ func (r *Runner) readLastRunningName(outputFile string) string {
 		}
 	}
 	return last
+}
+
+func (r *Runner) provider() string {
+	if r.args.Provider != "" {
+		return r.args.Provider
+	}
+	return defaultProvider
+}
+
+type memoryResult struct {
+	containers []containerMemory
+	note       string
+}
+
+type memoryProbe struct {
+	stop   chan struct{}
+	result chan memoryResult
+}
+
+func (r *Runner) startMemorySampler() *memoryProbe {
+	probe := &memoryProbe{stop: make(chan struct{}), result: make(chan memoryResult, 1)}
+	go func() {
+		acc := newMemoryAccumulator()
+		firstErr := ""
+		sampleOnce := func() {
+			out, err := r.dockerStatsSnapshot()
+			if err != nil {
+				if firstErr == "" {
+					firstErr = err.Error()
+				}
+				return
+			}
+			for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+				if s, ok := parseDockerStatsLine(line); ok && isPinchtabBrowserContainer(s.Name) {
+					acc.add(s)
+				}
+			}
+		}
+
+		sampleOnce()
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-probe.stop:
+				sampleOnce()
+				containers := acc.reduce()
+				note := ""
+				if len(containers) == 0 {
+					note = "no pinchtab container memory sampled"
+					if firstErr != "" {
+						note += " (" + firstErr + ")"
+					}
+				}
+				probe.result <- memoryResult{containers: containers, note: note}
+				return
+			case <-ticker.C:
+				sampleOnce()
+			}
+		}
+	}()
+	return probe
+}
+
+func (p *memoryProbe) finish() memoryResult {
+	close(p.stop)
+	return <-p.result
+}
+
+func (r *Runner) applyMemoryResult(result memoryResult) {
+	if len(result.containers) == 0 {
+		r.mem = nil
+		if result.note != "" {
+			_, _ = fmt.Fprintf(r.stdout, "  memory: %s\n", result.note)
+		}
+		return
+	}
+	r.mem = &suiteMemory{Provider: r.provider(), Containers: result.containers}
+}
+
+func (r *Runner) dockerStatsSnapshot() (string, error) {
+	cmd := exec.Command("docker", "stats", "--no-stream", "--format", "{{.Name}},{{.MemUsage}},{{.PIDs}}") // #nosec G204 -- fixed docker stats invocation
+	cmd.Dir = r.repoRoot
+	cmd.Env = os.Environ()
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("docker stats unavailable: %v: %s", err, strings.TrimSpace(buf.String()))
+	}
+	return buf.String(), nil
+}
+
+func isPinchtabBrowserContainer(name string) bool {
+	return strings.Contains(name, "pinchtab") &&
+		!strings.Contains(name, "fixtures") &&
+		!strings.Contains(name, "runner")
 }
 
 func resolveCompose(dryRun bool) ([]string, error) {
