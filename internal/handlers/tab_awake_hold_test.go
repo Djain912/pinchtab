@@ -2,17 +2,23 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/chromedp/chromedp"
 	"github.com/pinchtab/pinchtab/internal/bridge"
 	"github.com/pinchtab/pinchtab/internal/config"
+	"github.com/pinchtab/pinchtab/internal/session"
 	"github.com/pinchtab/pinchtab/internal/testbrowser"
 )
 
-func TestATabResolvedForARequestStaysAwakeUntilTheRequestEnds(t *testing.T) {
+func newFreezeIdleFixture(t *testing.T, delay time.Duration) (*bridge.Bridge, *Handlers) {
+	t.Helper()
 	alloc, cancelAlloc := chromedp.NewExecAllocator(context.Background(), append(
 		chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.ExecPath(testbrowser.Path(t)),
@@ -26,10 +32,14 @@ func TestATabResolvedForARequestStaysAwakeUntilTheRequestEnds(t *testing.T) {
 	if err := chromedp.Run(tabCtx); err != nil {
 		t.Fatalf("start browser: %v", err)
 	}
-	cfg := &config.RuntimeConfig{TabLifecyclePolicy: "freeze_idle", TabCloseDelay: 20 * time.Millisecond, StateDir: t.TempDir()}
+	cfg := &config.RuntimeConfig{TabLifecyclePolicy: "freeze_idle", TabCloseDelay: delay, ActionTimeout: 10 * time.Second, StateDir: t.TempDir()}
 	b := bridge.New(context.Background(), tabCtx, cfg)
 	b.RegisterTab("tabA", tabCtx)
-	h := New(b, cfg, nil, nil, nil)
+	return b, New(b, cfg, nil, nil, nil)
+}
+
+func TestATabResolvedForARequestStaysAwakeUntilTheRequestEnds(t *testing.T) {
+	b, h := newFreezeIdleFixture(t, 20*time.Millisecond)
 
 	reqCtx, endRequest := context.WithCancel(context.Background())
 	req := httptest.NewRequest("GET", "/snapshot", nil).WithContext(reqCtx)
@@ -49,5 +59,51 @@ func TestATabResolvedForARequestStaysAwakeUntilTheRequestEnds(t *testing.T) {
 	}
 	if !b.TabFrozen("tabA") {
 		t.Fatal("tab never froze after its request ended")
+	}
+}
+
+func TestAFailedUnfreezeIsARetryable503AndKeepsTheSessionsCurrentTab(t *testing.T) {
+	b, h := newFreezeIdleFixture(t, 30*time.Millisecond)
+	var failThaw atomic.Bool
+	failThaw.Store(true)
+	b.SetLifecycleWriterForTests(func(_ context.Context, frozen bool) error {
+		if !frozen && failThaw.Swap(false) {
+			return errors.New("renderer busy")
+		}
+		return nil
+	})
+	scope := scopedCurrentTab(currentTabScopeSession, "ses_frozen")
+	h.CurrentTabs.Set(scope, "tabA")
+	b.ScheduleIdleLifecycle("tabA")
+	deadline := time.Now().Add(time.Second)
+	for !b.TabFrozen("tabA") && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !b.TabFrozen("tabA") {
+		t.Fatal("tab never froze")
+	}
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux, nil)
+	text := func() *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, session.WithSession(httptest.NewRequest(http.MethodGet, "/text", nil), &session.Session{ID: "ses_frozen"}))
+		return w
+	}
+
+	first := text()
+	var body struct {
+		Code      string `json:"code"`
+		Retryable bool   `json:"retryable"`
+	}
+	_ = json.Unmarshal(first.Body.Bytes(), &body)
+	if first.Code != http.StatusServiceUnavailable || body.Code != "tab_unfreeze_failed" || !body.Retryable {
+		t.Fatalf("failed unfreeze answered %d %s, want 503 tab_unfreeze_failed retryable", first.Code, first.Body.String())
+	}
+	if got, ok := h.CurrentTabs.Get(scope); !ok || got != "tabA" {
+		t.Fatalf("session current tab = %q %v after a failed unfreeze, want tabA kept", got, ok)
+	}
+
+	if second := text(); second.Code != http.StatusOK {
+		t.Fatalf("retry after the renderer recovered answered %d %s, want 200", second.Code, second.Body.String())
 	}
 }

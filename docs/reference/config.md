@@ -511,7 +511,7 @@ You can change or clear that default with `browser.extensionPaths`.
 ```
 
 - `eviction` controls what happens when `maxTabs` is reached: `close_lru`, `close_oldest`, or `reject`.
-- `lifecycle` controls idle lifecycle behavior: `keep` disables lifecycle auto-close and is the default; `close_idle` auto-closes a tab after it handles an authorized `/text`, `/snapshot`, or `/action` request; `freeze_idle` instead freezes a tab no request has touched for the idle delay (timers and JavaScript stop, the page and session stay); every request restarts that clock and unfreezes the tab first. A tab is never frozen while a request on it is running (including a screencast stream), while it is paused for handoff, or while it holds network interception rules.
+- `lifecycle` controls idle lifecycle behavior: `keep` disables lifecycle auto-close and is the default; `close_idle` auto-closes a tab after it handles an authorized `/text`, `/snapshot`, or `/action` request; `freeze_idle` instead freezes a tab no request has touched for the idle delay (timers and JavaScript stop, the page and session stay); every request restarts that clock and unfreezes the tab first. If the renderer does not accept the unfreeze, the request answers `503` with code `tab_unfreeze_failed` and `retryable: true`; the tab and a session's current-tab pointer are kept, and the next request retries. A tab is never frozen while a request on it is running (including a screencast stream), while it is paused for handoff, or while it holds network interception rules.
 - `closeDelaySec` is the idle delay for `close_idle` and `freeze_idle`. The default is `300` seconds when either is enabled.
 - `restore` controls whether session tabs are restored on startup. The default is `false`.
 

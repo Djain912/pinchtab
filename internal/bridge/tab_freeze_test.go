@@ -238,8 +238,9 @@ func TestAFailedThawFailsTheRequestAndTheNextAccessRetries(t *testing.T) {
 	}
 
 	_, _, err := tm.TabContext("tab1")
-	if err == nil || !strings.Contains(err.Error(), "could not be unfrozen") {
-		t.Fatalf("first access err = %v, want could not be unfrozen", err)
+	var unfreeze *TabUnfreezeError
+	if !errors.As(err, &unfreeze) || unfreeze.TabID != "tab1" || !strings.Contains(err.Error(), "could not be unfrozen") {
+		t.Fatalf("first access err = %v, want a TabUnfreezeError for tab1", err)
 	}
 	if !tm.TabFrozen("tab1") {
 		t.Fatal("a failed thaw was recorded as awake")

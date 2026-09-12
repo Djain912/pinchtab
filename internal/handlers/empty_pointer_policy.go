@@ -56,6 +56,11 @@ func WriteTabContextError(w http.ResponseWriter, err error, notFoundStatus int) 
 		httpx.ErrorCode(w, http.StatusConflict, "no_current_tab", err.Error(), false, nil)
 		return
 	}
+	var unfreeze *bridge.TabUnfreezeError
+	if errors.As(err, &unfreeze) {
+		httpx.ErrorCode(w, http.StatusServiceUnavailable, "tab_unfreeze_failed", err.Error(), true, nil)
+		return
+	}
 	if notFoundStatus == 0 {
 		notFoundStatus = http.StatusNotFound
 	}

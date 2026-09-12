@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -23,7 +24,8 @@ func (h *Handlers) tabContext(r *http.Request, tabID string) (context.Context, s
 	}
 
 	ctx, resolvedID, err := h.Bridge.TabContext(tabID)
-	if err != nil && !explicitTab && !scope.IsGlobal() {
+	var unfreeze *bridge.TabUnfreezeError
+	if err != nil && !explicitTab && !scope.IsGlobal() && !errors.As(err, &unfreeze) {
 		h.CurrentTabs.Clear(scope)
 		return nil, "", noCurrentTabError(scope.Description())
 	}

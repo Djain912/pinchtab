@@ -13,6 +13,21 @@ import (
 
 const lifecycleCallTimeout = 5 * time.Second
 
+type TabUnfreezeError struct {
+	TabID string
+	Err   error
+}
+
+func (e *TabUnfreezeError) Error() string {
+	return fmt.Sprintf("tab %s could not be unfrozen: %v", e.TabID, e.Err)
+}
+
+func (e *TabUnfreezeError) Unwrap() error { return e.Err }
+
+func (tm *TabManager) SetLifecycleWriterForTests(write func(ctx context.Context, frozen bool) error) {
+	tm.setFrozen = write
+}
+
 func setTabFrozen(ctx context.Context, frozen bool) error {
 	return chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
 		return cdpops.SetPageFrozen(c, frozen)
@@ -121,7 +136,7 @@ func (tm *TabManager) thawTab(tabID string, entry *TabEntry) error {
 		return nil
 	}
 	if err := tm.applyFrozen(ctx, false); err != nil {
-		return fmt.Errorf("tab %s could not be unfrozen: %w", tabID, err)
+		return &TabUnfreezeError{TabID: tabID, Err: err}
 	}
 	tm.mu.Lock()
 	entry.frozen = false
