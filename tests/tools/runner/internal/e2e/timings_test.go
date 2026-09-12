@@ -207,16 +207,17 @@ func TestParseDockerStatsLine(t *testing.T) {
 		name     string
 		line     string
 		wantOK   bool
+		wantID   string
 		wantName string
 		wantMiB  float64
 		wantPids int
 	}{
-		{"chrome pinchtab", "pinchtab-pinchtab-1,484MiB / 7.667GiB,12", true, "pinchtab-pinchtab-1", 484, 12},
-		{"gib used", "pinchtab-pinchtab-secure-1,1.5GiB / 7.667GiB,30", true, "pinchtab-pinchtab-secure-1", 1536, 30},
-		{"non-numeric pids keeps the memory sample", "pinchtab-pinchtab-1,200MiB / 8GiB,--", true, "pinchtab-pinchtab-1", 200, 0},
-		{"too few fields", "only-two,200MiB", false, "", 0, 0},
-		{"unparseable memory", "pinchtab-pinchtab-1,notmem,3", false, "", 0, 0},
-		{"blank", "", false, "", 0, 0},
+		{"chrome pinchtab", "a1b2c3,e2e-pinchtab-1,484MiB / 7.667GiB,12", true, "a1b2c3", "e2e-pinchtab-1", 484, 12},
+		{"gib used", "d4e5f6,e2e-pinchtab-secure-1,1.5GiB / 7.667GiB,30", true, "d4e5f6", "e2e-pinchtab-secure-1", 1536, 30},
+		{"non-numeric pids keeps the memory sample", "a1b2c3,e2e-pinchtab-1,200MiB / 8GiB,--", true, "a1b2c3", "e2e-pinchtab-1", 200, 0},
+		{"too few fields", "e2e-pinchtab-1,200MiB / 8GiB,3", false, "", "", 0, 0},
+		{"unparseable memory", "a1b2c3,e2e-pinchtab-1,notmem,3", false, "", "", 0, 0},
+		{"blank", "", false, "", "", 0, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, ok := parseDockerStatsLine(tc.line)
@@ -226,10 +227,34 @@ func TestParseDockerStatsLine(t *testing.T) {
 			if !ok {
 				return
 			}
-			if got.Name != tc.wantName || got.MiB != tc.wantMiB || got.Pids != tc.wantPids {
-				t.Errorf("parseDockerStatsLine(%q) = %+v, want name %q mib %v pids %d", tc.line, got, tc.wantName, tc.wantMiB, tc.wantPids)
+			if got.ID != tc.wantID || got.Name != tc.wantName || got.MiB != tc.wantMiB || got.Pids != tc.wantPids {
+				t.Errorf("parseDockerStatsLine(%q) = %+v, want id %q name %q mib %v pids %d", tc.line, got, tc.wantID, tc.wantName, tc.wantMiB, tc.wantPids)
 			}
 		})
+	}
+}
+
+func TestSelectStackSamplesRecordsOnlyThisStacksContainers(t *testing.T) {
+	stackIDs := map[string]bool{"a1b2c3d4e5f6": true}
+	statsOutput := strings.Join([]string{
+		"a1b2c3d4e5f6,e2e-pinchtab-1,484MiB / 8GiB,12",
+		"9988776655ff,pinchtab-stealth-chrome,900MiB / 8GiB,40",
+		"1122334455aa,e2e-fixtures-1,10MiB / 8GiB,3",
+	}, "\n")
+
+	got := selectStackSamples(statsOutput, stackIDs)
+	if len(got) != 1 || got[0].Name != "e2e-pinchtab-1" {
+		t.Fatalf("selectStackSamples = %+v; a foreign pinchtab container or the stack's fixtures must not be recorded", got)
+	}
+}
+
+func TestContainerIDMatchesToleratesShortAndFullIDs(t *testing.T) {
+	stackIDs := map[string]bool{"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2": true}
+	if !containerIDMatches("a1b2c3d4e5f6", stackIDs) {
+		t.Error("a short docker stats id must match the full compose ps id it prefixes")
+	}
+	if containerIDMatches("ffffffffffff", stackIDs) {
+		t.Error("an unrelated id must not match")
 	}
 }
 

@@ -3,6 +3,7 @@ package e2e
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -535,7 +536,7 @@ func (r *Runner) runSinglePlanWithCompose(plan suitePlan, composeFile string) in
 
 	var probe *memoryProbe
 	if !r.args.DryRun {
-		probe = r.startMemorySampler()
+		probe = r.startMemorySampler(composeFile)
 	}
 	code := r.runLoggedCommand("running "+def.Name+" suite", def.Output, command)
 	if probe != nil {
@@ -1047,23 +1048,40 @@ type memoryProbe struct {
 	result chan memoryResult
 }
 
-func (r *Runner) startMemorySampler() *memoryProbe {
+const (
+	dockerProbeTimeout    = 10 * time.Second
+	memorySamplerDeadline = 15 * time.Second
+)
+
+func (r *Runner) startMemorySampler(composeFile string) *memoryProbe {
 	probe := &memoryProbe{stop: make(chan struct{}), result: make(chan memoryResult, 1)}
 	go func() {
 		acc := newMemoryAccumulator()
 		firstErr := ""
+		note := func(err error) {
+			if err != nil && firstErr == "" {
+				firstErr = err.Error()
+			}
+		}
+
+		stackIDs, err := r.stackContainerIDs(composeFile)
+		note(err)
+		ids := make([]string, 0, len(stackIDs))
+		for id := range stackIDs {
+			ids = append(ids, id)
+		}
+
 		sampleOnce := func() {
-			out, err := r.dockerStatsSnapshot()
-			if err != nil {
-				if firstErr == "" {
-					firstErr = err.Error()
-				}
+			if len(ids) == 0 {
 				return
 			}
-			for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-				if s, ok := parseDockerStatsLine(line); ok && isPinchtabBrowserContainer(s.Name) {
-					acc.add(s)
-				}
+			out, err := r.dockerStatsSnapshot(ids)
+			if err != nil {
+				note(err)
+				return
+			}
+			for _, s := range selectStackSamples(out, stackIDs) {
+				acc.add(s)
 			}
 		}
 
@@ -1075,14 +1093,14 @@ func (r *Runner) startMemorySampler() *memoryProbe {
 			case <-probe.stop:
 				sampleOnce()
 				containers := acc.reduce()
-				note := ""
+				reason := ""
 				if len(containers) == 0 {
-					note = "no pinchtab container memory sampled"
+					reason = "no pinchtab container memory sampled"
 					if firstErr != "" {
-						note += " (" + firstErr + ")"
+						reason += " (" + firstErr + ")"
 					}
 				}
-				probe.result <- memoryResult{containers: containers, note: note}
+				probe.result <- memoryResult{containers: containers, note: reason}
 				return
 			case <-ticker.C:
 				sampleOnce()
@@ -1094,7 +1112,12 @@ func (r *Runner) startMemorySampler() *memoryProbe {
 
 func (p *memoryProbe) finish() memoryResult {
 	close(p.stop)
-	return <-p.result
+	select {
+	case result := <-p.result:
+		return result
+	case <-time.After(memorySamplerDeadline):
+		return memoryResult{note: "memory sampler did not finish within " + memorySamplerDeadline.String()}
+	}
 }
 
 func (r *Runner) applyMemoryResult(result memoryResult) {
@@ -1108,15 +1131,44 @@ func (r *Runner) applyMemoryResult(result memoryResult) {
 	r.mem = &suiteMemory{Provider: r.provider(), Containers: result.containers}
 }
 
-func (r *Runner) dockerStatsSnapshot() (string, error) {
-	cmd := exec.Command("docker", "stats", "--no-stream", "--format", "{{.Name}},{{.MemUsage}},{{.PIDs}}") // #nosec G204 -- fixed docker stats invocation
+func (r *Runner) stackContainerIDs(composeFile string) (map[string]bool, error) {
+	out, err := r.captureWithTimeout(r.composeArgs(composeFile, "ps", "-q"))
+	if err != nil {
+		return nil, fmt.Errorf("docker compose ps: %w", err)
+	}
+	ids := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if id := strings.TrimSpace(line); id != "" {
+			ids[id] = true
+		}
+	}
+	return ids, nil
+}
+
+func (r *Runner) dockerStatsSnapshot(ids []string) (string, error) {
+	command := append([]string{"docker", "stats", "--no-stream", "--format", "{{.ID}},{{.Name}},{{.MemUsage}},{{.PIDs}}"}, ids...)
+	out, err := r.captureWithTimeout(command)
+	if err != nil {
+		return "", fmt.Errorf("docker stats unavailable: %w", err)
+	}
+	return out, nil
+}
+
+func (r *Runner) captureWithTimeout(command []string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), dockerProbeTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, command[0], command[1:]...) // #nosec G204 -- commands are fixed docker/compose invocations
 	cmd.Dir = r.repoRoot
 	cmd.Env = os.Environ()
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("docker stats unavailable: %v: %s", err, strings.TrimSpace(buf.String()))
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "", fmt.Errorf("timed out after %s", dockerProbeTimeout)
+	}
+	if err != nil {
+		return "", fmt.Errorf("%v: %s", err, strings.TrimSpace(buf.String()))
 	}
 	return buf.String(), nil
 }

@@ -60,6 +60,7 @@ type containerMemory struct {
 }
 
 type memorySample struct {
+	ID   string
 	Name string
 	MiB  float64
 	Pids int
@@ -115,19 +116,44 @@ func round1(v float64) float64 {
 
 func parseDockerStatsLine(line string) (memorySample, bool) {
 	fields := strings.Split(strings.TrimSpace(line), ",")
-	if len(fields) != 3 {
+	if len(fields) != 4 {
 		return memorySample{}, false
 	}
-	name := strings.TrimSpace(fields[0])
-	mib, ok := parseMemUsageMiB(fields[1])
-	if name == "" || !ok {
+	id := strings.TrimSpace(fields[0])
+	name := strings.TrimSpace(fields[1])
+	mib, ok := parseMemUsageMiB(fields[2])
+	if id == "" || name == "" || !ok {
 		return memorySample{}, false
 	}
-	pids, err := strconv.Atoi(strings.TrimSpace(fields[2]))
+	pids, err := strconv.Atoi(strings.TrimSpace(fields[3]))
 	if err != nil {
 		pids = 0
 	}
-	return memorySample{Name: name, MiB: mib, Pids: pids}, true
+	return memorySample{ID: id, Name: name, MiB: mib, Pids: pids}, true
+}
+
+func selectStackSamples(statsOutput string, stackIDs map[string]bool) []memorySample {
+	var out []memorySample
+	for _, line := range strings.Split(strings.TrimSpace(statsOutput), "\n") {
+		s, ok := parseDockerStatsLine(line)
+		if !ok || !containerIDMatches(s.ID, stackIDs) || !isPinchtabBrowserContainer(s.Name) {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+func containerIDMatches(statsID string, stackIDs map[string]bool) bool {
+	if stackIDs[statsID] {
+		return true
+	}
+	for id := range stackIDs {
+		if strings.HasPrefix(id, statsID) || strings.HasPrefix(statsID, id) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseMemUsageMiB(field string) (float64, bool) {
