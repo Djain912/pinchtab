@@ -205,7 +205,18 @@ pinchtab find --threshold <0-1>         # Minimum similarity score
 pinchtab find --explain                 # Include score breakdown
 pinchtab find --ref-only                # Print only the best ref
 pinchtab eval <expression>              # Evaluate JavaScript
+pinchtab a11y audit                     # Accessibility score + findings (native engine)
+pinchtab a11y audit --axe               # Run axe-core in the page (industry rule ids)
+pinchtab a11y audit --axe --tags wcag2a,wcag2aa   # axe: filter by WCAG tags
+pinchtab a11y audit --axe --rules image-alt,label # axe: run only these rule ids
+pinchtab a11y audit --axe --json        # Full JSON envelope with per-node refs
 ```
+
+`pinchtab a11y audit --axe` runs the vendored axe-core engine (see
+[reference/a11y.md](reference/a11y.md)) in the page's isolated world, so page
+script cannot tamper with the result. Each violation node that maps to a
+snapshot ref carries it, so a failing element can be actioned directly with
+`pinchtab action`.
 
 `pinchtab eval` is intentionally not frame-scoped. Current `pinchtab frame`
 state affects selector-based commands such as `snap`, `click`, `fill`, and
