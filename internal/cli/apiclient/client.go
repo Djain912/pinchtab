@@ -271,6 +271,20 @@ func DoDeleteJSON(client *http.Client, base, token, path string, body map[string
 	return doAndRender(client, token, request{method: "DELETE", url: base + path, body: body})
 }
 
+// DoDeleteQuiet is like DoDelete but does not print the response body, so a
+// self-rendering caller emits its own output exactly once. It keeps DoDelete's
+// fatal-on-transport-error + exit-on-HTTP-error policy; a non-object body
+// returns a nil map for the caller to branch on.
+func DoDeleteQuiet(client *http.Client, base, token, path string, params url.Values) map[string]any {
+	r := request{method: "DELETE", url: buildURL(base, path, params)}
+	status, body := mustRequest(client, token, r)
+	exitOnAPIError(r, status, body)
+
+	var result map[string]any
+	_ = json.Unmarshal(body, &result)
+	return result
+}
+
 // ResolveInstanceBase fetches the named instance from the orchestrator and returns
 // a base URL pointing directly at that instance's API port.
 func ResolveInstanceBase(orchBase, token, instanceID, bind string) string {
