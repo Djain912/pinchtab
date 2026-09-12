@@ -89,6 +89,14 @@ func (e *actionEndpointExecutor) Execute(ctx context.Context, t *Task) (any, err
 	if t.AgentID != "" {
 		req.Header.Set(activity.HeaderAgentID, t.AgentID)
 	}
+	// Route hop auth through the single owner (the orchestrator): only a trusted hop keeps
+	// the X-PinchTab-* identity headers above through ingress, so without this the source and
+	// tab id are stripped and the action records as "client".
+	if authorizer, ok := e.resolver.(RequestAuthorizer); ok {
+		if err := authorizer.AuthorizeTabRequest(t.TabID, req); err != nil {
+			return nil, fmt.Errorf("authorize scheduler request for tab %q: %w", t.TabID, err)
+		}
+	}
 
 	resp, err := e.client.Do(req)
 	if err != nil {

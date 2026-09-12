@@ -344,6 +344,36 @@ func (o *Orchestrator) hopIsTrusted(inst *InstanceInternal) bool {
 	return inst.authToken == "" && o.internalToken != ""
 }
 
+// ResolveTabInstance returns the localhost port of the instance that owns tabID, so the
+// scheduler can use the orchestrator as its InstanceResolver and get port resolution and hop
+// auth from one owner.
+func (o *Orchestrator) ResolveTabInstance(tabID string) (string, error) {
+	inst, err := o.instanceMgr.FindInstanceByTabID(tabID)
+	if err != nil {
+		return "", fmt.Errorf("tab %q not found: %w", tabID, err)
+	}
+	return inst.Port, nil
+}
+
+// AuthorizeTabRequest applies the same per-instance hop auth the proxy uses (bearer token,
+// plus the internal token on trusted child hops) to a request the scheduler sends directly to
+// the instance that owns tabID. It is the one owner of that decision; callers must not
+// re-derive it or read the token from the environment.
+func (o *Orchestrator) AuthorizeTabRequest(tabID string, req *http.Request) error {
+	inst, err := o.instanceMgr.FindInstanceByTabID(tabID)
+	if err != nil {
+		return fmt.Errorf("tab %q not found: %w", tabID, err)
+	}
+	o.mu.RLock()
+	internal := o.instances[inst.ID]
+	o.mu.RUnlock()
+	if internal == nil {
+		return fmt.Errorf("instance %q for tab %q is no longer tracked", inst.ID, tabID)
+	}
+	o.applyInstanceAuth(req, internal)
+	return nil
+}
+
 func classifyLaunchError(err error) int {
 	msg := err.Error()
 	if strings.Contains(msg, "cannot contain") || strings.Contains(msg, "cannot be empty") {

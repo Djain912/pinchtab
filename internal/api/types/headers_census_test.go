@@ -191,14 +191,12 @@ var publicClientPackages = map[string]string{
 var publicClientExemptHeaders = map[string]map[string]string{
 	"internal/cli/apiclient": {"x-pinchtab-source": "harmless: bearer credential fallback records the same 'client' label"},
 	"cmd/pinchtab":           {"x-pinchtab-source": "harmless: same as the CLI apiclient — bearer fallback yields 'client'"},
-	// PENDING (PIN-384, blocked): the scheduler's Source/Tab-Id are stripped today, so it
-	// records as 'client'. The fix is to send the trusted internal token via the
-	// orchestrator's hop-auth owner (applyInstanceAuth) — which lives outside this card's
-	// footprint (orchestrator/scheduler interface/server wiring). Remove these two entries
-	// when that lands and the executor routes through the authorizer.
+	// The scheduler's action executor routes hop auth through the orchestrator
+	// (AuthorizeTabRequest), which marks internal/scheduler authorized below, so its
+	// Source/Tab-Id survive ingress and need no exemption. The webhook headers stay exempt:
+	// they go to an EXTERNAL receiver, not a PinchTab listener, and would be flagged if the
+	// executor ever stopped routing through the authorizer.
 	"internal/scheduler": {
-		"x-pinchtab-source":  "PENDING PIN-384: needs the orchestrator internal-token hop-auth; stripped until then",
-		"x-pinchtab-tab-id":  "PENDING PIN-384: needs the orchestrator internal-token hop-auth; stripped until then",
 		"x-pinchtab-event":   "webhook.go: outbound event-webhook to an EXTERNAL receiver that reads these; not a PinchTab listener behind the strip layer",
 		"x-pinchtab-task-id": "webhook.go: outbound event-webhook to an EXTERNAL receiver that reads these; not a PinchTab listener behind the strip layer",
 	},
@@ -244,7 +242,17 @@ func pinchtabRequestHeaderSets(t *testing.T, files []srccensus.SourceFile) (sets
 				return true
 			}
 			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "Set" {
+			if !ok {
+				return true
+			}
+			// A package that routes a request through the orchestrator's hop-auth owner is
+			// authorized the same as one that sets the internal token itself: the token is
+			// applied there, not here.
+			if sel.Sel.Name == "AuthorizeTabRequest" {
+				tokenPkgs[pkg] = true
+				return true
+			}
+			if sel.Sel.Name != "Set" {
 				return true
 			}
 			inner, ok := sel.X.(*ast.SelectorExpr)
@@ -316,6 +324,19 @@ func TestStrippedHeaderCensusAllowsATrustedHopThatSendsTheToken(t *testing.T) {
 	sets, tokenPkgs := pinchtabRequestHeaderSets(t, planted)
 	if len(strippedHeaderViolations(sets, tokenPkgs)) != 0 {
 		t.Fatal("a package that sends the internal token was flagged; its headers survive ingress")
+	}
+}
+
+// A package that routes its request through the orchestrator's hop-auth owner
+// (AuthorizeTabRequest) is authorized the same as one that sends the token directly, so its
+// X-PinchTab-* sets are not flagged.
+func TestStrippedHeaderCensusAllowsAPackageThatRoutesThroughTheAuthorizer(t *testing.T) {
+	planted := []srccensus.SourceFile{
+		{Name: "internal/scheduler/x.go", Text: "package scheduler\nimport \"net/http\"\nfunc f(a interface{ AuthorizeTabRequest(string, *http.Request) error }, req *http.Request) {\n\t_ = a.AuthorizeTabRequest(\"t\", req)\n\treq.Header.Set(\"X-PinchTab-Source\", \"scheduler\")\n}\n"},
+	}
+	sets, tokenPkgs := pinchtabRequestHeaderSets(t, planted)
+	if len(strippedHeaderViolations(sets, tokenPkgs)) != 0 {
+		t.Fatal("a package that routes through AuthorizeTabRequest was flagged; its headers survive ingress via hop auth")
 	}
 }
 

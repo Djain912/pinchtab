@@ -16,6 +16,22 @@ type InstanceResolver interface {
 	ResolveTabInstance(tabID string) (port string, err error)
 }
 
+// RequestAuthorizer applies per-instance hop auth (bearer token, plus the internal token on
+// trusted child hops) to a request bound for the instance that owns tabID, so the instance
+// honors the X-PinchTab-* identity headers instead of stripping them at ingress. The
+// orchestrator implements it; the scheduler must not read the token itself. A resolver that
+// does not implement it leaves the request unauthorized and the action records as "client".
+type RequestAuthorizer interface {
+	AuthorizeTabRequest(tabID string, req *http.Request) error
+}
+
+// NewActionExecutor builds the executor that dispatches a task to an instance's action
+// endpoint, using resolver for port resolution and, when it also implements RequestAuthorizer,
+// for hop auth. Exposed so a test can drive a scheduler-executed action with a real resolver.
+func NewActionExecutor(resolver InstanceResolver) TaskExecutor {
+	return &actionEndpointExecutor{resolver: resolver, client: &http.Client{Timeout: 60 * time.Second}}
+}
+
 // Config holds scheduler tuning knobs.
 type Config struct {
 	Enabled           bool          `json:"enabled"`

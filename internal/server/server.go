@@ -275,8 +275,7 @@ func RunDashboard(cfg *config.RuntimeConfig, version string) {
 	if cfg.Scheduler.Enabled {
 		schedCfg := scheduler.ConfigFromRuntime(cfg.Scheduler)
 
-		resolver := &scheduler.ManagerResolver{Mgr: orch.InstanceManager()}
-		sched = scheduler.New(schedCfg, resolver)
+		sched = scheduler.New(schedCfg, orch)
 		sched.RegisterHandlers(mux)
 		slog.Info("scheduler enabled (on-demand)", "strategy", schedCfg.Strategy, "workers", schedCfg.WorkerCount)
 	}
