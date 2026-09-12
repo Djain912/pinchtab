@@ -14,7 +14,11 @@ import (
 const (
 	vocabHeader      = "X-PinchTab-Vocab"
 	vocabTabIDHeader = "X-PinchTab-Tab-Id"
-	vocabStoreLimit  = 16
+	// VocabTabHeader tells the server which tab the echoed token belongs to, so it
+	// enforces the epoch check only when the action resolves that same tab and
+	// ignores a token left over from a tab the current pointer has since moved off.
+	VocabTabHeader  = "X-PinchTab-Vocab-Tab"
+	vocabStoreLimit = 16
 )
 
 // vocabEntry pairs a snapshot's vocabulary token with the tab the server
@@ -25,45 +29,66 @@ type vocabEntry struct {
 	Token string `json:"token"`
 }
 
+// vocabStore is one server's token records plus the tab the last implicit
+// snapshot resolved, so an implicit action can echo that tab's token and tag it.
+type vocabStore struct {
+	Current string       `json:"current"`
+	Entries []vocabEntry `json:"entries"`
+}
+
 // DoGetCapturingVocab performs a GET like DoGet and, on success, persists the
 // response's vocabulary token keyed by the tab the server resolved (the
-// X-PinchTab-Tab-Id header), not by how the caller spelled --tab. A later action
-// on that tab echoes it and a ref renumbered by an intervening snapshot is
-// refused rather than mis-resolved. The token is delivered as a response header
-// so it survives every snapshot format, including the compact text the CLI
-// defaults to.
-func DoGetCapturingVocab(client *http.Client, base, token, path string, params url.Values) map[string]any {
+// X-PinchTab-Tab-Id header), not by how the caller spelled --tab. When the
+// snapshot was implicit (no --tab), the resolved tab also becomes the store's
+// current pointer, so a later implicit action echoes that tab's token. The token
+// is delivered as a response header so it survives every snapshot format,
+// including the compact text the CLI defaults to.
+func DoGetCapturingVocab(client *http.Client, base, token, path string, params url.Values, implicit bool) map[string]any {
 	var headers http.Header
 	r := request{method: "GET", url: buildURL(base, path, params), respHeaders: &headers}
 	status, body := mustRequest(client, token, r)
 	exitOnAPIError(r, status, body)
-	storeVocabToken(base, headers.Get(vocabTabIDHeader), headers.Get(vocabHeader))
+	storeVocabToken(base, headers.Get(vocabTabIDHeader), headers.Get(vocabHeader), implicit)
 	return printAndDecode(body)
 }
 
-// VocabTokenFor returns the token stored for a resolved tab id, or "". An empty
-// tabID (an implicit action, whose target the CLI cannot know before the server
-// resolves it) returns "", so the caller omits the token rather than echoing one
-// belonging to whatever tab was current at the last snapshot.
+// VocabForAction returns the tab id to tag and the token to echo for an action.
+// An explicit --tab X uses X's own record; an implicit action uses the current
+// pointer's tab. The returned tab is sent as VocabTabHeader so the server can
+// ignore the token when the action resolves a different tab.
+func VocabForAction(base, requestedTab string) (vocabTab, token string) {
+	store := loadVocabStore(base)
+	tab := requestedTab
+	if tab == "" {
+		tab = store.Current
+	}
+	if tab == "" {
+		return "", ""
+	}
+	for _, e := range store.Entries {
+		if e.TabID == tab {
+			return tab, e.Token
+		}
+	}
+	return tab, ""
+}
+
+// VocabTokenFor returns the token stored for a resolved tab id, or "".
 func VocabTokenFor(base, tabID string) string {
 	if tabID == "" {
 		return ""
 	}
-	for _, e := range loadVocabStore(base) {
-		if e.TabID == tabID {
-			return e.Token
-		}
-	}
-	return ""
+	_, token := VocabForAction(base, tabID)
+	return token
 }
 
-func storeVocabToken(base, tabID, token string) {
+func storeVocabToken(base, tabID, token string, implicit bool) {
 	if tabID == "" || token == "" {
 		return
 	}
-	entries := loadVocabStore(base)
-	kept := entries[:0]
-	for _, e := range entries {
+	store := loadVocabStore(base)
+	kept := store.Entries[:0]
+	for _, e := range store.Entries {
 		if e.TabID != tabID {
 			kept = append(kept, e)
 		}
@@ -72,25 +97,29 @@ func storeVocabToken(base, tabID, token string) {
 	if len(kept) > vocabStoreLimit {
 		kept = kept[len(kept)-vocabStoreLimit:]
 	}
-	writeVocabStore(base, kept)
+	store.Entries = kept
+	if implicit {
+		store.Current = tabID
+	}
+	writeVocabStore(base, store)
 }
 
-func loadVocabStore(base string) []vocabEntry {
+func loadVocabStore(base string) vocabStore {
 	data, err := os.ReadFile(vocabStorePath(base))
 	if err != nil {
-		return nil
+		return vocabStore{}
 	}
-	var entries []vocabEntry
-	if err := json.Unmarshal(data, &entries); err != nil {
-		return nil
+	var store vocabStore
+	if err := json.Unmarshal(data, &store); err != nil {
+		return vocabStore{}
 	}
-	return entries
+	return store
 }
 
-func writeVocabStore(base string, entries []vocabEntry) {
+func writeVocabStore(base string, store vocabStore) {
 	path := vocabStorePath(base)
 	_ = os.MkdirAll(filepath.Dir(path), 0755)
-	data, err := json.Marshal(entries)
+	data, err := json.Marshal(store)
 	if err != nil {
 		return
 	}

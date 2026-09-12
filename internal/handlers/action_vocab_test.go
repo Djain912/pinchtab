@@ -124,6 +124,42 @@ func TestAStaleTokenDoesNotBlockANonRefAction(t *testing.T) {
 	}
 }
 
+// A token tagged (X-PinchTab-Vocab-Tab) for the tab the action resolves is enforced: a
+// superseded token on the resolved tab is still refused, so the implicit snap-then-click
+// flow keeps its supersession protection.
+func TestATokenTaggedForTheResolvedTabIsEnforced(t *testing.T) {
+	h, mb := newVocabHandlers("current")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/action", strings.NewReader(`{"kind":"click","ref":"e1","tabId":"tab1","vocab":"stale"}`))
+	req.Header.Set(vocabTabHeader, "tab1")
+	h.HandleAction(w, req)
+	var body map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	if w.Code != 409 || body["code"] != vocabSupersededCode {
+		t.Fatalf("a superseded token tagged for the resolved tab was not refused: status %d body %s", w.Code, w.Body.String())
+	}
+	if mb.executeCalled {
+		t.Error("the refusal must land before ExecuteAction")
+	}
+}
+
+// A token tagged for a DIFFERENT tab than the action resolves is ignored, not refused: the
+// current pointer moved off the snapshotted tab, and a false supersession there is the
+// mirror-case regression the tag exists to kill. Pre-fix the server ignored the tag and
+// refused this with a 409.
+func TestATokenTaggedForADifferentTabIsIgnored(t *testing.T) {
+	h, _ := newVocabHandlers("current")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/action", strings.NewReader(`{"kind":"click","ref":"e1","tabId":"tab1","vocab":"stale"}`))
+	req.Header.Set(vocabTabHeader, "other-tab")
+	h.HandleAction(w, req)
+	var body map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	if body["code"] == vocabSupersededCode {
+		t.Errorf("a token tagged for another tab produced a false supersession: %v", body)
+	}
+}
+
 // The token rides back in a response header, so a client that read it from the header — not
 // the JSON body — echoes it the same way. The guard reads the header when the request carried
 // no explicit field.

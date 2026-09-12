@@ -16,16 +16,17 @@ import (
 )
 
 // vocabServer mints a distinct vocabulary token per (tab, epoch) and records the
-// token each action echoes, so a test can assert which snapshot's token a later
-// action sent — the whole point of keying the token store by resolved tab.
+// token and tab tag each action echoes, so a test can assert which snapshot's
+// token a later action sent and which tab it claimed it for.
 type vocabServer struct {
-	mu         sync.Mutex
-	current    string
-	epoch      map[string]int
-	lastVocab  string
-	hadVocab   bool
-	lastPath   string
-	httpServer *httptest.Server
+	mu           sync.Mutex
+	current      string
+	epoch        map[string]int
+	lastVocab    string
+	lastVocabTab string
+	hadVocab     bool
+	lastPath     string
+	httpServer   *httptest.Server
 }
 
 func newVocabServer(current string) *vocabServer {
@@ -48,12 +49,6 @@ func (s *vocabServer) bumpEpoch(tab string) {
 		s.epoch[tab] = 1
 	}
 	s.epoch[tab]++
-}
-
-func (s *vocabServer) setCurrent(tab string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.current = tab
 }
 
 func (s *vocabServer) handle(w http.ResponseWriter, r *http.Request) {
@@ -79,6 +74,7 @@ func (s *vocabServer) handle(w http.ResponseWriter, r *http.Request) {
 	if v, ok := decoded["vocab"].(string); ok {
 		s.lastVocab, s.hadVocab = v, true
 	}
+	s.lastVocabTab = r.Header.Get("X-PinchTab-Vocab-Tab")
 	_, _ = w.Write([]byte(`{"success":true}`))
 }
 
@@ -101,10 +97,10 @@ func clickCmd(tab string) *cobra.Command {
 	return cmd
 }
 
-// AC-1: an explicit action echoes the token of the snapshot that resolved the
-// SAME tab, even when that snapshot was implicit. On HEAD the click reads the
-// slot keyed by the "--tab X" spelling (T1) and misses the implicit snapshot's
-// T2 stored under "default".
+// AC-1 / row (c): an explicit action echoes the token of the snapshot that
+// resolved the SAME tab, tagged with that tab, even when that snapshot was
+// implicit. On the pre-fix commit the click read the slot keyed by the "--tab X"
+// spelling (T1) and missed the implicit snapshot's T2.
 func TestExplicitClickSendsTheLatestTokenForItsResolvedTab(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	srv := newVocabServer("X")
@@ -117,34 +113,39 @@ func TestExplicitClickSendsTheLatestTokenForItsResolvedTab(t *testing.T) {
 	actions.Action(client, base, "", "click", "e5", clickCmd("X"))
 
 	if srv.lastVocab != "X-e2" {
-		t.Fatalf("click sent vocab %q (hadVocab=%v), want the current token X-e2; a stale token here is the false 409 this fixes", srv.lastVocab, srv.hadVocab)
+		t.Fatalf("click sent vocab %q (hadVocab=%v), want the current token X-e2", srv.lastVocab, srv.hadVocab)
+	}
+	if srv.lastVocabTab != "X" {
+		t.Fatalf("click tagged the token for tab %q, want X", srv.lastVocabTab)
 	}
 	if srv.lastPath != "/tabs/X/action" {
 		t.Fatalf("click went to %q, want /tabs/X/action", srv.lastPath)
 	}
 }
 
-// AC-2 (mirror): an implicit snapshot resolves the current tab X; the current
-// tab then moves to Y; an implicit click must not echo X's token, because the
-// CLI cannot know it will resolve Y. On HEAD the click reads the shared
-// "default" slot and sends X's token against Y.
-func TestImplicitClickDoesNotSendAPriorTabsToken(t *testing.T) {
+// The implicit flow keeps its protection: after an implicit snapshot resolves the
+// current tab, an implicit click echoes that tab's token, tagged with it, so the
+// server can refuse a superseded ref. The pre-fix (omit) commit sent no token
+// here, which is the silent-wrong-click regression this restores.
+func TestImplicitClickSendsTheCurrentTabsTaggedToken(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	srv := newVocabServer("X")
 	defer srv.httpServer.Close()
 	base, client := srv.httpServer.URL, srv.httpServer.Client()
 
 	actions.Snapshot(client, base, "", snapCmd(""), "")
-	srv.setCurrent("Y")
 	actions.Action(client, base, "", "click", "e5", clickCmd(""))
 
-	if srv.hadVocab {
-		t.Fatalf("implicit click sent vocab %q; it must omit the token when it cannot know the resolved tab", srv.lastVocab)
+	if !srv.hadVocab {
+		t.Fatal("implicit click sent no token; the common snap-then-click flow lost its supersession protection")
+	}
+	if srv.lastVocab != "X-e1" || srv.lastVocabTab != "X" {
+		t.Fatalf("implicit click sent vocab %q tagged %q, want X-e1 tagged X", srv.lastVocab, srv.lastVocabTab)
 	}
 }
 
 // AC-3: the per-tab files are replaced by one bounded file per server, written
-// 0600, holding at most the N most recent tabs.
+// 0600, holding at most the N most recent tabs plus the current pointer.
 func TestVocabStoreIsOneBoundedFilePerServer(t *testing.T) {
 	stateHome := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateHome)
@@ -176,14 +177,17 @@ func TestVocabStoreIsOneBoundedFilePerServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var entries []struct {
-		TabID string `json:"tabId"`
-		Token string `json:"token"`
+	var store struct {
+		Current string `json:"current"`
+		Entries []struct {
+			TabID string `json:"tabId"`
+			Token string `json:"token"`
+		} `json:"entries"`
 	}
-	if err := json.Unmarshal(data, &entries); err != nil {
+	if err := json.Unmarshal(data, &store); err != nil {
 		t.Fatalf("vocab store is not the bounded JSON map: %v\n%s", err, data)
 	}
-	if len(entries) == 0 || len(entries) > 16 {
-		t.Fatalf("store holds %d entries after 50 snapshots, want 1..16", len(entries))
+	if len(store.Entries) == 0 || len(store.Entries) > 16 {
+		t.Fatalf("store holds %d entries after 50 snapshots, want 1..16", len(store.Entries))
 	}
 }
