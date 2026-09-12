@@ -435,7 +435,7 @@ func (s *Scheduler) recordActivity(t *Task, execErr error, latency time.Duration
 	}
 	if err := s.activity.Record(activity.Event{
 		Timestamp:  timeNow().UTC(),
-		Source:     "scheduler",
+		Source:     activity.SourceScheduler,
 		AgentID:    t.AgentID,
 		Method:     http.MethodPost,
 		Path:       fmt.Sprintf("/tabs/%s/action", t.TabID),

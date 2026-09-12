@@ -84,7 +84,7 @@ func (e *actionEndpointExecutor) Execute(ctx context.Context, t *Task) (any, err
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(activity.HeaderPTSource, "scheduler")
+	req.Header.Set(activity.HeaderPTSource, activity.SourceScheduler)
 	req.Header.Set(activity.HeaderPTTabID, t.TabID)
 	if t.AgentID != "" {
 		req.Header.Set(activity.HeaderAgentID, t.AgentID)

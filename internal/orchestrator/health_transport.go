@@ -14,7 +14,7 @@ import (
 	"github.com/pinchtab/pinchtab/internal/sanitize"
 )
 
-const orchestratorActivitySource = "orchestrator"
+const orchestratorActivitySource = activity.SourceOrchestrator
 
 type remoteTab struct {
 	ID    string `json:"id"`

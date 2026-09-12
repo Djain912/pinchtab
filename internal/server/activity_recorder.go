@@ -31,7 +31,7 @@ func (r dashboardActivityRecorder) Record(evt activity.Event) error {
 	if r.base != nil && r.base.Enabled() {
 		err = r.base.Record(evt)
 	}
-	if r.dash != nil && shouldBroadcastDashboardActivity(evt) {
+	if r.dash != nil && activity.IsDashboardAgentActivity(evt) {
 		r.dash.RecordActivityEvent(evt)
 	}
 	return err
@@ -42,8 +42,4 @@ func (r dashboardActivityRecorder) Query(filter activity.Filter) ([]activity.Eve
 		return []activity.Event{}, nil
 	}
 	return r.base.Query(filter)
-}
-
-func shouldBroadcastDashboardActivity(evt activity.Event) bool {
-	return evt.Source == "client" || evt.Source == "scheduler"
 }

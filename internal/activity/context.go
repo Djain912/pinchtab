@@ -123,10 +123,10 @@ func sourceFor(r *http.Request, fallback string) string {
 	}
 	creds := authn.CredentialsFromRequest(r)
 	if creds.Method == authn.MethodCookie {
-		return "dashboard"
+		return SourceDashboard
 	}
 	if creds.Method == authn.MethodHeader || creds.Method == authn.MethodSession {
-		return "client"
+		return SourceClient
 	}
 	return fallback
 }

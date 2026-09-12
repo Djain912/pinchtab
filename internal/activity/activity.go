@@ -452,19 +452,19 @@ func clampQueryLimit(limit int) int {
 
 func (s *Store) shouldRecordSource(source string) bool {
 	switch normalizeSourceName(source) {
-	case "client":
+	case SourceClient:
 		return true
-	case "dashboard":
+	case SourceDashboard:
 		return s.events.Dashboard
-	case "server":
+	case SourceServer:
 		return s.events.Server
-	case "bridge":
+	case SourceBridge:
 		return s.events.Bridge
-	case "orchestrator":
+	case SourceOrchestrator:
 		return s.events.Orchestrator
-	case "scheduler":
+	case SourceScheduler:
 		return s.events.Scheduler
-	case "mcp":
+	case SourceMCP:
 		return s.events.MCP
 	default:
 		return s.events.Other
@@ -669,7 +669,7 @@ func appendJSONL(path string, line []byte) error {
 
 func shouldWritePrimaryLog(source string) bool {
 	switch normalizeSourceName(source) {
-	case "", "server", "bridge":
+	case "", SourceServer, SourceBridge:
 		return true
 	default:
 		return false

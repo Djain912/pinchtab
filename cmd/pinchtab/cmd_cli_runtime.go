@@ -283,7 +283,7 @@ func (t agentHeaderTransport) RoundTrip(req *http.Request) (*http.Response, erro
 
 	cloned := req.Clone(req.Context())
 	cloned.Header = req.Header.Clone()
-	cloned.Header.Set(activity.HeaderPTSource, "client")
+	cloned.Header.Set(activity.HeaderPTSource, activity.SourceClient)
 	if id := normalizeCLIAgentID(t.agentID); id != "" {
 		cloned.Header.Set(activity.HeaderAgentID, id)
 	}
