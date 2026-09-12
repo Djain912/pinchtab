@@ -78,7 +78,7 @@ func (h *Handlers) HandleRecordStart(w http.ResponseWriter, r *http.Request) {
 
 	ctx, resolvedTabID, err := h.tabContext(r, req.TabID)
 	if err != nil {
-		httpx.Problem(w, http.StatusNotFound, "tab_not_found", "tab not found", false, nil)
+		WriteTabContextError(w, err, http.StatusNotFound)
 		return
 	}
 
