@@ -89,6 +89,10 @@ func (w *streamAuthWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return nil, nil, fmt.Errorf("underlying ResponseWriter is not a Hijacker")
 }
 
+func (w *streamAuthWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 func pollStreamCredential(ctx context.Context, cancel context.CancelFunc, stillValid func() bool) {
 	t := time.NewTicker(streamRevalidateInterval)
 	defer t.Stop()

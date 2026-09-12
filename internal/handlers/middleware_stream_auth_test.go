@@ -112,6 +112,37 @@ func TestStreamEndsWhenCookieSessionRevoked(t *testing.T) {
 	}
 }
 
+func TestStreamHandlersBehindSessionAuthCanClearTheirWriteDeadline(t *testing.T) {
+	cfg := &config.RuntimeConfig{Token: "server-secret"}
+	sessions := browsersession.NewManager(browsersession.Config{})
+	sessionID, err := sessions.Create(cfg.Token)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	var deadlineErr error
+	handler := AuthMiddlewareWithSessions(config.NewLive(cfg), sessions, nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		deadlineErr = http.NewResponseController(w).SetWriteDeadline(time.Time{})
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+	}))
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/events", nil)
+	req.Header.Set("Origin", srv.URL)
+	req.AddCookie(&http.Cookie{Name: authn.CookieName, Value: sessionID})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("open stream: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	if deadlineErr != nil {
+		t.Fatalf("SetWriteDeadline through the session-auth writer = %v; the dashboard and logs SSE handlers answer 500 on this, so the stream-auth wrapper must expose Unwrap", deadlineErr)
+	}
+}
+
 func TestStreamEndsWhenAgentSessionRevoked(t *testing.T) {
 	shortenStreamRevalidate(t)
 
