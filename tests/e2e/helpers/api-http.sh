@@ -299,11 +299,16 @@ _e2e_snapshot_tab_ids() {
 }
 
 _e2e_close_leaked_tabs() {
-  local keep id
-  keep=$(e2e_curl -s --max-time 5 "${E2E_SERVER}/tabs" 2>/dev/null | jq -r '.tabs[0].id // empty' 2>/dev/null || true)
+  local id
+  # An empty baseline means the start-of-scenario GET /tabs failed or the instance
+  # was gone; "close everything not in an empty set" would close the only tab and
+  # tear down the browser, so skip and let the count check report the drift.
+  [ -n "${SCENARIO_TAB_BASELINE// /}" ] || return 0
   while read -r id; do
     [ -n "$id" ] || continue
-    [ "$id" = "$keep" ] && continue
+    case " ${SCENARIO_TAB_BASELINE} " in
+      *" ${id} "*) continue ;;
+    esac
     e2e_curl -s --max-time 5 -X POST "${E2E_SERVER}/close" \
       -H "Content-Type: application/json" \
       -d "{\"tabId\":\"$id\"}" >/dev/null 2>&1 || true

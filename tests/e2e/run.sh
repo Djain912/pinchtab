@@ -219,11 +219,14 @@ finish_scenario() {
 
 assert_scenario_tabs_settled() {
   declare -F _e2e_snapshot_tab_ids >/dev/null 2>&1 || return 0
-  local baseline_count after_count
-  baseline_count=$(printf '%s' "${SCENARIO_TAB_BASELINE}" | tr ' ' '\n' | grep -c .)
-  after_count=$(_e2e_snapshot_tab_ids | grep -c .)
-  if [ "${after_count}" -ne "${baseline_count}" ]; then
-    echo -e "${RED}  ✗ ${CURRENT_SCENARIO_FILE}: tab count did not return to baseline (start ${baseline_count}, end ${after_count})${NC}"
+  local baseline_ids after_ids
+  baseline_ids=$(printf '%s' "${SCENARIO_TAB_BASELINE}" | tr ' ' '\n' | sed '/^$/d' | sort)
+  after_ids=$(_e2e_snapshot_tab_ids | sed '/^$/d' | sort)
+  if [ "${baseline_ids}" != "${after_ids}" ]; then
+    local baseline_count after_count
+    baseline_count=$(printf '%s\n' "${baseline_ids}" | grep -c .)
+    after_count=$(printf '%s\n' "${after_ids}" | grep -c .)
+    echo -e "${YELLOW}  ⚠ ${CURRENT_SCENARIO_FILE}: tabs did not return to baseline (start ${baseline_count}, end ${after_count})${NC}"
   fi
   return 0
 }
