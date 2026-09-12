@@ -1,5 +1,5 @@
 {
-    "tabId": "8A006E97AB7902D27586073510FD8AD4",
+    "tabId": "32B0564F5CAD10D61054DDFD282E49D3",
     "engine": "axe",
     "version": "4.13.0",
     "url": "http://fixtures/a11y-violations.html",
@@ -60,6 +60,14 @@
                     "html": "<img id=\"no-alt\" src=\"data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==\">",
                     "ref": "e3",
                     "failureSummary": "Fix any of the following:\n  Element does not have an alt attribute\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+                },
+                {
+                    "target": [
+                        "iframe",
+                        "img"
+                    ],
+                    "html": "<img src=\"data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==\">",
+                    "failureSummary": "Fix any of the following:\n  Element does not have an alt attribute\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
                 }
             ]
         },
@@ -96,6 +104,35 @@
     ],
     "incompleteViolations": [
         {
+            "id": "bypass",
+            "impact": "serious",
+            "tags": [
+                "cat.keyboard",
+                "wcag2a",
+                "wcag241",
+                "section508",
+                "section508.22.o",
+                "TTv5",
+                "TT9.a",
+                "EN-301-549",
+                "EN-9.2.4.1",
+                "RGAAv4",
+                "RGAA-12.7.1"
+            ],
+            "help": "Page must have means to bypass repeated blocks",
+            "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/bypass?application=axeAPI",
+            "nodes": [
+                {
+                    "target": [
+                        "iframe",
+                        "html"
+                    ],
+                    "html": "<html lang=\"en\"><head></head><body><img src=\"data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==\"></body></html>",
+                    "failureSummary": "Fix any of the following:\n  No valid skip link found\n  Page does not have a heading\n  Page does not have a landmark region"
+                }
+            ]
+        },
+        {
             "id": "duplicate-id-aria",
             "impact": "critical",
             "tags": [
@@ -121,7 +158,7 @@
         }
     ],
     "passes": 15,
-    "incomplete": 1,
-    "inapplicable": 45,
-    "score": 70
+    "incomplete": 2,
+    "inapplicable": 44,
+    "score": 60
 }

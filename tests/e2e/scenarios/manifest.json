@@ -57,6 +57,20 @@
         "pr"
       ]
     },
+    "api/a11y-axe-basic.sh": {
+      "tags": [
+        "a11y",
+        "axe",
+        "pr"
+      ]
+    },
+    "cli/a11y-axe-basic.sh": {
+      "tags": [
+        "a11y",
+        "axe",
+        "pr"
+      ]
+    },
     "api/browser-extended.sh": {
       "tags": [
         "browser",

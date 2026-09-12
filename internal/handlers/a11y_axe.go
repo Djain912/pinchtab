@@ -9,6 +9,7 @@ import (
 	"github.com/pinchtab/pinchtab/internal/assets"
 	"github.com/pinchtab/pinchtab/internal/audit"
 	"github.com/pinchtab/pinchtab/internal/bridge"
+	"github.com/pinchtab/pinchtab/internal/bridge/observe"
 	"github.com/pinchtab/pinchtab/internal/httpx"
 )
 
@@ -29,20 +30,42 @@ func (h *Handlers) runAxeAudit(w http.ResponseWriter, r *http.Request, tCtx cont
 		return
 	}
 
-	expression := assets.AxeJS + "\n;" + axeRunSnippet(config, selector)
+	// Inject axe into every frame's isolated world first, so axe.run in the top
+	// frame can coordinate its same-origin iframe audit with an axe instance
+	// already listening in each child frame.
+	injectAxeIntoAllFrames(tCtx)
+
 	var raw audit.AxeRawResult
-	if err := bridge.EvaluateInIsolatedWorld(tCtx, "", expression, &raw); err != nil {
+	if err := bridge.EvaluateInIsolatedWorld(tCtx, "", axeRunSnippet(config, selector), &raw); err != nil {
 		httpx.Error(w, http.StatusInternalServerError, fmt.Errorf("run axe: %w", err))
 		return
 	}
 
 	report := audit.BuildAxeReport(raw, assets.AxeVersion, includeIncomplete)
-	h.fillAxeRefs(tCtx, &report)
+	h.fillAxeRefs(tCtx, resolvedTabID, &report)
 
 	httpx.JSON(w, 200, struct {
 		TabID string `json:"tabId"`
 		audit.AxeReport
 	}{resolvedTabID, report})
+}
+
+// injectAxeIntoAllFrames loads the axe source into every reachable frame's
+// isolated world (the top frame included), so a subsequent axe.run can audit
+// same-origin iframes through the axe instance waiting in each. A cross-origin
+// frame whose isolated world cannot be created is skipped, exactly as snapshot
+// and text extraction skip it.
+func injectAxeIntoAllFrames(tCtx context.Context) {
+	var ids []string
+	if tree, err := observe.FetchFrameTree(tCtx); err == nil {
+		ids = observe.FrameIDs(tree)
+	}
+	if len(ids) == 0 {
+		ids = []string{""} // top frame only
+	}
+	for _, id := range ids {
+		_ = bridge.EvaluateInIsolatedWorld(tCtx, id, assets.AxeJS, nil)
+	}
 }
 
 // axeRunSnippet builds the in-page call: run axe over the document (or a
@@ -71,8 +94,8 @@ func axeRunSnippet(config, selector string) string {
 // an agent can actuate a failing element directly. A node whose target does not
 // resolve to a snapshot ref (a cross-origin iframe, a node not in the tree) is
 // left without one rather than guessed.
-func (h *Handlers) fillAxeRefs(tCtx context.Context, report *audit.AxeReport) {
-	backendToRef := h.snapshotBackendRefs(tCtx)
+func (h *Handlers) fillAxeRefs(tCtx context.Context, tabID string, report *audit.AxeReport) {
+	backendToRef := h.snapshotBackendRefs(tCtx, tabID)
 	if len(backendToRef) == 0 {
 		return
 	}
@@ -80,11 +103,14 @@ func (h *Handlers) fillAxeRefs(tCtx context.Context, report *audit.AxeReport) {
 		for i := range violations {
 			for j := range violations[i].Nodes {
 				node := &violations[i].Nodes[j]
-				if len(node.Target) == 0 {
+				// Only a single-hop target names a top-frame element the top
+				// document's querySelector can resolve. A multi-hop target is
+				// inside an iframe; resolving its last selector against the top
+				// document would map it to the wrong element, so leave it unref'd.
+				if len(node.Target) != 1 {
 					continue
 				}
-				selector := node.Target[len(node.Target)-1]
-				backendID, err := bridge.BackendNodeIDForSelector(tCtx, "", selector)
+				backendID, err := bridge.BackendNodeIDForSelector(tCtx, "", node.Target[0])
 				if err != nil || backendID == 0 {
 					continue
 				}
@@ -98,16 +124,24 @@ func (h *Handlers) fillAxeRefs(tCtx context.Context, report *audit.AxeReport) {
 	fill(report.IncompleteViolations)
 }
 
-// snapshotBackendRefs maps backend node id → snapshot ref from a fresh snapshot,
-// the same tree /snapshot mints, so an axe node's ref is one /action can use.
-func (h *Handlers) snapshotBackendRefs(tCtx context.Context) map[int64]string {
+// snapshotBackendRefs builds a full-tree snapshot, stores it as the tab's ref
+// cache (as /snapshot and /find do), and returns backend node id → ref from that
+// cache. Storing the cache is what makes an axe node's ref actionable: /action
+// resolves a ref against the tab's cache, so the ref would 404 if the audit
+// computed it without publishing the snapshot it came from. A full tree (not the
+// interactive filter) is used so non-interactive violation targets — images,
+// low-contrast text — still map to a ref.
+func (h *Handlers) snapshotBackendRefs(tCtx context.Context, tabID string) map[int64]string {
 	rawNodes, err := bridge.FetchAXTree(tCtx)
 	if err != nil {
 		return nil
 	}
-	nodes, _ := bridge.BuildSnapshot(rawNodes, "", -1)
-	refs := make(map[int64]string, len(nodes))
-	for _, n := range nodes {
+	flat, _ := bridge.BuildSnapshot(rawNodes, "", -1)
+	cache := bridge.EpochRefs(h.Bridge.GetRefCache(tabID), flat)
+	h.Bridge.SetRefCache(tabID, cache)
+
+	refs := make(map[int64]string, len(cache.Nodes))
+	for _, n := range cache.Nodes {
 		if n.NodeID != 0 && n.Ref != "" {
 			refs[n.NodeID] = n.Ref
 		}
