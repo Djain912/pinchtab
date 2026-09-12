@@ -480,34 +480,68 @@ func TestExtractDocumentMarkdown_EmptyConversionFallsBackToRaw(t *testing.T) {
 	}
 }
 
-// The markdown table proves the guarantee: a cut inside a row would split a
-// pipe-delimited line, so every returned line must be whole.
-func TestTruncateCharsLine_NeverCutsMidLine(t *testing.T) {
+// A table row that overruns is dropped, never split: every returned line must be
+// a whole source line, and the result must not be empty (the header rows fit).
+func TestTruncateCharsLine_NeverSplitsTableRow(t *testing.T) {
 	body := "| Col A | Col B | Col C |\n|-------|-------|-------|\n| a1 | b1 | c1 |\n| a2 | b2 | c2 |\n| a3 | b3 | c3 |"
 	cut, truncated := truncateCharsLine(body, 60)
 	if !truncated {
 		t.Fatalf("expected a cut at 60 chars of a %d-char body", utf8.RuneCountInString(body))
 	}
-	for _, line := range strings.Split(body, "\n") {
-		if strings.Contains(cut, line) {
-			continue
-		}
-		if strings.HasPrefix(line, cut) && cut != "" && !strings.HasSuffix(cut, line) {
-			t.Fatalf("a partial line survived the cut:\n%q", cut)
-		}
+	if cut == "" {
+		t.Fatalf("result is empty; the header rows fit within 60 chars and must survive")
 	}
-	// Every line in the result must appear whole in the source.
 	sourceLines := map[string]bool{}
 	for _, line := range strings.Split(body, "\n") {
 		sourceLines[line] = true
 	}
 	for _, line := range strings.Split(cut, "\n") {
 		if !sourceLines[line] {
-			t.Fatalf("returned line %q is not a whole source line; the cut landed mid-line:\n%s", line, cut)
+			t.Fatalf("returned line %q is not a whole source line; a table row was split:\n%s", line, cut)
 		}
 	}
 	if utf8.RuneCountInString(cut) > 60 {
 		t.Errorf("cut kept %d chars, over the 60 limit", utf8.RuneCountInString(cut))
+	}
+}
+
+// seaportal emits each paragraph as ONE line, so a page opening with a long
+// paragraph must still return a rune-cut of it — not an empty body. This fails on
+// the whole-lines-only helper, which dropped the first overrunning line.
+func TestTruncateCharsLine_RuneCutsLongFirstLine(t *testing.T) {
+	body := strings.Repeat("word ", 60) + "end" // one ~303-char paragraph, no newlines
+	if utf8.RuneCountInString(body) <= 200 {
+		t.Fatalf("fixture must exceed the limit; got %d chars", utf8.RuneCountInString(body))
+	}
+	cut, truncated := truncateCharsLine(body, 200)
+	if !truncated {
+		t.Fatal("expected a cut")
+	}
+	if cut == "" {
+		t.Fatal("a long first paragraph must be rune-cut, not dropped to empty")
+	}
+	if n := utf8.RuneCountInString(cut); n == 0 || n > 200 {
+		t.Fatalf("cut kept %d chars, want 1..200", n)
+	}
+	if !strings.HasPrefix(body, cut) {
+		t.Fatalf("the partial line must be a prefix of the source paragraph:\n%q", cut)
+	}
+}
+
+// A cut that would land inside a [..](..) link drops the whole line rather than
+// emit a half-open link; the fitting heading before it survives.
+func TestTruncateCharsLine_NeverSplitsLink(t *testing.T) {
+	line2 := "Read [the annual report](https://example.com/reports/2026/annual.pdf) today"
+	body := "# Title\n" + line2
+	cut, truncated := truncateCharsLine(body, 30) // budget lands inside the link text
+	if !truncated {
+		t.Fatal("expected a cut")
+	}
+	if cut != "# Title" {
+		t.Fatalf("a mid-link cut must drop the line, keeping only the heading; got %q", cut)
+	}
+	if strings.Contains(cut, "](") || strings.Count(cut, "[") != strings.Count(cut, "]") {
+		t.Fatalf("a partial link survived: %q", cut)
 	}
 }
 

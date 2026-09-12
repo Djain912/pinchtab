@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -310,11 +311,13 @@ func truncateChars(s string, limit int) (string, bool) {
 	return s, false
 }
 
-// truncateCharsLine cuts s to at most limit characters on a line boundary, so a
-// cut never lands inside a Markdown table row or link. It keeps whole lines
-// while they fit and drops the rest; when the first line alone exceeds the limit
-// the result is empty. Reports whether it cut. This differs from truncateChars,
-// which cuts at the exact rune.
+// truncateCharsLine cuts s to at most limit characters, keeping whole lines
+// while they fit and then rune-cutting the first line that overruns. The partial
+// line is dropped instead of cut only for the two shapes a mid-line cut would
+// corrupt: a Markdown table row (starts with '|') or a cut that would land inside
+// a [..](..) link — so a cut never splits a table row or link. Reports whether it
+// cut. This differs from truncateChars, which cuts at the exact rune regardless
+// of line structure.
 func truncateCharsLine(s string, limit int) (string, bool) {
 	if limit < 0 || utf8.RuneCountInString(s) <= limit {
 		return s, false
@@ -322,20 +325,58 @@ func truncateCharsLine(s string, limit int) (string, bool) {
 	var b strings.Builder
 	count := 0
 	for i, line := range strings.Split(s, "\n") {
-		add := utf8.RuneCountInString(line)
+		sep := 0
 		if i > 0 {
-			add++ // the newline joining this line to the previous
+			sep = 1 // the newline joining this line to the previous
 		}
-		if count+add > limit {
-			break
+		lineLen := utf8.RuneCountInString(line)
+		if count+sep+lineLen <= limit {
+			if i > 0 {
+				b.WriteByte('\n')
+			}
+			b.WriteString(line)
+			count += sep + lineLen
+			continue
 		}
-		if i > 0 {
-			b.WriteByte('\n')
+		// This line overruns. Keep a rune-cut of it unless its shape forbids
+		// splitting, in which case the whole line is dropped.
+		budget := limit - count - sep
+		if budget > 0 && !strings.HasPrefix(line, "|") {
+			if partial, ok := cutLineForMarkdown(line, budget); ok {
+				if i > 0 {
+					b.WriteByte('\n')
+				}
+				b.WriteString(partial)
+			}
 		}
-		b.WriteString(line)
-		count += add
+		break
 	}
 	return b.String(), true
+}
+
+// markdownLinkRe matches a whole [text](url) link so a truncation can refuse to
+// cut through one.
+var markdownLinkRe = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
+
+// cutLineForMarkdown returns the first budget runes of line for use as the final
+// partial line of a truncation. ok is false when that cut would fall inside a
+// [..](..) link, which must not be split; the caller then drops the line whole.
+func cutLineForMarkdown(line string, budget int) (string, bool) {
+	cut := len(line)
+	count := 0
+	for off := range line {
+		if count == budget {
+			cut = off
+			break
+		}
+		count++
+	}
+	for _, loc := range markdownLinkRe.FindAllStringIndex(line, -1) {
+		if loc[0] < cut && cut < loc[1] {
+			return "", false
+		}
+	}
+	return line[:cut], true
 }
 
 // writeTextResponse truncates, IDPI-scans, and writes the document text as
