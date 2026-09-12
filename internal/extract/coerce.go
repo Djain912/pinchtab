@@ -7,16 +7,25 @@ import (
 	"github.com/pinchtab/pinchtab/internal/bridge/observe"
 )
 
-// coerceNumber parses a display string into a float64, stripping currency
-// symbols, thousands separators, and trailing units while keeping sign and
-// decimal. "$1,299.00" -> 1299, "−3.5 kg" -> -3.5 (Unicode minus honoured),
-// "call for price" -> not numeric. ok is false when no digit is present.
+// coerceNumber parses the FIRST numeric token of a display string into a
+// float64, stripping a leading currency symbol/sign and the token's thousands
+// separators while keeping sign and decimal. "$1,299.00" -> 1299, "−3.5 kg" ->
+// -3.5 (Unicode minus honoured), "4.7 out of 5" -> 4.7, "2 of 3" -> 2, "call
+// for price" -> not numeric. ok is false when no digit is present.
+//
+// It stops at the first rune after the token that is not a digit, '.', or ','
+// so digits from a trailing word ("out of 5", "of 3") are never glued on — a
+// coercion must leave a field missing, never hand back a wrong-typed value.
 func coerceNumber(s string) (float64, bool) {
 	var b strings.Builder
 	sign := ""
 	seenDigit := false
 	seenDot := false
+	done := false
 	for _, r := range s {
+		if done {
+			break
+		}
 		switch {
 		case r >= '0' && r <= '9':
 			b.WriteRune(r)
@@ -24,12 +33,18 @@ func coerceNumber(s string) (float64, bool) {
 		case r == '.' && !seenDot:
 			b.WriteRune('.')
 			seenDot = true
+		case r == ',' && seenDigit:
+			// thousands separator inside the token: dropped
 		case isMinus(r) && !seenDigit && sign == "":
 			sign = "-"
 		case r == '+' && !seenDigit && sign == "":
 			sign = "+"
 		default:
-			// currency, letters, spaces, thousands separators: dropped
+			// A non-numeric rune: before the first digit it is leading noise
+			// (currency, spaces) and is skipped; after it, the token has ended.
+			if seenDigit {
+				done = true
+			}
 		}
 	}
 	if !seenDigit {

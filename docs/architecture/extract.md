@@ -84,11 +84,14 @@ field (e.g. a sale price among several prices) without renaming the schema.
 ## Coercion rules
 
 - **string** — the trimmed raw value.
-- **number / integer** — currency symbols, thousands separators, and trailing
-  units are stripped; sign and decimal are kept. Both ASCII `-` and the Unicode
-  minus `−` (U+2212) are honoured. `integer` truncates toward zero. Examples:
-  `"$1,299.00"` → `1299`, `"−3.5 kg"` → `-3.5`, `"call for price"` → missing
-  with reason `not_numeric`.
+- **number / integer** — only the **first numeric token** is parsed: a leading
+  currency symbol and sign are stripped, the token's thousands separators are
+  dropped, sign and decimal are kept, and parsing stops at the first character
+  after the token so digits from a trailing word are never glued on. Both ASCII
+  `-` and the Unicode minus `−` (U+2212) are honoured. `integer` truncates toward
+  zero. Examples: `"$1,299.00"` → `1299`, `"−3.5 kg"` → `-3.5`,
+  `"4.7 out of 5"` → `4.7` (not `4.75`), `"2 of 3"` → `2`, `"call for price"` →
+  missing with reason `not_numeric`.
 - **boolean** — the accessibility `Checked` state (`true`/`false`) first, then
   the words `yes`/`no`/`true`/`false` in the read value. A `mixed` checkbox or an
   unrelated string leaves the field missing with reason `not_boolean`.

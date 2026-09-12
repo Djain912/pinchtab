@@ -1,19 +1,32 @@
 # extract testdata
 
 Accessibility snapshots used by `TestResolve_FromSnapshotFixtures`. Each file is
-the `nodes` array of a `pinchtab snap --json` capture, so the unit tests run
-against the same node shape the e2e fixtures produce.
+the `nodes` array of a real `pinchtab snap --json`-shaped capture (the `GET
+/snapshot` node list), so the unit tests run against the exact node shape the
+e2e fixtures produce — including the `RootWebArea` root, the `StaticText`
+children Chrome emits under each labelled paragraph, and the per-node `text`
+filled by DOM-metadata enrichment.
 
-| testdata file          | fixture                                  |
-| ---------------------- | ---------------------------------------- |
+| testdata file          | fixture                                   |
+| ---------------------- | ----------------------------------------- |
 | `extract-product.json` | `tests/e2e/fixtures/extract-product.html` |
 | `extract-article.json` | `tests/e2e/fixtures/extract-article.html` |
 
-Authored to mirror the committed fixtures at PinchTab commit `c906674b`
-(the HEAD when PIN-391 landed). Refresh from a Docker run when a snapshot
-changes shape:
+## How these were produced
+
+Captured from the e2e Docker stack (`tests/e2e/docker-compose.yml`, the
+`pinchtab` + `fixtures` services) at PinchTab commit `dca3d7a9`:
 
 ```
-pinchtab open http://fixtures/extract-product.html
-pinchtab snap --json > internal/extract/testdata/extract-product.json
+cd tests/e2e && docker compose up -d pinchtab fixtures
+curl -s -X POST http://127.0.0.1:9999/navigate \
+  -H 'Authorization: Bearer e2e-token' -H 'Content-Type: application/json' \
+  -d '{"url":"http://fixtures:80/extract-product.html"}'
+curl -s http://127.0.0.1:9999/snapshot -H 'Authorization: Bearer e2e-token'
+# → the `nodes` array committed here, wrapped as {url, title, nodes}
 ```
+
+Both fixtures render identically headed and headless (no JS). Re-capture with the
+same commands when a fixture changes shape; the volatile `nodeId`/`frameId`
+fields differ per run and are not asserted (the tests key on `ref`, `role`,
+`name`, `text`, `checked`).

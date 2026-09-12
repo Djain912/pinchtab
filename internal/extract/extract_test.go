@@ -31,14 +31,14 @@ func TestResolve_FromSnapshotFixtures(t *testing.T) {
 		schema := mustSchema(t, `{"type":"object","required":["name","price","in_stock"],"properties":{
 			"name":{"type":"string","description":"product name","x-pinchtab-hint":"role:heading"},
 			"price":{"type":"number","description":"product price"},
-			"rating":{"type":"string","description":"product rating"},
+			"rating":{"type":"number","description":"product rating out of 5"},
 			"in_stock":{"type":"boolean","description":"in stock availability"},
 			"description":{"type":"string","description":"product description"}}}`)
 		got := Resolve(schema, loadSnapshot(t, "extract-product.json"), Options{})
 		want := map[string]any{
 			"name":     "Sony WH-1000XM5 Wireless Headphones",
 			"price":    1299.0,
-			"rating":   "4.7 out of 5",
+			"rating":   4.7, // "4.7 out of 5" -> first token 4.7, never 4.75
 			"in_stock": true,
 		}
 		for k, v := range want {
@@ -232,6 +232,8 @@ func TestCoerceNumber(t *testing.T) {
 		{"call for price", 0, false},
 		{"42", 42, true},
 		{"1,000,000", 1000000, true},
+		{"4.7 out of 5", 4.7, true}, // trailing "5" must not glue onto the token
+		{"2 of 3", 2, true},         // trailing "3" must not glue onto the token
 		{"", 0, false},
 	}
 	for _, tc := range tests {
