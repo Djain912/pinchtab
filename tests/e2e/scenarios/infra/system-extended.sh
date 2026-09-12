@@ -470,6 +470,23 @@ fi
 end_test
 
 # ─────────────────────────────────────────────────────────────────
+start_test "a scheduled task runs to done on the managed instance"
+
+pt_post /tasks -d "{\"agentId\":\"${AGENT}-run\",\"action\":\"hover\",\"selector\":\"body\",\"tabId\":\"${TAB_ID}\"}"
+assert_http_status "202" "task accepted"
+RUN_TASK_ID=$(echo "$RESULT" | jq -r '.taskId')
+RUN_STATE=""
+for _ in $(seq 1 100); do
+  pt_get "/tasks/${RUN_TASK_ID}"
+  RUN_STATE=$(echo "$RESULT" | jq -r '.state // empty')
+  case "$RUN_STATE" in queued|assigned|running|"") sleep 0.1 ;; *) break ;; esac
+done
+assert_json_eq "$RESULT" ".state" "done" "the executor reached the instance and the task completed"
+assert_json_eq "$RESULT" ".error // \"\"" "" "no executor error"
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
 start_test "GET /tasks — list tasks"
 
 pt_get "/tasks?agentId=${AGENT}"
