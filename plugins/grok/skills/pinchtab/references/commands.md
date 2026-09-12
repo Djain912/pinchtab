@@ -221,7 +221,13 @@ Extract readable text from the page.
 pinchtab text
 pinchtab text --raw    # no formatting cleanup
 pinchtab text "#main"  # text from one element
+pinchtab text --markdown              # Markdown for article-shaped pages (keeps links, tables)
+pinchtab text --markdown --output page.md  # write Markdown to a file, print a one-line confirmation
 ```
+
+Prefer `--markdown` for articles, docs and other prose-heavy pages: it preserves
+headings, inline links and tables, and `--output` keeps a long page out of the
+context window. It cannot be combined with `--full`/`--raw`.
 
 ### `pinchtab find <query>`
 Find elements by text content or CSS selector.
@@ -260,6 +266,7 @@ Read the tab's captured browser console logs (`console.log`/`warn`/`error`). Che
 pinchtab console
 pinchtab console --limit 20
 pinchtab console --clear     # empty the buffer instead of reading it
+pinchtab console --json      # structured entries (level, message, timestamp) for jq
 ```
 
 ### `pinchtab errors`
@@ -268,6 +275,7 @@ Read the tab's **uncaught JavaScript errors** — exceptions the page threw. A s
 ```bash
 pinchtab errors
 pinchtab errors --clear      # empty the buffer instead of reading it
+pinchtab errors --json       # structured entries (url, line, column, stack) for jq
 ```
 
 A buffer full of errors is the normal, useful case — it is what tells you the page failed, not an error in the command itself.

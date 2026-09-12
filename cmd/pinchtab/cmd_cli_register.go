@@ -387,6 +387,7 @@ func configureBrowserFlags() {
 	consoleCmd.Flags().String("limit", "", "Maximum entries to return")
 	errorsCmd.Flags().Bool("clear", false, "Clear error logs")
 	errorsCmd.Flags().String("limit", "", "Maximum entries to return")
+	addJSONFlag(consoleCmd, errorsCmd)
 
 	auditCmd.Flags().Bool("sitemap", false, "Treat the URL as a sitemap.xml and audit the discovered pages")
 	auditCmd.Flags().Int("sample-size", 0, "Pages audited per template group, e.g. /products/p1..pN (0 = all pages; deterministic picks)")

@@ -266,6 +266,7 @@ Read the tab's captured browser console logs (`console.log`/`warn`/`error`). Che
 pinchtab console
 pinchtab console --limit 20
 pinchtab console --clear     # empty the buffer instead of reading it
+pinchtab console --json      # structured entries (level, message, timestamp) for jq
 ```
 
 ### `pinchtab errors`
@@ -274,6 +275,7 @@ Read the tab's **uncaught JavaScript errors** — exceptions the page threw. A s
 ```bash
 pinchtab errors
 pinchtab errors --clear      # empty the buffer instead of reading it
+pinchtab errors --json       # structured entries (url, line, column, stack) for jq
 ```
 
 A buffer full of errors is the normal, useful case — it is what tells you the page failed, not an error in the command itself.
