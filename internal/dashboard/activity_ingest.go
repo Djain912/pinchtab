@@ -96,8 +96,9 @@ func (d *Dashboard) IngestPersistedAgentActivity(rec activity.Recorder, since ti
 	}
 
 	events, err := rec.Query(activity.Filter{
-		Since: since,
-		Limit: persistedAgentBootstrapLimit,
+		Sources: activity.DashboardAgentSources(),
+		Since:   since,
+		Limit:   persistedAgentBootstrapLimit,
 	})
 	if err != nil {
 		return since, err

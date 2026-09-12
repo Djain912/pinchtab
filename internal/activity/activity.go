@@ -77,6 +77,7 @@ type StepCounts struct {
 
 type Filter struct {
 	Source      string
+	Sources     []string
 	RequestID   string
 	SessionID   string
 	AgentID     string
@@ -491,6 +492,9 @@ func (f Filter) matches(evt Event) bool {
 	if f.Source != "" && normalizeSourceName(evt.Source) != normalizeSourceName(f.Source) {
 		return false
 	}
+	if len(f.Sources) > 0 && !matchesAnySource(evt.Source, f.Sources) {
+		return false
+	}
 	if f.RequestID != "" && evt.RequestID != f.RequestID {
 		return false
 	}
@@ -525,6 +529,16 @@ func (f Filter) matches(evt Event) bool {
 		return false
 	}
 	return true
+}
+
+func matchesAnySource(source string, want []string) bool {
+	normalized := normalizeSourceName(source)
+	for _, w := range want {
+		if normalizeSourceName(w) == normalized {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) filePathFor(ts time.Time) string {
