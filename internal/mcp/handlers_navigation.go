@@ -27,6 +27,9 @@ func handleNavigate(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.
 		if tabID != "" {
 			payload["tabId"] = tabID
 		}
+		if v, ok := optBool(r, "newTab"); ok && v {
+			payload["newTab"] = true
+		}
 		body, code, err := c.Post(ctx, routedPathWithBody(r, "/navigate", payload), payload)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil

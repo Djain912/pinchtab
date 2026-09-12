@@ -22,6 +22,7 @@ func allTools() []mcp.Tool {
 			mcp.WithDescription("Navigate to a URL in the browser"),
 			mcp.WithString("url", mcp.Required(), mcp.Description("The URL to navigate to")),
 			tabIDParam(),
+			mcp.WithBoolean("newTab", mcp.Description("Open the URL in a new tab instead of reusing the current one; the returned tabId targets it in later tools")),
 			mcp.WithBoolean("snap", mcp.Description("Return interactive compact snapshot after navigation (saves a round-trip)")),
 			browserParam(),
 		),

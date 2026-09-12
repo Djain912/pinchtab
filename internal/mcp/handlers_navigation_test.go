@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -987,5 +988,77 @@ func TestSnapAndBrowserTogetherRouteBothRequestsToTheNamedInstance(t *testing.T)
 				t.Errorf("the snapshot went to browser %q while %s went to cloak: the tool would answer with another instance's page as the result of this navigation", got, tc.path)
 			}
 		})
+	}
+}
+
+// pinchtab_navigate must forward newTab so an MCP agent can OPEN a tab, not just
+// manage existing ones. The server here models the /navigate newTab contract (a
+// new tab on newTab:true, otherwise reuse) and /tabs, so the test drives the real
+// tools end to end: list_tabs before, navigate {newTab:true}, list_tabs after,
+// and asserts the count went up by one and a tabId came back. A plain navigate is
+// the control — it must reuse the current tab and leave the count unchanged.
+func TestHandleNavigateNewTabOpensATab(t *testing.T) {
+	var tabs []string
+	nextID := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/navigate":
+			raw, _ := io.ReadAll(r.Body)
+			var body map[string]any
+			_ = json.Unmarshal(raw, &body)
+			newTab, _ := body["newTab"].(bool)
+			var id string
+			if newTab || len(tabs) == 0 {
+				nextID++
+				id = fmt.Sprintf("tab-%d", nextID)
+				tabs = append(tabs, id)
+			} else {
+				id = tabs[len(tabs)-1]
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"tabId": id, "url": body["url"], "newTab": newTab})
+		case "/tabs":
+			out := make([]map[string]any, len(tabs))
+			for i, id := range tabs {
+				out[i] = map[string]any{"id": id}
+			}
+			_ = json.NewEncoder(w).Encode(out)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	countTabs := func() int {
+		var arr []map[string]any
+		if err := json.Unmarshal([]byte(resultText(t, callTool(t, "pinchtab_list_tabs", nil, srv))), &arr); err != nil {
+			t.Fatalf("list_tabs is not a JSON array: %v", err)
+		}
+		return len(arr)
+	}
+
+	// Seed the current tab with a plain navigate, then count.
+	_ = callTool(t, "pinchtab_navigate", map[string]any{"url": "https://example.com/a"}, srv)
+	before := countTabs()
+
+	r := callTool(t, "pinchtab_navigate", map[string]any{"url": "https://example.com/b", "newTab": true}, srv)
+	if r.IsError {
+		t.Fatalf("navigate newTab returned error: %s", resultText(t, r))
+	}
+	res := resultJSON(t, r)
+	if id, _ := res["tabId"].(string); id == "" {
+		t.Errorf("newTab navigate returned no tabId to target the new tab: %v", res)
+	}
+	if res["newTab"] != true {
+		t.Errorf("the MCP handler did not forward newTab; the server saw newTab=%v", res["newTab"])
+	}
+	if after := countTabs(); after != before+1 {
+		t.Fatalf("newTab did not open a tab: count %d -> %d", before, after)
+	}
+
+	// Control: a plain navigate reuses the current tab, so the count is unchanged.
+	countAfterNewTab := countTabs()
+	_ = callTool(t, "pinchtab_navigate", map[string]any{"url": "https://example.com/c"}, srv)
+	if reuse := countTabs(); reuse != countAfterNewTab {
+		t.Fatalf("a plain navigate changed the tab count: %d -> %d", countAfterNewTab, reuse)
 	}
 }
