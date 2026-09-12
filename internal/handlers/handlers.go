@@ -112,7 +112,7 @@ func New(b bridge.BridgeAPI, cfg *config.RuntimeConfig, p bridge.ProfileService,
 		return h.Bridge.Evaluate(ctx, expression, out, opts)
 	}
 
-	if notifier, ok := h.Bridge.(tabRemovalNotifier); ok {
+	if notifier, ok := bridgeAs[tabRemovalNotifier](h.Bridge); ok {
 		notifier.AddTabRemovedHook(h.credentialStore.RemoveTab)
 	}
 
@@ -266,7 +266,7 @@ func (h *Handlers) clearTabFrameScope(tabID string) {
 }
 
 func (h *Handlers) bridgeRestartStatus() (bool, time.Duration) {
-	provider, ok := h.Bridge.(restartStatusProvider)
+	provider, ok := bridgeAs[restartStatusProvider](h.Bridge)
 	if !ok {
 		return false, 0
 	}

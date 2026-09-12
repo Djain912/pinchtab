@@ -90,7 +90,7 @@ type tabAwakeHolder interface {
 var _ tabAwakeHolder = (*bridge.Bridge)(nil)
 
 func (h *Handlers) holdTabAwakeForRequest(r *http.Request, tabID string) {
-	if holder, ok := h.Bridge.(tabAwakeHolder); ok {
+	if holder, ok := bridgeAs[tabAwakeHolder](h.Bridge); ok {
 		holder.HoldAwakeUntil(r.Context(), tabID)
 	}
 }
@@ -106,7 +106,7 @@ func (h *Handlers) tabScopes() (tabScopeTracker, bool) {
 	if h == nil {
 		return nil, false
 	}
-	tracker, ok := h.Bridge.(tabScopeTracker)
+	tracker, ok := bridgeAs[tabScopeTracker](h.Bridge)
 	return tracker, ok
 }
 

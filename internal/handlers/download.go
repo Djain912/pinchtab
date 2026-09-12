@@ -122,7 +122,7 @@ func (h *Handlers) enforceDownloadTabPolicy(w http.ResponseWriter, r *http.Reque
 		return false
 	}
 	if currentURL == "" {
-		if provider, ok := h.Bridge.(tabPolicyStateProvider); ok {
+		if provider, ok := bridgeAs[tabPolicyStateProvider](h.Bridge); ok {
 			if state, ok := provider.GetTabPolicyState(resolvedTabID); ok && state.CurrentURL != "" {
 				currentURL = state.CurrentURL
 			}

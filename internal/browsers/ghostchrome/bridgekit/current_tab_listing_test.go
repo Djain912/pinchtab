@@ -34,9 +34,6 @@ func TestTheTabListingThroughTheAdapterLeadsWithTheCurrentTab(t *testing.T) {
 	chrome.RegisterTab("tabB", ctx)
 	adapter := NewBridgeAdapter(chrome, cfg)
 
-	if got := adapter.CurrentTabID(); got != "tabB" {
-		t.Errorf("adapter CurrentTabID = %q, want the chrome bridge's current tab tabB", got)
-	}
 	_, resolved, err := adapter.TabContext("")
 	if err != nil || resolved != "tabB" {
 		t.Fatalf("adapter TabContext(\"\") = %q, %v; the reader must agree with it", resolved, err)

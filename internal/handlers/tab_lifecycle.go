@@ -97,7 +97,7 @@ func (h *Handlers) createBlankTab(w http.ResponseWriter, r *http.Request, browse
 			httpx.Error(w, 400, fmt.Errorf("browserContextId is not owned by an attached page"))
 			return
 		}
-		creator, ok := h.Bridge.(browserContextTabCreator)
+		creator, ok := bridgeAs[browserContextTabCreator](h.Bridge)
 		if !ok {
 			httpx.Error(w, 501, fmt.Errorf("browser-context tab creation is unavailable"))
 			return

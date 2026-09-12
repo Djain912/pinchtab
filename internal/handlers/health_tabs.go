@@ -24,7 +24,7 @@ func (h *Handlers) listedCurrentTabID(r *http.Request, targets []bridge.TabTarge
 		tabID, _ := h.scopedCurrentTabForRequest(r)
 		return tabID
 	}
-	if reader, ok := h.Bridge.(currentTabReader); ok {
+	if reader, ok := bridgeAs[currentTabReader](h.Bridge); ok {
 		if tabID := reader.CurrentTabID(); tabID != "" {
 			return tabID
 		}
@@ -199,7 +199,7 @@ func (h *Handlers) HandleTabs(w http.ResponseWriter, r *http.Request) {
 		if t.BrowserContextID != "" {
 			entry["browserContextId"] = t.BrowserContextID
 		}
-		if hr, ok := h.Bridge.(tabHandoffReader); ok {
+		if hr, ok := bridgeAs[tabHandoffReader](h.Bridge); ok {
 			if hs, ok := hr.TabHandoffState(tabID); ok {
 				entry["status"] = hs.Status
 				entry["handoffReason"] = hs.Reason

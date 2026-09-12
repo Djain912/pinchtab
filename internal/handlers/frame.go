@@ -24,7 +24,7 @@ type frameRequest struct {
 }
 
 func (h *Handlers) frameScopes() frameScopeAPI {
-	scopes, _ := h.Bridge.(frameScopeAPI)
+	scopes, _ := bridgeAs[frameScopeAPI](h.Bridge)
 	return scopes
 }
 

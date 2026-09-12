@@ -311,7 +311,7 @@ type staticFirstOutcome struct {
 // one budget would let a slow static fetch starve the Chrome attempt that exists
 // to rescue it.
 func (h *Handlers) tryStaticFirstNavigate(w http.ResponseWriter, r *http.Request, req navigateRequest, effectiveCfg *config.RuntimeConfig, navRoute *browserops.RouteMetadata) staticFirstOutcome {
-	sf, ok := h.Bridge.(staticFirstNavigator)
+	sf, ok := bridgeAs[staticFirstNavigator](h.Bridge)
 	if !ok || !sf.StaticFirstNavigate() || !req.NewTab {
 		return staticFirstOutcome{}
 	}

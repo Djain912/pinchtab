@@ -19,7 +19,7 @@ type tabHandoffController interface {
 }
 
 func (h *Handlers) handoffController() (tabHandoffController, bool) {
-	ctrl, ok := h.Bridge.(tabHandoffController)
+	ctrl, ok := bridgeAs[tabHandoffController](h.Bridge)
 	return ctrl, ok
 }
 

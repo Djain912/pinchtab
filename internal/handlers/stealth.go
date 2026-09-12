@@ -98,7 +98,7 @@ func (h *Handlers) HandleFingerprintRotate(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	if tracker, ok := h.Bridge.(interface{ SetFingerprintRotateActive(string, bool) }); ok {
+	if tracker, ok := bridgeAs[interface{ SetFingerprintRotateActive(string, bool) }](h.Bridge); ok {
 		tracker.SetFingerprintRotateActive(resolvedTabID, true)
 	}
 
