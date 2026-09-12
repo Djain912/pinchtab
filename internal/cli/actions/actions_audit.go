@@ -505,7 +505,11 @@ func printAuditSummary(report map[string]any) {
 func auditSummaryLines(report audit.AuditReport) []string {
 	failed, broken, jsErrors := 0, 0, 0
 	for _, p := range report.Pages {
-		if p.Error != "" {
+		// A page failed when the audit could not collect it (transport Error) OR
+		// when its own document returned 4xx/5xx — the latter has no Error, so it
+		// used to read as ok. The main-document failure is not in BrokenAssets
+		// (dropped in ToPageResult), so broken counts only failed sub-resources.
+		if p.Error != "" || p.StatusCode >= 400 {
 			failed++
 		}
 		broken += len(p.Browser.BrokenAssets)
