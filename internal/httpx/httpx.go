@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -178,6 +179,13 @@ func DecodeJSONBody(w http.ResponseWriter, r *http.Request, maxBytes int64, dst 
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(dst); err != nil {
 		return clarifyUnknownJSONField(err, dst)
+	}
+	return nil
+}
+
+func DecodeOptionalJSONBody(w http.ResponseWriter, r *http.Request, maxBytes int64, dst any) error {
+	if err := DecodeJSONBody(w, r, maxBytes, dst); err != nil && !errors.Is(err, io.EOF) {
+		return err
 	}
 	return nil
 }

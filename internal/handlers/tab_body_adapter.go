@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -75,9 +74,7 @@ func (h *Handlers) withPathTabIDBody(w http.ResponseWriter, r *http.Request, roo
 // mutate makes it identical to withPathTabIDBody.
 func (h *Handlers) withPathTabIDBodyMutate(w http.ResponseWriter, r *http.Request, mutate func(body map[string]any), root http.HandlerFunc) {
 	body := map[string]any{}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodySize))
-	if err := dec.Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-		httpx.Error(w, 400, fmt.Errorf("decode: %w", err))
+	if !decodeOptionalJSON(w, r, &body) {
 		return
 	}
 	provided, err := bodyTabID(body)

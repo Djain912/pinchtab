@@ -1,9 +1,7 @@
 package handlers
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -114,7 +112,7 @@ func (h *Handlers) HandleRecordStop(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Discard bool `json:"discard"`
 	}
-	if err := httpx.DecodeJSONBody(w, r, 0, &req); err != nil && !errors.Is(err, io.EOF) {
+	if err := httpx.DecodeOptionalJSONBody(w, r, 0, &req); err != nil {
 		httpx.Error(w, httpx.StatusForJSONDecodeError(err), err)
 		return
 	}

@@ -1,10 +1,7 @@
 package handlers
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -137,8 +134,7 @@ func (h *Handlers) HandleTabHandoff(w http.ResponseWriter, r *http.Request) {
 		Reason    string `json:"reason"`
 		TimeoutMs int    `json:"timeoutMs"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodySize)).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
-		httpx.Error(w, 400, fmt.Errorf("decode: %w", err))
+	if !decodeOptionalJSON(w, r, &req) {
 		return
 	}
 
@@ -196,8 +192,7 @@ func (h *Handlers) HandleTabResume(w http.ResponseWriter, r *http.Request) {
 		Status string         `json:"status"`
 		Data   map[string]any `json:"resolvedData"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodySize)).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
-		httpx.Error(w, 400, fmt.Errorf("decode: %w", err))
+	if !decodeOptionalJSON(w, r, &req) {
 		return
 	}
 

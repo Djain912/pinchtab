@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,11 +33,9 @@ func (o *Orchestrator) handleInstanceTabOpen(w http.ResponseWriter, r *http.Requ
 	var req struct {
 		URL string `json:"url,omitempty"`
 	}
-	if httpx.MayHaveBody(r) {
-		if err := httpx.DecodeJSONBody(w, r, 0, &req); err != nil && !errors.Is(err, io.EOF) {
-			httpx.Error(w, httpx.StatusForJSONDecodeError(err), err)
-			return
-		}
+	if err := httpx.DecodeOptionalJSONBody(w, r, 0, &req); err != nil {
+		httpx.Error(w, httpx.StatusForJSONDecodeError(err), err)
+		return
 	}
 
 	payload, err := json.Marshal(map[string]any{

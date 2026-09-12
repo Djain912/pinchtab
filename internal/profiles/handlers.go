@@ -3,7 +3,6 @@ package profiles
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -268,7 +267,7 @@ func (pm *ProfileManager) handlePruneQuarantined(w http.ResponseWriter, r *http.
 // a caller sending nothing is asking for.
 func decodePruneRequest(w http.ResponseWriter, r *http.Request) (pruneQuarantinedRequest, error) {
 	var req pruneQuarantinedRequest
-	if err := httpx.DecodeJSONBody(w, r, 0, &req); err != nil && !errors.Is(err, io.EOF) {
+	if err := httpx.DecodeOptionalJSONBody(w, r, 0, &req); err != nil {
 		return req, err
 	}
 	if req.Profile == "" {

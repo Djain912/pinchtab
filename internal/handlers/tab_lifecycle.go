@@ -3,9 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
@@ -131,11 +129,8 @@ func (h *Handlers) HandleTabClose(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TabID string `json:"tabId"`
 	}
-	if httpx.MayHaveBody(r) {
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodySize)).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
-			httpx.Error(w, 400, fmt.Errorf("decode: %w", err))
-			return
-		}
+	if !decodeOptionalJSON(w, r, &req) {
+		return
 	}
 	tabID, ok := h.requirePathTabIDMatch(w, r, req.TabID)
 	if !ok {
@@ -151,8 +146,7 @@ func (h *Handlers) HandleClose(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TabID string `json:"tabId"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodySize)).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
-		httpx.Error(w, 400, fmt.Errorf("decode: %w", err))
+	if !decodeOptionalJSON(w, r, &req) {
 		return
 	}
 

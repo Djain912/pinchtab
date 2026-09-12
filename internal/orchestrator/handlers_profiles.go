@@ -1,9 +1,7 @@
 package orchestrator
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 
 	"github.com/pinchtab/pinchtab/internal/authn"
@@ -39,11 +37,9 @@ func (o *Orchestrator) handleStartByID(w http.ResponseWriter, r *http.Request) {
 		Browser         string                 `json:"browser,omitempty"`
 		FallbackTargets []string               `json:"fallbackTargets,omitempty"`
 	}
-	if httpx.MayHaveBody(r) {
-		if err := httpx.DecodeJSONBody(w, r, 0, &req); err != nil && !errors.Is(err, io.EOF) {
-			httpx.Error(w, httpx.StatusForJSONDecodeError(err), err)
-			return
-		}
+	if err := httpx.DecodeOptionalJSONBody(w, r, 0, &req); err != nil {
+		httpx.Error(w, httpx.StatusForJSONDecodeError(err), err)
+		return
 	}
 	if err := validateStartInstanceSecurityPolicy(req.SecurityPolicy); err != nil {
 		httpx.Error(w, 400, err)
