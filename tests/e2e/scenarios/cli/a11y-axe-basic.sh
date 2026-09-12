@@ -39,3 +39,30 @@ pt_ok a11y audit
 assert_output_contains "engine=native" "native engine summary line"
 
 end_test
+
+# ─────────────────────────────────────────────────────────────────
+# snapshot files a token, the second nav invalidates it, and the audit must
+# overwrite the store with the token it minted; otherwise the click echoes the
+# snapshot's stale token and the server refuses it 409 vocab_superseded.
+start_test "pinchtab a11y audit --axe refreshes the vocab store so click on a returned ref succeeds"
+
+pt_ok nav "${FIXTURES_URL}/a11y-violations.html"
+pt_ok snap
+pt_ok nav "${FIXTURES_URL}/a11y-violations.html"
+
+pt_ok a11y audit --axe --json
+REF=$(jq -r 'first(.violations[] | select(.id=="label") | .nodes[] | select(.ref!=null and .ref!="") | .ref)' <<<"$PT_OUT")
+if [ -n "$REF" ] && [ "$REF" != "null" ]; then
+  pass_assert "label violation carries ref $REF"
+else
+  fail_assert "label violation carries no ref"
+fi
+
+pt_ok click "$REF"
+if grep -q "superseded" <<<"$PT_ERR$PT_OUT"; then
+  fail_assert "click echoed a stale token: $PT_ERR"
+else
+  pass_assert "click on $REF accepted with the audit's token"
+fi
+
+end_test
