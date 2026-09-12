@@ -985,7 +985,6 @@ Problem Details is currently used for selected precondition and capability failu
 - network stream unsupported streaming capability
 - dashboard SSE unsupported streaming capability or deadline control
 - instance logs SSE unsupported streaming capability or deadline control
-- screencast tab-not-found precondition failure
 
 Additional endpoints may be migrated over time. Clients should tolerate both error content types and branch on `Content-Type` when parsing failures.
 
