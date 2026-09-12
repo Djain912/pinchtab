@@ -215,7 +215,8 @@ func smokeLane() lane {
 
 func (r *Runner) bringUpAndRunPlans(stack string, plans []suitePlan) (codes map[string]int, restartFailed bool, setupCode int) {
 	services := servicesForPlans(plans, []string{"pinchtab", "fixtures"})
-	if code := r.bringUpSharedStack(stack, services); code != 0 {
+	buildServices := servicesToBuild(plans, []string{"pinchtab", "fixtures"})
+	if code := r.bringUpSharedStack(stack, services, buildServices); code != 0 {
 		return nil, false, code
 	}
 
@@ -509,7 +510,9 @@ func (r *Runner) runSingle(def suiteDef) int {
 		return 1
 	}
 	plan := suitePlan{def: def, scenarios: scenarios}
-	if code := r.bringUpSharedStack(def.Compose, servicesForPlans([]suitePlan{plan}, []string{"pinchtab", "fixtures"})); code != 0 {
+	plans := []suitePlan{plan}
+	fallback := []string{"pinchtab", "fixtures"}
+	if code := r.bringUpSharedStack(def.Compose, servicesForPlans(plans, fallback), servicesToBuild(plans, fallback)); code != 0 {
 		_ = r.composeDown(def.Compose)
 		return code
 	}
@@ -559,7 +562,7 @@ func (r *Runner) planSuites(defs []suiteDef) ([]suitePlan, int) {
 	return plans, 0
 }
 
-func (r *Runner) bringUpSharedStack(composeFile string, services []string) int {
+func (r *Runner) bringUpSharedStack(composeFile string, services, buildServices []string) int {
 	// Cloak pinchtab services are supplied by the provider override image.
 	// Build support images such as fixtures and runners, but keep compose from
 	// rebuilding the overridden pinchtab services.
@@ -579,7 +582,7 @@ func (r *Runner) bringUpSharedStack(composeFile string, services []string) int {
 			return code
 		}
 	} else {
-		if code := r.buildSharedStack(composeFile); code != 0 {
+		if code := r.buildSharedStack(composeFile, buildServices...); code != 0 {
 			return code
 		}
 	}

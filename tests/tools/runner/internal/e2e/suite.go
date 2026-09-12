@@ -294,6 +294,21 @@ func servicesForPlans(plans []suitePlan, fallback []string) []string {
 	return out
 }
 
+func servicesToBuild(plans []suitePlan, fallback []string) []string {
+	services := append([]string(nil), servicesForPlans(plans, fallback)...)
+	seen := map[string]bool{}
+	for _, svc := range services {
+		seen[svc] = true
+	}
+	for _, plan := range plans {
+		if runner := plan.def.Runner; runner != "" && !seen[runner] {
+			seen[runner] = true
+			services = append(services, runner)
+		}
+	}
+	return services
+}
+
 func (r *Runner) showSuiteSkip(suite string) {
 	_, _ = fmt.Fprintf(r.stdout, "Skipping %s: filter %q has no matching scenarios\n", suite, r.args.Filter)
 }
