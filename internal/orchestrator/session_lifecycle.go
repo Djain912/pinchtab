@@ -14,6 +14,11 @@ import (
 
 var sessionTabsCloseBudget = 10 * time.Second
 
+const (
+	sessionCloseSlots         = 4
+	sessionCloseShutdownGrace = 5 * time.Second
+)
+
 func (o *Orchestrator) SessionLifecycleHook() session.LifecycleHook {
 	if o == nil {
 		return func(session.LifecycleEvent) {}
@@ -23,15 +28,47 @@ func (o *Orchestrator) SessionLifecycleHook() session.LifecycleHook {
 			return
 		}
 		o.bindings.ClearSession(evt.SessionID)
-		o.sessionCloses.Add(1)
+		ctx, slots, ok := o.beginSessionClose()
+		if !ok {
+			return
+		}
 		go func() {
 			defer o.sessionCloses.Done()
-			o.closeEndedSessionTabs(evt.SessionID)
+			select {
+			case slots <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
+			defer func() { <-slots }()
+			o.closeEndedSessionTabs(ctx, evt.SessionID)
 		}()
 	}
 }
 
-func (o *Orchestrator) closeEndedSessionTabs(sessionID string) {
+func (o *Orchestrator) beginSessionClose() (context.Context, chan struct{}, bool) {
+	o.sessionCloseMu.Lock()
+	defer o.sessionCloseMu.Unlock()
+	if o.sessionClosesEnded {
+		return nil, nil, false
+	}
+	if o.sessionCloseCtx == nil {
+		o.sessionCloseCtx, o.cancelSessionCloses = context.WithCancel(context.Background())
+		o.sessionCloseSlotSem = make(chan struct{}, sessionCloseSlots)
+	}
+	o.sessionCloses.Add(1)
+	return o.sessionCloseCtx, o.sessionCloseSlotSem, true
+}
+
+func (o *Orchestrator) endSessionCloses() {
+	o.sessionCloseMu.Lock()
+	defer o.sessionCloseMu.Unlock()
+	o.sessionClosesEnded = true
+	if o.cancelSessionCloses != nil {
+		o.cancelSessionCloses()
+	}
+}
+
+func (o *Orchestrator) closeEndedSessionTabs(parent context.Context, sessionID string) {
 	o.mu.RLock()
 	var targets []*InstanceInternal
 	for _, inst := range o.instances {
@@ -41,7 +78,7 @@ func (o *Orchestrator) closeEndedSessionTabs(sessionID string) {
 	}
 	o.mu.RUnlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), sessionTabsCloseBudget)
+	ctx, cancel := context.WithTimeout(parent, sessionTabsCloseBudget)
 	defer cancel()
 	header := http.Header{}
 	header.Set(activity.HeaderPTSessionID, sessionID)

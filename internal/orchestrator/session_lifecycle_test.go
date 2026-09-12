@@ -19,6 +19,7 @@ func TestSessionLifecycleHook_ClearsBinding(t *testing.T) {
 
 	hook := o.SessionLifecycleHook()
 	hook(session.LifecycleEvent{SessionID: "ses_dead", AgentID: "agent-x", Reason: session.LifecycleReasonRevoked})
+	o.sessionCloses.Wait()
 
 	if _, ok := o.bindings.ResolveSession("ses_dead"); ok {
 		t.Fatal("binding should have been cleared")
@@ -30,6 +31,7 @@ func TestSessionLifecycleHook_NoopOnEmptyID(t *testing.T) {
 	o.bindings.BindSession("ses_a", "inst_a")
 	hook := o.SessionLifecycleHook()
 	hook(session.LifecycleEvent{SessionID: "", Reason: session.LifecycleReasonExpired})
+	o.sessionCloses.Wait()
 	if _, ok := o.bindings.ResolveSession("ses_a"); !ok {
 		t.Fatal("unrelated binding should not be touched")
 	}

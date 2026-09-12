@@ -43,6 +43,12 @@ type Orchestrator struct {
 	detachedStops sync.WaitGroup
 	sessionCloses sync.WaitGroup
 
+	sessionCloseMu      sync.Mutex
+	sessionCloseCtx     context.Context
+	cancelSessionCloses context.CancelFunc
+	sessionCloseSlotSem chan struct{}
+	sessionClosesEnded  bool
+
 	// monitors tracks the per-instance startup monitors for the same reason.
 	// A monitor writes instance state for up to instanceStartupTimeout after
 	// launch, so one that outlives its orchestrator keeps touching memory the

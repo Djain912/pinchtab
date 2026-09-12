@@ -274,6 +274,7 @@ func (o *Orchestrator) setStopError(id, msg string) {
 }
 
 func (o *Orchestrator) Shutdown() {
+	o.endSessionCloses()
 	o.mu.RLock()
 	ids := make([]string, 0, len(o.instances))
 	for id, inst := range o.instances {
@@ -305,6 +306,7 @@ func (o *Orchestrator) Shutdown() {
 	o.signalShutdown()
 	joinDetached("startup monitors", &o.monitors, monitorShutdownGrace)
 	joinDetached("failed-attempt teardowns", &o.detachedStops, detachedStopShutdownGrace)
+	joinDetached("session tab closes", &o.sessionCloses, sessionCloseShutdownGrace)
 }
 
 // joinDetached waits for wg, then reports rather than hangs. Every wait here is
