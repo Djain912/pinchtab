@@ -234,15 +234,20 @@ func emitDefaultConfigHint() {
 func hintRestartIfRunning() {
 	cfg := loadLocalConfig()
 	snap, state := probeHealthSnapshot(cfg.Port, cfg.Token)
+	// A token mismatch (healthSnapshotProtected) hides the mode, so the instance is
+	// running but we cannot confirm it is the server front door: still remind the
+	// caller to restart, in the mode-neutral form. Without this a protected instance
+	// gets no hint — the regression the earlier CheckPinchTabRunning did not have.
+	// One emission point so the hint census records a single occurrence.
+	var hint string
 	switch state {
 	case healthSnapshotRunning:
-		output.Hint(restartHintForMode(snap.Mode))
+		hint = restartHintForMode(snap.Mode)
 	case healthSnapshotProtected:
-		// A token mismatch hides the mode, so the instance is running but we cannot
-		// confirm it is the server front door: still remind the caller to restart,
-		// in the mode-neutral form. Without this a protected instance gets no hint —
-		// the regression the earlier CheckPinchTabRunning did not have.
-		output.Hint(restartHintForMode(""))
+		hint = restartHintForMode("")
+	}
+	if hint != "" {
+		output.Hint(hint)
 	}
 }
 
