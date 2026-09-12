@@ -212,8 +212,9 @@ func allTools() []mcp.Tool {
 		),
 
 		mcp.NewTool("pinchtab_eval",
-			mcp.WithDescription("Execute JavaScript in the browser and return the result. This is not frame-scoped; current pinchtab_frame state does not change evaluation context."),
+			mcp.WithDescription("Execute JavaScript in the browser and return the result. This is not frame-scoped; current pinchtab_frame state does not change evaluation context. A Promise-returning expression needs awaitPromise:true to resolve, otherwise it returns {} with a hint."),
 			expressionParam("expression"),
+			mcp.WithBoolean("awaitPromise", mcp.Description("Resolve a returned Promise before responding, returning its resolved value (matches CLI --await-promise)")),
 			tabIDParam(),
 		),
 		mcp.NewTool("pinchtab_pdf",

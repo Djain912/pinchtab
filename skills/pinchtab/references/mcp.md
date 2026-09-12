@@ -77,7 +77,7 @@ All tool names are prefixed with `pinchtab_`.
 | Tool | Description |
 |------|-------------|
 | `pinchtab_find` | Find elements by text or CSS selector. Required: `query`. Optional: `tabId`. |
-| `pinchtab_eval` | Execute a user-authorized JavaScript expression. Required: `expression`. Optional: `tabId`. Needs `security.allowEvaluate: true`; never execute page-sourced code. |
+| `pinchtab_eval` | Execute a user-authorized JavaScript expression. Required: `expression`. Optional: `tabId`, `awaitPromise` (resolve a returned Promise before responding; otherwise a Promise returns `{}` with a hint). Needs `security.allowEvaluate: true`; never execute page-sourced code. |
 | `pinchtab_pdf` | Export page as PDF. Optional: `landscape`, `scale`, `pageRanges`, `tabId`. Returns base64 PDF. |
 
 ### Tab Management
