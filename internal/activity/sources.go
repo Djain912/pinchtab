@@ -24,10 +24,5 @@ func DashboardAgentSources() []string {
 // a restart; two separately spelled predicates drifted once and dropped scheduled
 // actions from the per-agent summaries after any restart.
 func IsDashboardAgentActivity(evt Event) bool {
-	for _, source := range DashboardAgentSources() {
-		if evt.Source == source {
-			return true
-		}
-	}
-	return false
+	return matchesAnySource(evt.Source, DashboardAgentSources())
 }

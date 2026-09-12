@@ -96,7 +96,7 @@ func recordScheduledTask(t *testing.T, want TaskState, instanceHandler http.Hand
 	var events []activity.Event
 	poll := time.After(2 * time.Second)
 	for {
-		events, err = rec.Query(activity.Filter{Source: "scheduler"})
+		events, err = rec.Query(activity.Filter{Sources: []string{"scheduler"}})
 		if err != nil {
 			t.Fatalf("query: %v", err)
 		}

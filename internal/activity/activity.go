@@ -76,7 +76,6 @@ type StepCounts struct {
 }
 
 type Filter struct {
-	Source      string
 	Sources     []string
 	RequestID   string
 	SessionID   string
@@ -485,13 +484,6 @@ func (noopRecorder) Query(Filter) ([]Event, error) {
 }
 
 func (f Filter) matches(evt Event) bool {
-	// Compare normalized names: the source is stored verbatim from the client
-	// header but the per-source file is named with the normalized form, so
-	// matching raw here would discard events from the very file queryFiles
-	// selected for this source.
-	if f.Source != "" && normalizeSourceName(evt.Source) != normalizeSourceName(f.Source) {
-		return false
-	}
 	if len(f.Sources) > 0 && !matchesAnySource(evt.Source, f.Sources) {
 		return false
 	}
@@ -599,7 +591,7 @@ func (s *Store) queryFiles(filter Filter) []string {
 		files = append(files, legacyPath)
 	}
 
-	source := normalizeSourceName(filter.Source)
+	wantSources := normalizedSources(filter.Sources)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -608,7 +600,7 @@ func (s *Store) queryFiles(filter Filter) []string {
 		if !isActivityLogFile(name) {
 			continue
 		}
-		if source != "" && !isSourceLogFile(name, source) {
+		if len(wantSources) > 0 && !matchesAnySourceLogFile(name, wantSources) {
 			continue
 		}
 		if day, ok := activityLogDay(name); ok && !dayInRange(day, sinceDay, untilDay) {
@@ -715,6 +707,33 @@ func normalizeSourceName(source string) string {
 
 func isActivityLogFile(name string) bool {
 	return name != "events.jsonl" && strings.HasPrefix(name, "events-") && strings.HasSuffix(name, ".jsonl")
+}
+
+// normalizedSources normalizes a filter's requested sources, dropping any that
+// normalize to empty. A nil result means "no source narrowing".
+func normalizedSources(sources []string) []string {
+	if len(sources) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(sources))
+	for _, s := range sources {
+		if n := normalizeSourceName(s); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// matchesAnySourceLogFile reports whether name is the per-source log of any of
+// the already-normalized sources, so the file walk opens only the requested
+// sources' logs instead of every source's log in the retention window.
+func matchesAnySourceLogFile(name string, normalizedSources []string) bool {
+	for _, s := range normalizedSources {
+		if isSourceLogFile(name, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // isSourceLogFile anchors on the trailing day so a query for "mcp" does not
