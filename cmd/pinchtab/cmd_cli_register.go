@@ -376,7 +376,12 @@ func configureBrowserFlags() {
 	waitCmd.Flags().String("load", "", "Wait for load state (networkidle)")
 	waitCmd.Flags().String("fn", "", "Wait for JS expression to be truthy")
 	waitCmd.Flags().String("state", "", "Element state: visible (default) or hidden")
-	waitCmd.Flags().Int("timeout", 0, "Timeout in milliseconds (default 10000, max 30000)")
+	waitCmd.Flags().Int("timeout-ms", 0, "Timeout in milliseconds (default 10000, max 30000)")
+	// --timeout on wait is milliseconds, but the same bare flag is SECONDS on
+	// nav/scrape — a 1000x footgun. Keep it for back-compat as a deprecated alias
+	// (still ms); cobra prints its deprecation note pointing at --timeout-ms on use.
+	waitCmd.Flags().Int("timeout", 0, "Deprecated: use --timeout-ms")
+	_ = waitCmd.Flags().MarkDeprecated("timeout", "use --timeout-ms (this flag is milliseconds; bare --timeout means seconds on nav and scrape)")
 
 	consoleCmd.Flags().Bool("clear", false, "Clear console logs")
 	consoleCmd.Flags().String("limit", "", "Maximum entries to return")

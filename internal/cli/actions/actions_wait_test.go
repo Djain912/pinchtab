@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -23,9 +24,101 @@ func newWaitCmd() *cobra.Command {
 	cmd.Flags().String("fn", "", "")
 	cmd.Flags().String("state", "", "")
 	cmd.Flags().String("tab", "", "")
+	cmd.Flags().Int("timeout-ms", 0, "")
 	cmd.Flags().Int("timeout", 0, "")
 	cmd.Flags().Bool("json", false, "")
 	return cmd
+}
+
+func newNavTimeoutCmd() *cobra.Command {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("tab", "", "")
+	cmd.Flags().Float64("timeout", 0, "")
+	for _, name := range []string{"new-tab", "block-images", "block-ads", "dismiss-banners"} {
+		cmd.Flags().Bool(name, false, "")
+	}
+	return cmd
+}
+
+func newScrapeTimeoutCmd() *cobra.Command {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("format", "json", "")
+	cmd.Flags().String("profile", "", "")
+	cmd.Flags().String("cookies-file", "", "")
+	cmd.Flags().String("output-dir", "", "")
+	cmd.Flags().StringArray("cookie", nil, "")
+	cmd.Flags().StringArray("include", nil, "")
+	cmd.Flags().StringArray("exclude", nil, "")
+	cmd.Flags().StringArray("only", nil, "")
+	cmd.Flags().Int("max-pages", 0, "")
+	cmd.Flags().Int("max-per-pattern", 0, "")
+	cmd.Flags().Int("concurrency", 0, "")
+	cmd.Flags().Int("timeout", 0, "")
+	for _, name := range []string{"enrich-all", "no-browser", "preview", "json"} {
+		cmd.Flags().Bool(name, false, "")
+	}
+	return cmd
+}
+
+// The card's core: the bare --timeout flag meant different units per verb. This
+// pins the unit each verb's timeout flag feeds to the request — wait in
+// milliseconds (via the new --timeout-ms and the deprecated --timeout alias),
+// nav and scrape in seconds — so the 1000x divergence cannot silently return.
+func TestTimeoutFlagUnitsPerVerb(t *testing.T) {
+	var lastBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		lastBody = nil
+		_ = json.Unmarshal(b, &lastBody)
+		if strings.HasSuffix(r.URL.Path, "/wait") {
+			_ = json.NewEncoder(w).Encode(map[string]any{"waited": true})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{}) // a valid, empty scrape report
+	}))
+	defer srv.Close()
+	base, client := srv.URL, srv.Client()
+
+	t.Run("wait --timeout-ms feeds milliseconds", func(t *testing.T) {
+		cmd := newWaitCmd()
+		_ = cmd.Flags().Set("timeout-ms", "2500")
+		Wait(client, base, "", []string{"#x"}, cmd)
+		if lastBody["timeout"] != float64(2500) {
+			t.Fatalf("wait --timeout-ms 2500 sent timeout=%v, want 2500 (ms)", lastBody["timeout"])
+		}
+	})
+
+	t.Run("wait --timeout (deprecated alias) still feeds milliseconds", func(t *testing.T) {
+		cmd := newWaitCmd()
+		_ = cmd.Flags().Set("timeout", "2500")
+		Wait(client, base, "", []string{"#x"}, cmd)
+		if lastBody["timeout"] != float64(2500) {
+			t.Fatalf("wait --timeout 2500 sent timeout=%v, want 2500 (ms, back-compat)", lastBody["timeout"])
+		}
+	})
+
+	t.Run("nav --timeout feeds seconds", func(t *testing.T) {
+		cmd := newNavTimeoutCmd()
+		_ = cmd.Flags().Set("timeout", "10")
+		req := buildNavigateRequest("http://example.test", cmd)
+		if req.body["timeout"] != float64(10) {
+			t.Fatalf("nav --timeout 10 built timeout=%v, want 10 (seconds)", req.body["timeout"])
+		}
+	})
+
+	t.Run("scrape --timeout feeds seconds on the unit-named key", func(t *testing.T) {
+		cmd := newScrapeTimeoutCmd()
+		_ = cmd.Flags().Set("timeout", "10")
+		if err := Scrape(client, base, "", cmd, "http://example.test"); err != nil {
+			t.Fatalf("Scrape: %v", err)
+		}
+		if lastBody["timeoutSeconds"] != float64(10) {
+			t.Fatalf("scrape --timeout 10 sent timeoutSeconds=%v, want 10 (seconds)", lastBody["timeoutSeconds"])
+		}
+		if _, carriesBareTimeout := lastBody["timeout"]; carriesBareTimeout {
+			t.Errorf("scrape must not send a bare ms-ambiguous timeout key: %v", lastBody)
+		}
+	})
 }
 
 const waitChildEnv = "PINCHTAB_TEST_WAIT_MODE"
