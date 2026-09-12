@@ -213,7 +213,19 @@ source_filtered_scenario() {
 # non-zero exit intact.
 finish_scenario() {
   run_scenario_cleanup
+  assert_scenario_tabs_settled
   [ "${TESTS_FAILED:-0}" -eq 0 ] || exit 1
+}
+
+assert_scenario_tabs_settled() {
+  declare -F _e2e_snapshot_tab_ids >/dev/null 2>&1 || return 0
+  local baseline_count after_count
+  baseline_count=$(printf '%s' "${SCENARIO_TAB_BASELINE}" | tr ' ' '\n' | grep -c .)
+  after_count=$(_e2e_snapshot_tab_ids | grep -c .)
+  if [ "${after_count}" -ne "${baseline_count}" ]; then
+    echo -e "${RED}  ✗ ${CURRENT_SCENARIO_FILE}: tab count did not return to baseline (start ${baseline_count}, end ${after_count})${NC}"
+  fi
+  return 0
 }
 
 # Each scenario file runs in its own subshell: file-scope variables, functions
@@ -225,6 +237,7 @@ run_scenario_file() {
   (
     CURRENT_SCENARIO_FILE="${script_name%.sh}"
     TESTS_FAILED=0
+    record_scenario_tab_baseline
     trap finish_scenario EXIT
     if [ -n "${TEST_FILTER}" ]; then
       if ! source_filtered_scenario "${script_path}" "${TEST_FILTER}"; then

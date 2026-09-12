@@ -294,6 +294,22 @@ get_tab_count() {
   e2e_curl -s "${E2E_SERVER}/tabs" | jq '.tabs | length'
 }
 
+_e2e_snapshot_tab_ids() {
+  e2e_curl -s --max-time 5 "${E2E_SERVER}/tabs" 2>/dev/null | jq -r '.tabs[].id // empty' 2>/dev/null || true
+}
+
+_e2e_close_leaked_tabs() {
+  local keep id
+  keep=$(e2e_curl -s --max-time 5 "${E2E_SERVER}/tabs" 2>/dev/null | jq -r '.tabs[0].id // empty' 2>/dev/null || true)
+  while read -r id; do
+    [ -n "$id" ] || continue
+    [ "$id" = "$keep" ] && continue
+    e2e_curl -s --max-time 5 -X POST "${E2E_SERVER}/close" \
+      -H "Content-Type: application/json" \
+      -d "{\"tabId\":\"$id\"}" >/dev/null 2>&1 || true
+  done < <(_e2e_snapshot_tab_ids)
+}
+
 get_tab_id() {
   echo "$RESULT" | jq -r '.tabId'
 }
