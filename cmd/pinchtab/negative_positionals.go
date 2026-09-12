@@ -112,7 +112,12 @@ func consumesNextToken(cmd *cobra.Command, arg string) bool {
 		if attached {
 			return false
 		}
-		return takesValue(cmd.Flags().Lookup(name), cmd.InheritedFlags().Lookup(name))
+		// PersistentFlags too: a value-flag written BEFORE the subcommand (the remote
+		// form `pinchtab --server <url> set geo …`) is classified on the root, whose
+		// persistent flags (--server, --agent-id) are not yet merged into Flags() at
+		// this pre-Execute stage, so without this the URL reads as a positional and the
+		// subcommand path is lost.
+		return takesValue(cmd.Flags().Lookup(name), cmd.InheritedFlags().Lookup(name), cmd.PersistentFlags().Lookup(name))
 	}
 
 	// A shorthand bundle: pflag walks the characters and gives the REST of the token to
@@ -126,7 +131,7 @@ func consumesNextToken(cmd *cobra.Command, arg string) bool {
 			// non-ASCII byte is not a flag this walk can reason about.
 			return false
 		}
-		if !takesValue(cmd.Flags().ShorthandLookup(c), cmd.InheritedFlags().ShorthandLookup(c)) {
+		if !takesValue(cmd.Flags().ShorthandLookup(c), cmd.InheritedFlags().ShorthandLookup(c), cmd.PersistentFlags().ShorthandLookup(c)) {
 			continue
 		}
 		return i == len(shorthands)-1

@@ -51,6 +51,21 @@ func TestNegativeArgumentsAreMovedBehindTheFlags(t *testing.T) {
 			args: []string{"set", "geo", "-33.8", "151.2", "--json"},
 			want: []string{"set", "geo", "--json", "--", "-33.8", "151.2"},
 		},
+		{
+			// PIN-419: a value-taking PERSISTENT flag (--server) before the subcommand.
+			// It is classified on the root, whose persistent flags are not yet merged
+			// into Flags() at rewrite time, so on HEAD --server does not consume the URL:
+			// the URL becomes a positional, the set-geo path is lost, and cobra reports
+			// the URL as an "unknown command".
+			name: "a persistent --server before the subcommand keeps its value and the path",
+			args: []string{"--server", "http://127.0.0.1:19227", "set", "geo", "51.5", "-0.12"},
+			want: []string{"set", "geo", "--server", "http://127.0.0.1:19227", "--", "51.5", "-0.12"},
+		},
+		{
+			name: "a persistent --agent-id before the subcommand keeps its value and the path",
+			args: []string{"--agent-id", "agent-7", "mouse", "move", "-5", "-5"},
+			want: []string{"mouse", "move", "--agent-id", "agent-7", "--", "-5", "-5"},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := rewriteNegativeNumberArgs(rootCmd, tc.args)
