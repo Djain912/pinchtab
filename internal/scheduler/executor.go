@@ -58,6 +58,17 @@ func buildActionBody(t *Task) map[string]any {
 	return body
 }
 
+// InstanceError is the action endpoint's own failure response, kept typed so the
+// recorded activity event carries the instance's status rather than a flat 502.
+type InstanceError struct {
+	Status int
+	Body   string
+}
+
+func (e *InstanceError) Error() string {
+	return fmt.Sprintf("executor returned %d: %s", e.Status, e.Body)
+}
+
 func (e *actionEndpointExecutor) Execute(ctx context.Context, t *Task) (any, error) {
 	if t.TabID == "" {
 		return nil, fmt.Errorf("tabId is required for task execution")
@@ -110,7 +121,7 @@ func (e *actionEndpointExecutor) Execute(ctx context.Context, t *Task) (any, err
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("executor returned %d: %s", resp.StatusCode, string(respBody))
+		return nil, &InstanceError{Status: resp.StatusCode, Body: string(respBody)}
 	}
 
 	var result any

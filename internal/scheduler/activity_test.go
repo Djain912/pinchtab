@@ -12,12 +12,44 @@ import (
 )
 
 func TestSchedulerRecordsOneActivityEventPerTask(t *testing.T) {
-	instance := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	evt := recordScheduledTask(t, StateDone, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]bool{"success": true}); err != nil {
 			t.Errorf("encode failed: %v", err)
 		}
-	}))
+	})
+	if evt.Source != "scheduler" {
+		t.Errorf("source = %q, want scheduler", evt.Source)
+	}
+	if evt.AgentID != "agent-1" {
+		t.Errorf("agentId = %q, want agent-1", evt.AgentID)
+	}
+	if evt.TabID != "tab-1" {
+		t.Errorf("tabId = %q, want tab-1", evt.TabID)
+	}
+	if evt.Action != "click" {
+		t.Errorf("action = %q, want click", evt.Action)
+	}
+	if evt.Status != http.StatusOK {
+		t.Errorf("status = %d, want 200", evt.Status)
+	}
+}
+
+func TestSchedulerRecordsTheInstanceStatusOnFailure(t *testing.T) {
+	evt := recordScheduledTask(t, StateFailed, func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "selector matched no element", http.StatusNotFound)
+	})
+	if evt.Status != http.StatusNotFound {
+		t.Errorf("status = %d, want the instance's 404, not a flat 502", evt.Status)
+	}
+	if !strings.Contains(evt.Error, "selector matched no element") {
+		t.Errorf("error = %q, want the instance's body", evt.Error)
+	}
+}
+
+func recordScheduledTask(t *testing.T, want TaskState, instanceHandler http.HandlerFunc) activity.Event {
+	t.Helper()
+	instance := httptest.NewServer(instanceHandler)
 	defer instance.Close()
 
 	parts := strings.Split(instance.URL, ":")
@@ -50,7 +82,7 @@ func TestSchedulerRecordsOneActivityEventPerTask(t *testing.T) {
 
 	deadline := time.After(5 * time.Second)
 	for {
-		if got := s.GetTask(task.ID); got != nil && got.GetState() == StateDone {
+		if got := s.GetTask(task.ID); got != nil && got.GetState() == want {
 			break
 		}
 		select {
@@ -82,17 +114,5 @@ func TestSchedulerRecordsOneActivityEventPerTask(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("scheduler activity events = %d, want exactly 1", len(events))
 	}
-	evt := events[0]
-	if evt.Source != "scheduler" {
-		t.Errorf("source = %q, want scheduler", evt.Source)
-	}
-	if evt.AgentID != "agent-1" {
-		t.Errorf("agentId = %q, want agent-1", evt.AgentID)
-	}
-	if evt.TabID != "tab-1" {
-		t.Errorf("tabId = %q, want tab-1", evt.TabID)
-	}
-	if evt.Action != "click" {
-		t.Errorf("action = %q, want click", evt.Action)
-	}
+	return events[0]
 }

@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -145,7 +146,7 @@ func New(cfg Config, resolver InstanceResolver, sink ActivitySink) *Scheduler {
 		cfg:      cfg,
 		queue:    NewTaskQueue(cfg.MaxQueueSize, cfg.MaxPerAgent),
 		results:  NewResultStore(cfg.ResultTTL),
-		executor: &actionEndpointExecutor{resolver: resolver, client: &http.Client{Timeout: 60 * time.Second}},
+		executor: NewActionExecutor(resolver),
 		activity: sink,
 		metrics:  newMetrics(),
 		live:     make(map[string]*Task),
@@ -432,6 +433,10 @@ func (s *Scheduler) recordActivity(t *Task, execErr error, latency time.Duration
 	if execErr != nil {
 		status = http.StatusBadGateway
 		errMsg = execErr.Error()
+		var upstream *InstanceError
+		if errors.As(execErr, &upstream) {
+			status = upstream.Status
+		}
 	}
 	if err := s.activity.Record(activity.Event{
 		Timestamp:  timeNow().UTC(),
