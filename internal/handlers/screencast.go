@@ -100,6 +100,8 @@ func (h *Handlers) HandleScreencast(w http.ResponseWriter, r *http.Request) {
 			}
 		case <-done:
 			return
+		case <-r.Context().Done():
+			return
 		case <-time.After(10 * time.Second):
 			if err := wsutil.WriteServerMessage(conn, ws.OpPing, nil); err != nil {
 				return

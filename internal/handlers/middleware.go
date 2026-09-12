@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -33,6 +34,33 @@ const (
 	backgroundHealthPath    = "/health/background"
 	backgroundHealthHeader  = "PinchTab-Background-Marker"
 )
+
+// streamRevalidateInterval bounds how long a long-lived response outlives the
+// cookie or agent session that authorised it, since auth runs once at connect.
+var streamRevalidateInterval = 15 * time.Second
+
+func isStreamRequest(r *http.Request) bool {
+	if isWebSocketUpgrade(r) {
+		return true
+	}
+	return strings.Contains(r.Header.Get("Accept"), "text/event-stream")
+}
+
+func pollStreamCredential(ctx context.Context, cancel context.CancelFunc, stillValid func() bool) {
+	t := time.NewTicker(streamRevalidateInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if !stillValid() {
+				cancel()
+				return
+			}
+		}
+	}
+}
 
 // requestLogLevel maps the answered status onto a severity an operator can route on. Every
 // request used to log at Info, so a server returning 500s looked exactly like a healthy one
@@ -153,6 +181,8 @@ func AuthMiddlewareWithSessions(live *config.Live, sessions *browsersession.Mana
 			return
 		}
 
+		var revalidate func() bool
+
 		switch creds.Method {
 		case authn.MethodSession:
 			if agentSessions == nil || !agentSessions.Enabled() {
@@ -183,6 +213,11 @@ func AuthMiddlewareWithSessions(live *config.Live, sessions *browsersession.Mana
 				SessionID: sess.ID,
 			})
 			r = session.WithSession(r, sess)
+			sessValue := creds.Value
+			revalidate = func() bool {
+				_, ok := agentSessions.AuthenticateWithoutTouch(sessValue)
+				return ok
+			}
 		case authn.MethodHeader:
 			if subtle.ConstantTimeCompare([]byte(creds.Value), []byte(token)) != 1 {
 				authn.ClearSessionCookie(w, r, cfg != nil && cfg.TrustProxyHeaders, cookieSecureSetting(cfg))
@@ -212,11 +247,23 @@ func AuthMiddlewareWithSessions(live *config.Live, sessions *browsersession.Mana
 				})
 				return
 			}
+			cookieValue := creds.Value
+			revalidate = func() bool {
+				return sessions.Valid(cookieValue, token)
+			}
 		default:
 			authn.ClearSessionCookie(w, r, cfg != nil && cfg.TrustProxyHeaders, cookieSecureSetting(cfg))
 			httpx.Unauthorized(w, httpx.CodeBadToken, creds.Value)
 			return
 		}
+
+		if revalidate != nil && isStreamRequest(r) {
+			ctx, cancel := context.WithCancel(r.Context())
+			defer cancel()
+			r = r.WithContext(ctx)
+			go pollStreamCredential(ctx, cancel, revalidate)
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }

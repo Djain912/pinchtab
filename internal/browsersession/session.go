@@ -196,6 +196,12 @@ func (m *Manager) Validate(sessionID, token string) bool {
 	})
 }
 
+func (m *Manager) Valid(sessionID, token string) bool {
+	return m.withValidSessionRead(sessionID, token, func(authRequest, sessionState) bool {
+		return true
+	})
+}
+
 func (m *Manager) Elevate(sessionID, token string) bool {
 	return m.withValidSession(sessionID, token, func(req authRequest, state sessionState) (saveJob, bool) {
 		state.LastSeen = req.now
