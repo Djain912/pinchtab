@@ -14,11 +14,7 @@ import (
 const (
 	vocabHeader      = "X-PinchTab-Vocab"
 	vocabTabIDHeader = "X-PinchTab-Tab-Id"
-	// VocabTabHeader tells the server which tab the echoed token belongs to, so it
-	// enforces the epoch check only when the action resolves that same tab and
-	// ignores a token left over from a tab the current pointer has since moved off.
-	VocabTabHeader  = "X-PinchTab-Vocab-Tab"
-	vocabStoreLimit = 16
+	vocabStoreLimit  = 16
 )
 
 // vocabEntry pairs a snapshot's vocabulary token with the tab the server

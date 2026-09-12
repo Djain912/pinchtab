@@ -153,6 +153,13 @@ type ActionRequest struct {
 	Browser string `json:"browser,omitempty"`
 
 	Vocab string `json:"vocab,omitempty"`
+
+	// VocabTab names the tab the echoed Vocab token belongs to. The server enforces
+	// the epoch check only when it is empty (legacy clients) or equals the resolved
+	// tab, so a token left over from a tab the caller has since moved off is ignored
+	// rather than refused. It rides in the body (and the GET query) because the
+	// X-PinchTab-* request headers are stripped from public clients.
+	VocabTab string `json:"vocabTab,omitempty"`
 }
 
 type actionRequestAlias ActionRequest

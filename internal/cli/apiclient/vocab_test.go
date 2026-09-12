@@ -74,7 +74,7 @@ func (s *vocabServer) handle(w http.ResponseWriter, r *http.Request) {
 	if v, ok := decoded["vocab"].(string); ok {
 		s.lastVocab, s.hadVocab = v, true
 	}
-	s.lastVocabTab = r.Header.Get("X-PinchTab-Vocab-Tab")
+	s.lastVocabTab, _ = decoded["vocabTab"].(string)
 	_, _ = w.Write([]byte(`{"success":true}`))
 }
 

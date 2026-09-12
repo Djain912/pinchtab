@@ -400,6 +400,7 @@ func decodeActionRequest(w http.ResponseWriter, r *http.Request) (bridge.ActionR
 		req.HasDelta = req.HasDelta || hasDeltaParam
 		req.Browser = q.Get("browser")
 		req.Vocab = q.Get("vocab")
+		req.VocabTab = q.Get("vocabTab")
 		if err := d.Err(); err != nil {
 			httpx.Error(w, 400, err)
 			return bridge.ActionRequest{}, false
@@ -416,12 +417,6 @@ func decodeActionRequest(w http.ResponseWriter, r *http.Request) (bridge.ActionR
 }
 
 const vocabHeader = "X-PinchTab-Vocab"
-
-// vocabTabHeader names the tab the echoed token belongs to. The epoch check runs
-// only when it is empty (a legacy client that cannot tag) or equals the resolved
-// tab; a token tagged for a different tab is ignored, so a stale current pointer
-// after the tab moved proceeds instead of a false supersession.
-const vocabTabHeader = "X-PinchTab-Vocab-Tab"
 
 const vocabSupersededCode = "vocab_superseded"
 
@@ -520,7 +515,7 @@ func (h *Handlers) HandleAction(w http.ResponseWriter, r *http.Request) {
 	if req.Vocab == "" {
 		req.Vocab = r.Header.Get(vocabHeader)
 	}
-	if req.Vocab != "" && actionTargetsRef(req) && vocabTabMatches(r.Header.Get(vocabTabHeader), resolvedTabID) {
+	if req.Vocab != "" && actionTargetsRef(req) && vocabTabMatches(req.VocabTab, resolvedTabID) {
 		if cache := h.Bridge.GetRefCache(resolvedTabID); cache != nil && cache.DomEpoch != "" && cache.DomEpoch != req.Vocab {
 			writeVocabSuperseded(w, resolvedTabID)
 			return

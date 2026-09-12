@@ -124,10 +124,7 @@ func postActionWithHeaders(client *http.Client, base, token string, cmd *cobra.C
 	if _, ok := body["vocab"]; !ok {
 		if vocabTab, tok := apiclient.VocabForAction(base, tabID); tok != "" {
 			body["vocab"] = tok
-			if headers == nil {
-				headers = map[string]string{}
-			}
-			headers[apiclient.VocabTabHeader] = vocabTab
+			body["vocabTab"] = vocabTab
 		}
 	}
 
