@@ -11,19 +11,23 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pinchtab/pinchtab/internal/api/types"
 	"github.com/pinchtab/pinchtab/internal/authn"
 	"github.com/pinchtab/pinchtab/internal/browserops"
 	"github.com/pinchtab/pinchtab/internal/httpx"
 )
 
 const (
-	HeaderAgentID      = "X-Agent-Id"
-	HeaderPTSessionID  = "X-PinchTab-Session-Id"
-	HeaderPTSource     = "X-PinchTab-Source"
+	HeaderAgentID     = "X-Agent-Id"
+	HeaderPTSessionID = "X-PinchTab-Session-Id"
+	// HeaderPTSource and HeaderPTTabID are the two identity headers that also form
+	// part of the CLI/MCP wire contract, so their spelling lives once in api/types
+	// and these alias it. The rest are activity-only and single-homed here.
+	HeaderPTSource     = types.HeaderSource
 	HeaderPTInstance   = "X-PinchTab-Instance-Id"
 	HeaderPTProfileID  = "X-PinchTab-Profile-Id"
 	HeaderPTProfile    = "X-PinchTab-Profile-Name"
-	HeaderPTTabID      = "X-PinchTab-Tab-Id"
+	HeaderPTTabID      = types.HeaderTabID
 	HeaderPTTabCreated = "X-PinchTab-Tab-Created"
 )
 

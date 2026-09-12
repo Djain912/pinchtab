@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/pinchtab/pinchtab/internal/api/types"
 )
 
 // request describes a single API call. body is a JSON payload (nil = no body;
@@ -74,7 +76,7 @@ func doRequest(client *http.Client, token string, r request) (int, []byte, error
 }
 
 func setClientHeaders(req *http.Request, token string) {
-	req.Header.Set("X-PinchTab-Source", "client")
+	req.Header.Set(types.HeaderSource, "client")
 	if token == "" {
 		return
 	}

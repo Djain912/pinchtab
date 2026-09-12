@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/pinchtab/pinchtab/internal/activity"
+	"github.com/pinchtab/pinchtab/internal/api/types"
 	"github.com/pinchtab/pinchtab/internal/bridge"
 	"github.com/pinchtab/pinchtab/internal/browserops"
 	"github.com/pinchtab/pinchtab/internal/browsers"
@@ -416,7 +417,7 @@ func decodeActionRequest(w http.ResponseWriter, r *http.Request) (bridge.ActionR
 	return req, true
 }
 
-const vocabHeader = "X-PinchTab-Vocab"
+const vocabHeader = types.HeaderVocab
 
 const vocabSupersededCode = "vocab_superseded"
 

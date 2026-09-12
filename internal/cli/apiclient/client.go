@@ -9,11 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/pinchtab/pinchtab/internal/api/types"
 )
 
 const (
-	vocabHeader      = "X-PinchTab-Vocab"
-	vocabTabIDHeader = "X-PinchTab-Tab-Id"
+	vocabHeader      = types.HeaderVocab
+	vocabTabIDHeader = types.HeaderTabID
 	vocabStoreLimit  = 16
 )
 

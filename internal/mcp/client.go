@@ -14,9 +14,10 @@ import (
 	"time"
 
 	"github.com/pinchtab/pinchtab/internal/activity"
+	"github.com/pinchtab/pinchtab/internal/api/types"
 )
 
-const vocabHeader = "X-PinchTab-Vocab"
+const vocabHeader = types.HeaderVocab
 
 // vocabStore holds the last snapshot vocabulary token per tab so an interaction
 // echoes it back and a ref minted under a superseded snapshot is refused rather
