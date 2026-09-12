@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -29,6 +30,50 @@ func TestBrowserCommandRegistration(t *testing.T) {
 		if hoverCmd.Flags().Lookup(name) == nil {
 			t.Errorf("hoverCmd missing flag %q", name)
 		}
+	}
+}
+
+func TestTextCommandRegistersMarkdownAndOutput(t *testing.T) {
+	for _, name := range []string{"markdown", "output"} {
+		if textCmd.Flags().Lookup(name) == nil {
+			t.Errorf("textCmd missing flag %q", name)
+		}
+	}
+	if f := textCmd.Flags().Lookup("output"); f != nil && f.Shorthand != "o" {
+		t.Errorf("--output shorthand = %q, want o (the file-output idiom download/screenshot/capture use)", f.Shorthand)
+	}
+}
+
+func TestTextMarkdownRefusesConflictingModesLocally(t *testing.T) {
+	if textCmd.PreRunE == nil {
+		t.Fatal("textCmd has no PreRunE, so --markdown --full costs a server round trip to discover")
+	}
+	defer func() {
+		_ = textCmd.Flags().Set("markdown", "false")
+		_ = textCmd.Flags().Set("full", "false")
+		_ = textCmd.Flags().Set("raw", "false")
+	}()
+
+	for _, conflicting := range []string{"full", "raw"} {
+		_ = textCmd.Flags().Set("markdown", "true")
+		_ = textCmd.Flags().Set("full", "false")
+		_ = textCmd.Flags().Set("raw", "false")
+		if err := textCmd.Flags().Set(conflicting, "true"); err != nil {
+			t.Fatal(err)
+		}
+		err := textCmd.PreRunE(textCmd, nil)
+		if err == nil {
+			t.Errorf("--markdown --%s was accepted; it must be refused with a usage error", conflicting)
+		} else if !strings.Contains(err.Error(), "markdown") {
+			t.Errorf("refusal = %v, want it to name --markdown", err)
+		}
+	}
+
+	_ = textCmd.Flags().Set("full", "false")
+	_ = textCmd.Flags().Set("raw", "false")
+	_ = textCmd.Flags().Set("markdown", "true")
+	if err := textCmd.PreRunE(textCmd, nil); err != nil {
+		t.Errorf("--markdown alone was refused: %v", err)
 	}
 }
 

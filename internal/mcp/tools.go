@@ -93,6 +93,7 @@ func allTools() []mcp.Tool {
 		mcp.NewTool("pinchtab_get_text",
 			mcp.WithDescription("Extract readable text content from the current page. Inherits the current frame scope for the tab unless no frame is selected."),
 			tabIDParam(),
+			mcp.WithString("mode", mcp.Description("Extraction mode: 'readability' (default), 'raw', or 'markdown' (preserves links and tables; best for articles). Supersedes raw.")),
 			mcp.WithBoolean("raw", mcp.Description("Return raw text without formatting")),
 			mcp.WithString("format", mcp.Description("Response format: 'text'/'plain' for plain text, default JSON envelope")),
 			mcp.WithNumber("maxChars", mcp.Description("Maximum characters in response (e.g. 3000)")),

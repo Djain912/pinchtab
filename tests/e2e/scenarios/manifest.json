@@ -50,6 +50,13 @@
         "pr"
       ]
     },
+    "cli/text-markdown-basic.sh": {
+      "tags": [
+        "text",
+        "markdown",
+        "pr"
+      ]
+    },
     "api/browser-extended.sh": {
       "tags": [
         "browser",

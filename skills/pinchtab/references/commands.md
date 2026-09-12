@@ -221,7 +221,13 @@ Extract readable text from the page.
 pinchtab text
 pinchtab text --raw    # no formatting cleanup
 pinchtab text "#main"  # text from one element
+pinchtab text --markdown              # Markdown for article-shaped pages (keeps links, tables)
+pinchtab text --markdown --output page.md  # write Markdown to a file, print a one-line confirmation
 ```
+
+Prefer `--markdown` for articles, docs and other prose-heavy pages: it preserves
+headings, inline links and tables, and `--output` keeps a long page out of the
+context window. It cannot be combined with `--full`/`--raw`.
 
 ### `pinchtab find <query>`
 Find elements by text content or CSS selector.

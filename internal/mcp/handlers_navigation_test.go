@@ -370,6 +370,62 @@ func TestHandleGetText(t *testing.T) {
 	}
 }
 
+func TestHandleGetTextModeMarkdown(t *testing.T) {
+	srv := mockPinchTab()
+	defer srv.Close()
+
+	r := callTool(t, "pinchtab_get_text", map[string]any{
+		"mode": "markdown",
+	}, srv)
+
+	if got := getTextQueryValue(t, r, "mode"); got != "markdown" {
+		t.Errorf("outbound query mode = %q, want markdown", got)
+	}
+}
+
+func TestHandleGetTextRawMapsToModeRaw(t *testing.T) {
+	srv := mockPinchTab()
+	defer srv.Close()
+
+	r := callTool(t, "pinchtab_get_text", map[string]any{
+		"raw": true,
+	}, srv)
+
+	if got := getTextQueryValue(t, r, "mode"); got != "raw" {
+		t.Errorf("outbound query mode = %q, want raw for raw:true", got)
+	}
+}
+
+func TestHandleGetTextModeSupersedesRaw(t *testing.T) {
+	srv := mockPinchTab()
+	defer srv.Close()
+
+	r := callTool(t, "pinchtab_get_text", map[string]any{
+		"mode": "markdown",
+		"raw":  true,
+	}, srv)
+
+	if got := getTextQueryValue(t, r, "mode"); got != "markdown" {
+		t.Errorf("outbound query mode = %q, want markdown; mode must win over raw when both are set", got)
+	}
+}
+
+// getTextQueryValue reads the first value the mock recorded for a query key. The
+// mock echoes r.URL.Query() (a map of string→[]string) into resp["query"].
+func getTextQueryValue(t *testing.T, r *mcp.CallToolResult, key string) string {
+	t.Helper()
+	query, ok := resultJSON(t, r)["query"].(map[string]any)
+	if !ok {
+		t.Fatalf("result carried no query object: %s", resultText(t, r))
+	}
+	values, ok := query[key].([]any)
+	if !ok || len(values) == 0 {
+		return ""
+	}
+	s, _ := values[0].(string)
+	return s
+}
+
 func TestHandleGetTextFormat(t *testing.T) {
 	srv := mockPinchTab()
 	defer srv.Close()

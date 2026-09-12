@@ -48,7 +48,7 @@ text:
 
 | Field | Description |
 |-------|-------------|
-| `extraction` | `readability`, `raw` (explicitly requested), or `readability_fallback` (Readability collapsed, raw text returned) |
+| `extraction` | `readability`, `raw` (explicitly requested), `markdown` (page converted to Markdown), `markdown_fallback` (converter yielded nothing, raw text returned), or `readability_fallback` (Readability collapsed, raw text returned) |
 | `textLength` | Length of the returned text |
 | `rawLength` | Length of `document.body.innerText`, so coverage is computable |
 
@@ -57,6 +57,13 @@ With `format=text` the body stays bare and the mode is reported in the
 `truncated` keeps its meaning — text cut by `maxChars` — and is unaffected by a
 fallback. The CLI prints a one-line note on stderr when a fallback fired; stdout
 stays text-only.
+
+`--markdown` (`mode=markdown`) converts the rendered page to Markdown, preserving
+headings, inline links, and tables — the best mode for article-shaped pages you
+want to keep or re-read. It is mutually exclusive with `--full`/`--raw`. Pair it
+with `--output <file>` (`-o`) to write the Markdown to disk; the command then
+prints only a one-line confirmation so a long page never floods an agent's
+context.
 
 ## Examples
 
@@ -68,6 +75,10 @@ pinchtab text
 pinchtab text --full
 pinchtab text --raw                     # Alias of --full
 
+# Markdown (preserves headings, links, tables)
+pinchtab text --markdown
+pinchtab text --markdown --output page.md   # writes the file, prints a one-line confirmation
+
 # Extract text from specific element
 pinchtab text "#main-content"
 pinchtab text --selector ".article-body"
@@ -77,6 +88,7 @@ pinchtab text --frame FRAME123
 
 # API equivalent
 curl "http://localhost:9867/text?mode=raw"
+curl "http://localhost:9867/text?mode=markdown"
 curl "http://localhost:9867/text?selector=%23article-body"
 curl "http://localhost:9867/text?frameId=FRAME123&format=text"
 ```
@@ -89,6 +101,8 @@ curl "http://localhost:9867/text?frameId=FRAME123&format=text"
 | `--frame` | Extract from specific iframe by frameId |
 | `--full` | Full page innerText instead of Readability |
 | `--raw` | Alias for --full |
+| `--markdown` | Convert the page to Markdown (headings, links, tables); mutually exclusive with `--full`/`--raw` |
+| `--output`, `-o` | Write the extracted text to this file and print a one-line confirmation |
 | `--json` | Output JSON instead of plain text |
 | `--tab` | Target specific tab |
 
@@ -99,7 +113,7 @@ curl "http://localhost:9867/text?frameId=FRAME123&format=text"
 | `selector` | Element selector for text extraction |
 | `ref` | Snapshot ref (e.g., `e5`) |
 | `frameId` | Target iframe ID |
-| `mode` | `raw` for innerText, default for Readability |
+| `mode` | `raw` for innerText, `markdown` for Markdown, default for Readability |
 | `maxChars` | Truncate output |
 | `format` | `text` for plain text response |
 

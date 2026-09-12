@@ -139,7 +139,7 @@ PinchTab currently exposes 42 tools:
 - `pinchtab_frame`
 - `pinchtab_screenshot`
 - `pinchtab_capture` — paired screenshot + snapshot from one DOM epoch
-- `pinchtab_get_text`
+- `pinchtab_get_text` — extract page text; `mode` selects `readability` (default), `raw`, or `markdown` (preserves links and tables, best for article-shaped pages). `mode` supersedes the legacy boolean `raw`. Example: `pinchtab_get_text {"mode":"markdown"}`
 
 ### Interaction
 

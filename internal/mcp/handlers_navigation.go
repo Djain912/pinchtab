@@ -395,7 +395,11 @@ func handleGetText(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.C
 		if tabID := optString(r, "tabId"); tabID != "" {
 			q.Set("tabId", tabID)
 		}
-		if v, ok := optBool(r, "raw"); ok && v {
+		// mode supersedes the boolean raw so a caller can ask for markdown; raw:true
+		// alone still maps to mode=raw for older callers.
+		if mode := optString(r, "mode"); mode != "" {
+			q.Set("mode", mode)
+		} else if v, ok := optBool(r, "raw"); ok && v {
 			q.Set("mode", "raw")
 		}
 		if format := optString(r, "format"); format != "" {

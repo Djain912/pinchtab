@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -173,9 +174,20 @@ func configureBrowserFlags() {
 
 	textCmd.Flags().Bool("raw", false, "Raw extraction mode (alias of --full)")
 	textCmd.Flags().Bool("full", false, "Return the full page text (document.body.innerText, the API's mode=full/mode=raw) instead of the default Readability-filtered content")
+	textCmd.Flags().Bool("markdown", false, "Return the page as Markdown (preserves headings, links and tables); mutually exclusive with --full/--raw")
+	textCmd.Flags().StringP("output", "o", "", "Write the extracted text to this file and print a one-line confirmation instead of the body")
 	textCmd.Flags().String("frame", "", "Extract text from a specific iframe by frameId. If unset, uses the tab's active frame scope (set via `pinchtab frame`) or the top-level document.")
 	textCmd.Flags().StringP("selector", "s", "", "Element selector to extract text from (ref/CSS/XPath/text)")
 	textCmd.Flags().Bool("json", false, "Output full JSON response instead of just text content")
+	textCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		markdown, _ := cmd.Flags().GetBool("markdown")
+		raw, _ := cmd.Flags().GetBool("raw")
+		full, _ := cmd.Flags().GetBool("full")
+		if markdown && (raw || full) {
+			return fmt.Errorf("--markdown cannot be combined with --full or --raw; each selects a different extraction mode")
+		}
+		return nil
+	}
 	titleCmd.Flags().String("frame", "", "Read title from a specific iframe by frameId. If unset, uses the tab's active frame scope or top-level document.")
 	titleCmd.Flags().Bool("json", false, "Output full JSON response instead of just title")
 	urlCmd.Flags().String("frame", "", "Read URL from a specific iframe by frameId. If unset, uses the tab's active frame scope or top-level document.")

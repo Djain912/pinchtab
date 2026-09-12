@@ -197,6 +197,8 @@ pinchtab snap --text                    # Text output
 pinchtab text                           # Extract readable text
 pinchtab text --full                    # Full page innerText
 pinchtab text --raw                     # Raw extraction
+pinchtab text --markdown                 # Markdown (preserves links, tables)
+pinchtab text --markdown --output page.md # Write Markdown to a file (one-line confirmation)
 pinchtab text --frame <frameId>         # Read text from one iframe
 pinchtab find <query>                   # Semantic element search
 pinchtab find --threshold <0-1>         # Minimum similarity score
