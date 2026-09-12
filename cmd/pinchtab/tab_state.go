@@ -32,6 +32,9 @@ func (tabStateStore) useLocal() bool {
 	if strings.TrimSpace(os.Getenv("PINCHTAB_SESSION")) != "" {
 		return false
 	}
+	if base, _ := resolveTabStateEndpoint(); base == "" {
+		return false
+	}
 	return resolveCLIAgentID() == ""
 }
 

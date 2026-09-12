@@ -38,10 +38,16 @@ func buildURL(base, path string, params url.Values) string {
 func doRequest(client *http.Client, token string, r request) (int, []byte, error) {
 	var bodyReader io.Reader
 	if r.body != nil {
-		data, _ := json.Marshal(r.body)
+		data, err := json.Marshal(r.body)
+		if err != nil {
+			return 0, nil, fmt.Errorf("encode request body for %s: %w", r.url, err)
+		}
 		bodyReader = bytes.NewReader(data)
 	}
-	req, _ := http.NewRequest(r.method, r.url, bodyReader)
+	req, err := http.NewRequest(r.method, r.url, bodyReader)
+	if err != nil {
+		return 0, nil, fmt.Errorf("build request: %w", err)
+	}
 	if r.body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

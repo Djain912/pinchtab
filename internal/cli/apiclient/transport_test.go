@@ -3,10 +3,12 @@ package apiclient
 import (
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -62,5 +64,33 @@ func TestACompleteResponseIsStillReturnedWhole(t *testing.T) {
 	}
 	if code != http.StatusOK || string(body) != `{"tabs":[]}` {
 		t.Errorf("code %d body %q, want 200 and the whole body", code, string(body))
+	}
+}
+
+func TestAnUnbuildableRequestFailsBeforeTheWire(t *testing.T) {
+	var arrived atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		arrived.Add(1)
+	}))
+	defer srv.Close()
+
+	for name, call := range map[string]func() error{
+		"malformed base": func() error {
+			_, err := DoPostRawE(srv.Client(), "http://bad host:9867", "", "/action", map[string]any{"kind": "click"})
+			return err
+		},
+		"unencodable body": func() error {
+			_, err := DoPostRawE(srv.Client(), srv.URL, "", "/geolocation", map[string]any{"latitude": math.NaN(), "longitude": 0.0})
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := call(); err == nil {
+				t.Fatal("the call succeeded; it must refuse a request it could not build")
+			}
+			if got := arrived.Load(); got != 0 {
+				t.Fatalf("%d request(s) reached the server", got)
+			}
+		})
 	}
 }
