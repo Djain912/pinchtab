@@ -57,17 +57,18 @@ func Wait(client *http.Client, base, token string, args []string, cmd *cobra.Com
 		path = "/tabs/" + tabID + "/wait"
 	}
 
+	result := apiclient.DoPostQuiet(client, base, token, path, body)
+
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 	if jsonOutput {
-		apiclient.DoPost(client, base, token, path, body)
-		return
+		printIndented(result)
 	}
 
-	result := apiclient.DoPostQuiet(client, base, token, path, body)
-	// Server returns waited=false when condition isn't met within timeout
 	if waited, ok := result["waited"].(bool); ok && !waited {
 		output.Error("wait", "timeout", output.ExitTimeout)
 		return
 	}
-	output.Success()
+	if !jsonOutput {
+		output.Success()
+	}
 }
