@@ -251,50 +251,59 @@ func TestHandleMacro_FollowsAutoSwitchedTab(t *testing.T) {
 	}
 }
 
-// A stray or mistargeted query parameter (the common ?tab= mistake, or any unknown
-// key) must be refused 400 before any step runs, matching the singular /action —
-// otherwise the batch silently runs its writes on the current tab. A clean batch,
-// with no query or only routing keys, is unaffected.
+// lockedActionBridge is autoSwitchActionBridge with the current tab (tab1) held
+// by lockOwner, so a batch only executes when the request carries a matching
+// owner — the observable effect of reading owner from the query.
+type lockedActionBridge struct {
+	autoSwitchActionBridge
+	lockOwner string
+}
+
+func (m *lockedActionBridge) TabLockInfo(string) *bridge.LockInfo {
+	return &bridge.LockInfo{Owner: m.lockOwner}
+}
+
+// A stray or mistargeted query parameter (the common ?tab= mistake, the correctly
+// spelled but ignored ?tabId=, or any unknown key) must be refused 400 before any
+// step runs, matching the singular /action — otherwise the batch silently runs its
+// writes on the current tab. The one query key the batch reads, owner, is honoured.
 func TestHandleActions_RejectsStrayQueryParam(t *testing.T) {
 	body := `{"actions":[{"kind":"click"},{"kind":"type","text":"after"}]}`
 
-	t.Run("stray tab is refused before execution", func(t *testing.T) {
-		b := &autoSwitchActionBridge{}
-		h := New(b, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
-		req := httptest.NewRequest("POST", "/actions?tab=tab_fixture", bytes.NewReader([]byte(body)))
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
+	// Every key the batch does not read from the query must be refused before any
+	// step runs — including ?tabId=, which the batch ignores (it targets the tab
+	// from the body/path/current rule) and would otherwise run on the current tab.
+	for _, tc := range []struct {
+		name  string
+		query string
+	}{
+		{"stray tab", "tab=tab_fixture"},
+		{"mistargeted tabId", "tabId=tab_other"},
+		{"unknown key", "bogusparam=1"},
+		{"per-step field", "ref=e1"},
+	} {
+		t.Run(tc.name+" is refused before execution", func(t *testing.T) {
+			b := &autoSwitchActionBridge{}
+			h := New(b, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
+			req := httptest.NewRequest("POST", "/actions?"+tc.query, bytes.NewReader([]byte(body)))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
 
-		h.HandleActions(w, req)
+			h.HandleActions(w, req)
 
-		if w.Code != 400 {
-			t.Fatalf("expected 400 for a stray ?tab=, got %d: %s", w.Code, w.Body.String())
-		}
-		var resp map[string]string
-		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-			t.Fatalf("decode: %v", err)
-		}
-		if !strings.Contains(resp["error"], "tab") || !strings.Contains(resp["error"], "silently dropped") {
-			t.Errorf("error should name the offender and the drop: %q", resp["error"])
-		}
-		if len(b.actionTabs) != 0 {
-			t.Errorf("the batch executed %d steps despite the 400; no step may run on a rejected request: %v", len(b.actionTabs), b.actionTabs)
-		}
-	})
-
-	t.Run("unknown key is refused", func(t *testing.T) {
-		b := &autoSwitchActionBridge{}
-		h := New(b, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
-		req := httptest.NewRequest("POST", "/actions?bogusparam=1", bytes.NewReader([]byte(body)))
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-
-		h.HandleActions(w, req)
-
-		if w.Code != 400 {
-			t.Fatalf("expected 400 for an unknown query key, got %d: %s", w.Code, w.Body.String())
-		}
-	})
+			if w.Code != 400 {
+				t.Fatalf("expected 400 for ?%s, got %d: %s", tc.query, w.Code, w.Body.String())
+			}
+			if resp := map[string]string{}; json.Unmarshal(w.Body.Bytes(), &resp) == nil {
+				if !strings.Contains(resp["error"], "silently dropped") {
+					t.Errorf("error should carry the drop guidance: %q", resp["error"])
+				}
+			}
+			if len(b.actionTabs) != 0 {
+				t.Errorf("the batch executed %d steps despite the 400; no step may run on a rejected request: %v", len(b.actionTabs), b.actionTabs)
+			}
+		})
+	}
 
 	t.Run("no query executes normally", func(t *testing.T) {
 		b := &autoSwitchActionBridge{}
@@ -310,17 +319,41 @@ func TestHandleActions_RejectsStrayQueryParam(t *testing.T) {
 		}
 	})
 
-	t.Run("routing key is accepted", func(t *testing.T) {
-		b := &autoSwitchActionBridge{}
+	// owner is the one query key the batch reads (resolveOwner). Prove the EFFECT,
+	// not just the status: with the current tab locked by "agent", ?owner=agent must
+	// pass the lease and run every step, while the same request with no owner is
+	// refused 423 — so the owner used came from the query.
+	t.Run("owner from the query is read and honoured", func(t *testing.T) {
+		b := &lockedActionBridge{lockOwner: "agent"}
 		h := New(b, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
-		req := httptest.NewRequest("POST", "/actions?browser=chrome", bytes.NewReader([]byte(body)))
+		req := httptest.NewRequest("POST", "/actions?owner=agent", bytes.NewReader([]byte(body)))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
 		h.HandleActions(w, req)
 
 		if w.Code != 200 {
-			t.Fatalf("expected 200 for a batch with only a routing query key, got %d: %s", w.Code, w.Body.String())
+			t.Fatalf("expected 200 when ?owner= matches the tab lock, got %d: %s", w.Code, w.Body.String())
+		}
+		if len(b.actionTabs) == 0 {
+			t.Error("the batch ran no step, so ?owner= did not unlock the tab")
+		}
+	})
+
+	t.Run("without the query owner the locked tab refuses the batch", func(t *testing.T) {
+		b := &lockedActionBridge{lockOwner: "agent"}
+		h := New(b, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
+		req := httptest.NewRequest("POST", "/actions", bytes.NewReader([]byte(body)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		h.HandleActions(w, req)
+
+		if w.Code != 423 {
+			t.Fatalf("expected 423 for a locked tab with no owner, got %d: %s", w.Code, w.Body.String())
+		}
+		if len(b.actionTabs) != 0 {
+			t.Errorf("the batch ran on a locked tab: %v", b.actionTabs)
 		}
 	})
 }

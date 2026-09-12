@@ -285,18 +285,17 @@ func actionRequestJSONKeys() map[string]struct{} {
 }
 
 // batchActionQueryKeys is the accepted query-parameter set for the batch POST
-// /actions endpoint. The batch takes its steps in the JSON body, not as per-action
-// query fields, so only the tab-context and browser-routing keys are meaningful
-// here — the same ones the routing layers read from the query. Every per-step
-// action field (kind, ref, selector, …) is a stray parameter on this route and is
-// refused, as is a mistargeted ?tab= or any typo. It is a subset of
-// actionQueryKeys, pinned by TestBatchActionQueryKeysAreActionParameters.
+// /actions endpoint: only the keys this route actually reads from the query. The
+// batch takes its steps from the JSON body and its target tab from the
+// body/path/current-tab rule — never from the query — so the one meaningful query
+// key is owner, read by resolveOwner (the r.URL.Query().Get("owner") near the top
+// of this file). Everything else would be silently dropped: a per-step action
+// field, a mistargeted ?tab= or ?tabId= (the batch ignores a query tabId and would
+// run on the current tab), any typo. Each is refused with the same message
+// /action uses. Pinned as a subset of actionQueryKeys by
+// TestBatchActionQueryKeysAreActionParameters.
 var batchActionQueryKeys = map[string]struct{}{
-	"tabId":    {},
-	"browser":  {},
-	"owner":    {},
-	"vocab":    {},
-	"vocabTab": {},
+	"owner": {},
 }
 
 // unknownQueryFields names every supplied parameter not in the known set, sorted
