@@ -251,6 +251,90 @@ func TestHandleMacro_FollowsAutoSwitchedTab(t *testing.T) {
 	}
 }
 
+// A stray or mistargeted query parameter (the common ?tab= mistake, or any unknown
+// key) must be refused 400 before any step runs, matching the singular /action —
+// otherwise the batch silently runs its writes on the current tab. A clean batch,
+// with no query or only routing keys, is unaffected.
+func TestHandleActions_RejectsStrayQueryParam(t *testing.T) {
+	body := `{"actions":[{"kind":"click"},{"kind":"type","text":"after"}]}`
+
+	t.Run("stray tab is refused before execution", func(t *testing.T) {
+		b := &autoSwitchActionBridge{}
+		h := New(b, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
+		req := httptest.NewRequest("POST", "/actions?tab=tab_fixture", bytes.NewReader([]byte(body)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		h.HandleActions(w, req)
+
+		if w.Code != 400 {
+			t.Fatalf("expected 400 for a stray ?tab=, got %d: %s", w.Code, w.Body.String())
+		}
+		var resp map[string]string
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if !strings.Contains(resp["error"], "tab") || !strings.Contains(resp["error"], "silently dropped") {
+			t.Errorf("error should name the offender and the drop: %q", resp["error"])
+		}
+		if len(b.actionTabs) != 0 {
+			t.Errorf("the batch executed %d steps despite the 400; no step may run on a rejected request: %v", len(b.actionTabs), b.actionTabs)
+		}
+	})
+
+	t.Run("unknown key is refused", func(t *testing.T) {
+		b := &autoSwitchActionBridge{}
+		h := New(b, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
+		req := httptest.NewRequest("POST", "/actions?bogusparam=1", bytes.NewReader([]byte(body)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		h.HandleActions(w, req)
+
+		if w.Code != 400 {
+			t.Fatalf("expected 400 for an unknown query key, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("no query executes normally", func(t *testing.T) {
+		b := &autoSwitchActionBridge{}
+		h := New(b, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
+		req := httptest.NewRequest("POST", "/actions", bytes.NewReader([]byte(body)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		h.HandleActions(w, req)
+
+		if w.Code != 200 {
+			t.Fatalf("expected 200 for a clean batch, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("routing key is accepted", func(t *testing.T) {
+		b := &autoSwitchActionBridge{}
+		h := New(b, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
+		req := httptest.NewRequest("POST", "/actions?browser=chrome", bytes.NewReader([]byte(body)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		h.HandleActions(w, req)
+
+		if w.Code != 200 {
+			t.Fatalf("expected 200 for a batch with only a routing query key, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+// The batch accepted set must stay a subset of the action-family vocabulary, so a
+// key added here cannot silently permit something /action itself would refuse.
+func TestBatchActionQueryKeysAreActionParameters(t *testing.T) {
+	for key := range batchActionQueryKeys {
+		if _, ok := actionQueryKeys[key]; !ok {
+			t.Errorf("batchActionQueryKeys has %q, which is not an /action parameter; it would accept a key the singular route refuses", key)
+		}
+	}
+}
+
 func TestHandleActions_ResponseIncludesRoute(t *testing.T) {
 	b := &autoSwitchActionBridge{}
 	h := New(b, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
@@ -987,7 +1071,7 @@ func TestActionQueryAcceptsEveryFieldTheRequestTypeDeclares(t *testing.T) {
 		if key == "" || key == "-" {
 			continue
 		}
-		if unknown := unknownQueryFields(url.Values{key: []string{"1"}}); len(unknown) > 0 {
+		if unknown := unknownQueryFields(url.Values{key: []string{"1"}}, actionQueryKeys); len(unknown) > 0 {
 			t.Errorf("%q is declared by ActionRequest and the GET form calls it unknown; the allow-list is not derived from the type", key)
 		}
 		checked++
@@ -995,7 +1079,7 @@ func TestActionQueryAcceptsEveryFieldTheRequestTypeDeclares(t *testing.T) {
 	if checked == 0 {
 		t.Fatal("no field was checked; the guard is not reading the request type")
 	}
-	if unknown := unknownQueryFields(url.Values{"modifers": []string{"8"}}); len(unknown) != 1 {
+	if unknown := unknownQueryFields(url.Values{"modifers": []string{"8"}}, actionQueryKeys); len(unknown) != 1 {
 		t.Fatalf("a key the type does not declare was not called unknown: %v — the allow-list accepts everything", unknown)
 	}
 }

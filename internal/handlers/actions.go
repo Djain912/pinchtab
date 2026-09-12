@@ -284,13 +284,28 @@ func actionRequestJSONKeys() map[string]struct{} {
 	return keys
 }
 
-// unknownQueryFields names every supplied parameter the request type does not declare, sorted
-// so the refusal reads the same on every run. Presence follows the decoder's own rule — a
-// non-empty value — so ?_= is absent rather than an unknown request.
-func unknownQueryFields(q url.Values) []string {
+// batchActionQueryKeys is the accepted query-parameter set for the batch POST
+// /actions endpoint. The batch takes its steps in the JSON body, not as per-action
+// query fields, so only the tab-context and browser-routing keys are meaningful
+// here — the same ones the routing layers read from the query. Every per-step
+// action field (kind, ref, selector, …) is a stray parameter on this route and is
+// refused, as is a mistargeted ?tab= or any typo. It is a subset of
+// actionQueryKeys, pinned by TestBatchActionQueryKeysAreActionParameters.
+var batchActionQueryKeys = map[string]struct{}{
+	"tabId":    {},
+	"browser":  {},
+	"owner":    {},
+	"vocab":    {},
+	"vocabTab": {},
+}
+
+// unknownQueryFields names every supplied parameter not in the known set, sorted
+// so the refusal reads the same on every run. Presence follows the decoder's own
+// rule — a non-empty value — so ?_= is absent rather than an unknown request.
+func unknownQueryFields(q url.Values, known map[string]struct{}) []string {
 	var unknown []string
 	for key := range q {
-		if _, known := actionQueryKeys[key]; known {
+		if _, ok := known[key]; ok {
 			continue
 		}
 		if strings.TrimSpace(q.Get(key)) == "" {
@@ -360,7 +375,7 @@ func decodeActionRequest(w http.ResponseWriter, r *http.Request) (bridge.ActionR
 			httpx.Error(w, 400, fmt.Errorf("%s cannot be sent as query parameters and would be silently dropped; send this as POST /action with a JSON body", strings.Join(offenders, ", ")))
 			return bridge.ActionRequest{}, false
 		}
-		if unknown := unknownQueryFields(q); len(unknown) > 0 {
+		if unknown := unknownQueryFields(q, actionQueryKeys); len(unknown) > 0 {
 			httpx.Error(w, 400, unknownQueryFieldsError(unknown))
 			return bridge.ActionRequest{}, false
 		}
@@ -760,6 +775,15 @@ func (h *Handlers) writeUnknownActionKind(w http.ResponseWriter, kind string) {
 }
 
 func (h *Handlers) HandleActions(w http.ResponseWriter, r *http.Request) {
+	// Refuse a stray or mistargeted query parameter before any step runs, matching
+	// the singular /action: the batch takes its steps and tab from the JSON body, so
+	// a ?tab= (or any unknown key) would be silently dropped and the batch would run
+	// on the current tab — a silent wrong-tab write.
+	if unknown := unknownQueryFields(r.URL.Query(), batchActionQueryKeys); len(unknown) > 0 {
+		httpx.Error(w, 400, unknownQueryFieldsError(unknown))
+		return
+	}
+
 	var req actionsRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodySize)).Decode(&req); err != nil {
 		httpx.Error(w, 400, fmt.Errorf("decode: %w", err))
