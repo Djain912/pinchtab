@@ -78,7 +78,7 @@ The result store keeps snapshots of tasks and evicts terminal tasks after the co
 
 The scheduler takes the orchestrator directly as its `InstanceResolver`: `ResolveTabInstance(tabId)` maps a `tabId` to the owning instance port, which is how the scheduler knows where to forward execution.
 
-The orchestrator also implements `RequestAuthorizer`. Before dispatch the executor calls `AuthorizeTabRequest(tabId, req)`, which routes through the orchestrator's single hop-auth owner `applyInstanceAuth`: the request carries the instance's bearer token and, on a trusted child hop, the internal token. That is what lets the instance honor the `X-PinchTab-*` identity headers instead of stripping them at ingress, so the action records as `scheduler` rather than `client`. A resolver that does not implement `RequestAuthorizer` leaves the request unauthorized.
+The orchestrator also implements `RequestAuthorizer`. Before dispatch the executor calls `AuthorizeTabRequest(tabId, req)`, which routes through the orchestrator's single hop-auth owner `applyInstanceAuth`: the request carries the instance's bearer token and, on a trusted child hop, the internal token. That is what lets the instance honor the `X-PinchTab-*` identity headers instead of stripping them at ingress, so the instance attributes the action to `scheduler` rather than `client`. Managed child instances run with activity recording off, so that attribution is persisted only by an instance that records activity. A resolver that does not implement `RequestAuthorizer` sends no credential, and an instance that requires one refuses the task with `401`.
 
 ## Dispatch Lifecycle
 
