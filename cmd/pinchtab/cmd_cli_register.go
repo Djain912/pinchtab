@@ -27,7 +27,7 @@ func browserRootCommands() []*cobra.Command {
 		downloadCmd, uploadCmd, findCmd, selectCmd, checkCmd, uncheckCmd, networkCmd, waitCmd,
 		keyboardCmd, keydownCmd, keyupCmd, scrollintoviewCmd, dialogCmd, consoleCmd, errorsCmd,
 		clipboardCmd, cacheCmd, cookiesCmd, setCmd, storageCmd, stateCmd, closeCmd, handoffCmd,
-		resumeCmd, handoffStatusCmd, recordCmd, auditCmd, compareCmd, scrapeCmd,
+		resumeCmd, handoffStatusCmd, recordCmd, auditCmd, compareCmd, scrapeCmd, a11yCmd,
 	}
 }
 
@@ -46,8 +46,10 @@ func registerBrowserCommands() {
 	mouseCmd.AddCommand(mouseMoveCmd, mouseDownCmd, mouseUpCmd, mouseWheelCmd)
 	networkCmd.AddCommand(networkRouteCmd, networkUnrouteCmd, networkRulesCmd)
 	recordCmd.AddCommand(recordStartCmd, recordStopCmd, recordStatusCmd)
+	a11yCmd.AddCommand(a11yAuditCmd)
 
 	configureBrowserFlags()
+	configureA11yFlags()
 
 	addRootCommands(rootCmds...)
 }
