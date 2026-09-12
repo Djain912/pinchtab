@@ -191,6 +191,17 @@ var publicClientPackages = map[string]string{
 var publicClientExemptHeaders = map[string]map[string]string{
 	"internal/cli/apiclient": {"x-pinchtab-source": "harmless: bearer credential fallback records the same 'client' label"},
 	"cmd/pinchtab":           {"x-pinchtab-source": "harmless: same as the CLI apiclient — bearer fallback yields 'client'"},
+	// PENDING (PIN-384, blocked): the scheduler's Source/Tab-Id are stripped today, so it
+	// records as 'client'. The fix is to send the trusted internal token via the
+	// orchestrator's hop-auth owner (applyInstanceAuth) — which lives outside this card's
+	// footprint (orchestrator/scheduler interface/server wiring). Remove these two entries
+	// when that lands and the executor routes through the authorizer.
+	"internal/scheduler": {
+		"x-pinchtab-source":  "PENDING PIN-384: needs the orchestrator internal-token hop-auth; stripped until then",
+		"x-pinchtab-tab-id":  "PENDING PIN-384: needs the orchestrator internal-token hop-auth; stripped until then",
+		"x-pinchtab-event":   "webhook.go: outbound event-webhook to an EXTERNAL receiver that reads these; not a PinchTab listener behind the strip layer",
+		"x-pinchtab-task-id": "webhook.go: outbound event-webhook to an EXTERNAL receiver that reads these; not a PinchTab listener behind the strip layer",
+	},
 }
 
 func resolveHeaderName(arg ast.Expr) (string, bool) {
