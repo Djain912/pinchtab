@@ -528,21 +528,53 @@ func TestTruncateCharsLine_RuneCutsLongFirstLine(t *testing.T) {
 	}
 }
 
-// A cut that would land inside a [..](..) link drops the whole line rather than
-// emit a half-open link; the fitting heading before it survives.
+// A cut that would land inside a [..](..) link is pulled back to before the
+// link, never emitting a half-open one — and the text before the link survives
+// rather than the whole line being dropped.
 func TestTruncateCharsLine_NeverSplitsLink(t *testing.T) {
-	line2 := "Read [the annual report](https://example.com/reports/2026/annual.pdf) today"
-	body := "# Title\n" + line2
-	cut, truncated := truncateCharsLine(body, 30) // budget lands inside the link text
-	if !truncated {
-		t.Fatal("expected a cut")
+	assertNoPartialLink := func(t *testing.T, cut string) {
+		t.Helper()
+		if strings.Contains(cut, "](") || strings.Count(cut, "[") != strings.Count(cut, "]") {
+			t.Fatalf("a partial link survived: %q", cut)
+		}
 	}
-	if cut != "# Title" {
-		t.Fatalf("a mid-link cut must drop the line, keeping only the heading; got %q", cut)
-	}
-	if strings.Contains(cut, "](") || strings.Count(cut, "[") != strings.Count(cut, "]") {
-		t.Fatalf("a partial link survived: %q", cut)
-	}
+
+	t.Run("cut pulls back to before the link, keeping the lead", func(t *testing.T) {
+		line2 := "Read [the annual report](https://example.com/reports/2026/annual.pdf) today"
+		body := "# Title\n" + line2
+		cut, truncated := truncateCharsLine(body, 30) // budget lands inside the link
+		if !truncated {
+			t.Fatal("expected a cut")
+		}
+		if cut != "# Title\nRead" {
+			t.Fatalf("expected the lead before the link to survive; got %q", cut)
+		}
+		assertNoPartialLink(t, cut)
+	})
+
+	// A long opening paragraph with an inline link across the limit must still
+	// return the prose before the link, not an empty body.
+	t.Run("long first line with a link across the limit", func(t *testing.T) {
+		lead := strings.Repeat("word ", 38) // 190 chars, trailing space
+		body := lead + "[annual report](https://example.com/x/y/z) and more padding text here"
+		cut, truncated := truncateCharsLine(body, 200) // budget lands inside the link
+		if !truncated {
+			t.Fatal("expected a cut")
+		}
+		if cut == "" {
+			t.Fatal("a long first paragraph with a link must return the prose before it, not empty")
+		}
+		if strings.Contains(cut, "[") {
+			t.Fatalf("the cut must end before the link's '['; got %q", cut)
+		}
+		if !strings.HasPrefix(body, cut) {
+			t.Fatalf("the partial line must be a prefix of the source; got %q", cut)
+		}
+		if n := utf8.RuneCountInString(cut); n > 200 {
+			t.Fatalf("cut kept %d chars, over the 200 limit", n)
+		}
+		assertNoPartialLink(t, cut)
+	})
 }
 
 func TestTruncateCharsLine_NoCutWhenUnderLimit(t *testing.T) {

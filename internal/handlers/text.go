@@ -312,12 +312,11 @@ func truncateChars(s string, limit int) (string, bool) {
 }
 
 // truncateCharsLine cuts s to at most limit characters, keeping whole lines
-// while they fit and then rune-cutting the first line that overruns. The partial
-// line is dropped instead of cut only for the two shapes a mid-line cut would
-// corrupt: a Markdown table row (starts with '|') or a cut that would land inside
-// a [..](..) link — so a cut never splits a table row or link. Reports whether it
-// cut. This differs from truncateChars, which cuts at the exact rune regardless
-// of line structure.
+// while they fit and then rune-cutting the first line that overruns. A cut never
+// splits a Markdown table row or link: a table row (starts with '|') that does
+// not fit is dropped whole, and a cut that would land inside a [..](..) link is
+// pulled back to before the link. Reports whether it cut. This differs from
+// truncateChars, which cuts at the exact rune regardless of line structure.
 func truncateCharsLine(s string, limit int) (string, bool) {
 	if limit < 0 || utf8.RuneCountInString(s) <= limit {
 		return s, false
@@ -358,9 +357,11 @@ func truncateCharsLine(s string, limit int) (string, bool) {
 // cut through one.
 var markdownLinkRe = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`)
 
-// cutLineForMarkdown returns the first budget runes of line for use as the final
-// partial line of a truncation. ok is false when that cut would fall inside a
-// [..](..) link, which must not be split; the caller then drops the line whole.
+// cutLineForMarkdown returns the leading runes of line (at most budget) for use
+// as the final partial line of a truncation. A cut that would fall inside a
+// [..](..) link is pulled back to the link's start so no half-open link escapes,
+// then trailing whitespace is trimmed. ok is false only when nothing survives —
+// the line began with the link that the budget split.
 func cutLineForMarkdown(line string, budget int) (string, bool) {
 	cut := len(line)
 	count := 0
@@ -373,10 +374,15 @@ func cutLineForMarkdown(line string, budget int) (string, bool) {
 	}
 	for _, loc := range markdownLinkRe.FindAllStringIndex(line, -1) {
 		if loc[0] < cut && cut < loc[1] {
-			return "", false
+			cut = loc[0]
+			break
 		}
 	}
-	return line[:cut], true
+	partial := strings.TrimRight(line[:cut], " \t")
+	if partial == "" {
+		return "", false
+	}
+	return partial, true
 }
 
 // writeTextResponse truncates, IDPI-scans, and writes the document text as

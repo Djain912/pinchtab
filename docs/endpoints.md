@@ -332,7 +332,8 @@ It reads the current frame scope's rendered HTML (the document `/html` returns),
 so a `/frame`-selected iframe converts that frame. `format=text` returns the raw
 Markdown body with `Content-Type: text/markdown; charset=utf-8`, and `maxChars`
 keeps whole lines and rune-cuts the final overrunning one, never splitting a
-table row or link (those are dropped whole instead). When the
+table row (dropped whole) or a link (the cut pulls back to before the link). When
+the
 converter yields nothing the response falls back to the raw page text and echoes
 `extraction: "markdown_fallback"`.
 

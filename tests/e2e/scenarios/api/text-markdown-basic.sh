@@ -59,20 +59,46 @@ pt_get "/text?mode=markdown&maxChars=120"
 assert_ok "text markdown maxChars=120"
 assert_json_eq "$RESULT" '.truncated' 'true' "response marked truncated"
 
-# The last line must be whole: no dangling half of a table row or link. Every
-# returned line has to appear verbatim in the untruncated body.
+# Truncation rule: whole lines are kept, the final overrunning line is a rune-cut
+# prefix, a table row is dropped whole, and a cut pulls back to before a [..](..)
+# link. Assert every line but the last is a whole source line; the last is a
+# prefix of some source line; no returned line is a partial table row; and the
+# result leaves no link half-open.
 FULL=$(pt_get "/text?mode=markdown" >/dev/null; echo "$RESULT" | jq -r '.text')
 CUT=$(pt_get "/text?mode=markdown&maxChars=120" >/dev/null; echo "$RESULT" | jq -r '.text')
-PARTIAL_LINE=0
-while IFS= read -r line; do
+CUT_LINES=()
+while IFS= read -r line; do CUT_LINES+=("$line"); done <<<"$CUT"
+LAST_IDX=$(( ${#CUT_LINES[@]} - 1 ))
+LINE_RULE_OK=1
+for i in "${!CUT_LINES[@]}"; do
+  line="${CUT_LINES[$i]}"
   [ -z "$line" ] && continue
-  if ! grep -Fqx -- "$line" <<<"$FULL"; then
-    PARTIAL_LINE=1
-    echo -e "  ${RED}✗${NC} line not whole: $line"
+  if [ "$i" -lt "$LAST_IDX" ]; then
+    if ! grep -Fqx -- "$line" <<<"$FULL"; then
+      LINE_RULE_OK=0; echo -e "  ${RED}✗${NC} non-final line not whole: $line"
+    fi
+  else
+    PREFIX_OK=0
+    while IFS= read -r fline; do
+      case "$fline" in "$line"*) PREFIX_OK=1; break;; esac
+    done <<<"$FULL"
+    if [ "$PREFIX_OK" -eq 0 ]; then
+      LINE_RULE_OK=0; echo -e "  ${RED}✗${NC} final line is not a prefix of any source line: $line"
+    fi
   fi
-done <<<"$CUT"
-if [ "$PARTIAL_LINE" -eq 0 ]; then
-  echo -e "  ${GREEN}✓${NC} every truncated line is a complete source line"
+  case "$line" in
+    "|"*) grep -Fqx -- "$line" <<<"$FULL" || { LINE_RULE_OK=0; echo -e "  ${RED}✗${NC} partial table row: $line"; } ;;
+  esac
+done
+# No half-open link anywhere in the result: brackets balance and every "](" has a
+# closing ")".
+OPEN=$(tr -cd '[' <<<"$CUT" | wc -c); CLOSE=$(tr -cd ']' <<<"$CUT" | wc -c)
+LOPEN=$(grep -o '](' <<<"$CUT" | wc -l); RPAREN=$(tr -cd ')' <<<"$CUT" | wc -c)
+if [ "$OPEN" -ne "$CLOSE" ] || [ "$LOPEN" -gt "$RPAREN" ]; then
+  LINE_RULE_OK=0; echo -e "  ${RED}✗${NC} unbalanced link markup: [=$OPEN ]=$CLOSE ](=$LOPEN )=$RPAREN"
+fi
+if [ "$LINE_RULE_OK" -eq 1 ]; then
+  echo -e "  ${GREEN}✓${NC} truncated lines obey the cut rule (whole lines, prefix last line, no split row or link)"
   ((ASSERTIONS_PASSED++)) || true
 else
   ((ASSERTIONS_FAILED++)) || true
