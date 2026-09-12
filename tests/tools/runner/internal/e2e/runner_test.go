@@ -37,6 +37,11 @@ func TestServicesToBuildAddsOnlyTheRunnersThePlansExecute(t *testing.T) {
 			},
 			want: []string{"pinchtab", "pinchtab-secure", "fixtures", "runner-api", "runner-cli"},
 		},
+		{
+			name:  "an image-only variant pulls in the pinchtab service that builds the shared image",
+			plans: []suitePlan{planWithServices(apiExtendedSuite(), "pinchtab-secure", "fixtures")},
+			want:  []string{"pinchtab", "pinchtab-secure", "fixtures", "runner-api"},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := servicesToBuild(tc.plans, fallback)
