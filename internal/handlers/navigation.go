@@ -204,7 +204,7 @@ func (h *Handlers) resolveNavigateBrowser(w http.ResponseWriter, r *http.Request
 // (still scans and wraps, just warns instead of hard-blocking).
 func idpiScannerHint() string {
 	return ". To read pages like this, set strict mode off: `pinchtab config set security.idpi.strictMode false` " +
-		"then `pinchtab server restart` — content is still scanned and wrapped, just warned instead of blocked (see docs/guides/security.md)"
+		"then restart PinchTab to apply — content is still scanned and wrapped, just warned instead of blocked (see docs/guides/security.md)"
 }
 
 // validateNavigateTargets runs URL validation, the IDPI domain guard, and SSRF
@@ -523,7 +523,7 @@ func (h *Handlers) runNavigate(w http.ResponseWriter, r *http.Request, ex navExe
 		if ex.isNewTab && errors.Is(navErr, context.DeadlineExceeded) {
 			httpx.Error(w, http.StatusServiceUnavailable, fmt.Errorf(
 				"new tab did not load in time: %v; the browser may be out of memory or overloaded; "+
-					"close tabs or restart the instance with `pinchtab server restart`", navErr))
+					"close tabs or restart PinchTab", navErr))
 			return
 		}
 		navigateErrorWithHint(w, classifyNavigateError(navErr), navErr, ex.url)

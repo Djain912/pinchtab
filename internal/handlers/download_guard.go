@@ -26,8 +26,11 @@ const codeDownloadHostBlocked = "download_host_blocked"
 
 var errDownloadHostBlocked = errors.New("internal or blocked host")
 
+// The restart is named in the hint, not this executable remedy: the download
+// guard answers on a bridge as well as a server, and `pinchtab server restart`
+// would stop a bridge, so only the mode-neutral config write is executable here.
 var downloadHostGrant = remedy.Declare(
-	`pinchtab config set security.downloadAllowedDomains "$(pinchtab config get security.downloadAllowedDomains),<host>" && pinchtab server restart`)
+	`pinchtab config set security.downloadAllowedDomains "$(pinchtab config get security.downloadAllowedDomains),<host>"`)
 
 type downloadHostBlockedError struct{ host string }
 
@@ -220,7 +223,7 @@ func downloadHostBlockedDetails(host string) map[string]any {
 		return nil
 	}
 	details := remedy.Details(
-		"Name the host in security.downloadAllowedDomains to let the download endpoint reach it; a loopback entry exposes services on the server's own machine.",
+		"Name the host in security.downloadAllowedDomains to let the download endpoint reach it, then restart PinchTab to apply the change; a loopback entry exposes services on the server's own machine.",
 		downloadHostGrant.Fill(host))
 	details["host"] = host
 	details["setting"] = "security.downloadAllowedDomains"

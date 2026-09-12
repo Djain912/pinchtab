@@ -199,19 +199,29 @@ func TestCapabilityRemedySettingsAreAcceptedByTheConfigEditor(t *testing.T) {
 	}
 }
 
-// The restart half must name a command that exists at that exact path. Finding it
-// through the tree rather than asserting the literal means a renamed or moved
-// verb reds here instead of shipping a remedy nobody can run.
-func TestCapabilityRemedyRestartCommandExists(t *testing.T) {
-	line, _ := httpx.DisabledEndpointDetails("security.allowCookies")["remedy"].(string)
+// The capability remedy must be the mode-neutral config write, never the
+// server-only restart: this gate answers on a bridge too, where `pinchtab server
+// restart` would kill it. The restart guidance lives in the hint instead. This
+// supersedes the old test that required the remedy to name `pinchtab server
+// restart`. That command must still resolve, because the config-set CLI hint names
+// it on the one surface where the mode is known to be a server.
+func TestCapabilityRemedyIsModeNeutralAndServerRestartStillResolves(t *testing.T) {
+	details := httpx.DisabledEndpointDetails("security.allowCookies")
+	remedy, _ := details["remedy"].(string)
+	hint, _ := details["hint"].(string)
 
-	const restart = "pinchtab server restart"
-	if !strings.Contains(line, restart) {
-		t.Fatalf("remedy = %q, want it to name %q", line, restart)
+	if remedy != "pinchtab config set security.allowCookies true" {
+		t.Fatalf("remedy = %q, want the mode-neutral config write", remedy)
+	}
+	if strings.Contains(remedy, "pinchtab server restart") {
+		t.Fatalf("remedy names `pinchtab server restart`, which destroys a bridge if run: %q", remedy)
+	}
+	if !strings.Contains(strings.ToLower(hint), "restart pinchtab") {
+		t.Fatalf("hint does not carry the mode-neutral restart guidance: %q", hint)
 	}
 	found, _, err := rootCmd.Find([]string{"server", "restart"})
 	if err != nil || found.CommandPath() != "pinchtab server restart" {
-		t.Fatalf("`%s` does not resolve to itself (got %q, err %v); the remedy names a command that no longer exists",
-			restart, found.CommandPath(), err)
+		t.Fatalf("`pinchtab server restart` does not resolve to itself (got %q, err %v); the config-set hint names a command that no longer exists",
+			found.CommandPath(), err)
 	}
 }

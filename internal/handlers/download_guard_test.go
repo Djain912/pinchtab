@@ -119,6 +119,7 @@ func TestABlockedDownloadHostRefusalNamesTheSettingAndTheRemedy(t *testing.T) {
 			Host    string `json:"host"`
 			Setting string `json:"setting"`
 			Remedy  string `json:"remedy"`
+			Hint    string `json:"hint"`
 		} `json:"details"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
@@ -133,9 +134,17 @@ func TestABlockedDownloadHostRefusalNamesTheSettingAndTheRemedy(t *testing.T) {
 	if body.Details.Host != "127.0.0.1" || body.Details.Setting != "security.downloadAllowedDomains" {
 		t.Errorf("details name host %q setting %q", body.Details.Host, body.Details.Setting)
 	}
-	for _, want := range []string{"config set security.downloadAllowedDomains", "127.0.0.1", "server restart"} {
+	for _, want := range []string{"config set security.downloadAllowedDomains", "127.0.0.1"} {
 		if !strings.Contains(body.Details.Remedy, want) {
 			t.Errorf("remedy %q lacks %q", body.Details.Remedy, want)
 		}
+	}
+	// The mode-neutral config write only: `server restart` would kill a bridge, so
+	// the restart guidance lives in the hint.
+	if strings.Contains(body.Details.Remedy, "server restart") {
+		t.Errorf("remedy %q names `server restart`, which destroys a bridge if run", body.Details.Remedy)
+	}
+	if !strings.Contains(strings.ToLower(body.Details.Hint), "restart pinchtab") {
+		t.Errorf("hint %q should remind the user to restart PinchTab", body.Details.Hint)
 	}
 }

@@ -186,7 +186,7 @@ func (h *Handlers) annotateBrowserCrash(message string, details map[string]any) 
 	}
 
 	return crashAnnotation(message, details, crash,
-		"this error is a symptom of the dead browser, not of your selector or timeout; restart it with: pinchtab server restart")
+		"this error is a symptom of the dead browser, not of your selector or timeout; restart PinchTab to recover it")
 }
 
 // crashAnnotation is the one shape a crash takes in an error body: the reason in

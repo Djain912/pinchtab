@@ -28,7 +28,7 @@ var idpiDriftedTabRemedy = remedy.Declare("pinchtab back")
 // A refused target URL is the opposite case: nothing navigated, there is nothing
 // to recover from, and the allowlist genuinely is the only lever — so this is the
 // only remedy that names it, and the only place that guidance is rendered.
-const idpiRefusedURLHint = "the requested URL is outside security.allowedDomains, so the request was refused and nothing navigated. Allowing it widens what automation may reach — see docs/guides/security.md."
+const idpiRefusedURLHint = "the requested URL is outside security.allowedDomains, so the request was refused and nothing navigated. Widen the allowlist, then restart PinchTab to apply the change; allowing it widens what automation may reach — see docs/guides/security.md."
 
 // writeIDPIDomainBlocked is the single writer of an IDPI domain-block refusal, so
 // the status and code cannot differ between the three sites that produce one.
@@ -55,10 +55,12 @@ func idpiBlockDetails(url, hint string, r remedy.Remedy) map[string]any {
 	return details
 }
 
-// allowlistWidening appends to the current allowlist rather than replacing it, and carries
-// the restart because the security block is snapshotted at boot.
+// allowlistWidening appends to the current allowlist rather than replacing it. The security
+// block is snapshotted at boot, so the change needs a restart to apply — but the restart is
+// named in the hint, not this executable remedy, because `pinchtab server restart` would stop
+// a bridge, and this refusal answers on a bridge as well as a server.
 var allowlistWidening = remedy.Declare(
-	`pinchtab config set security.allowedDomains "$(pinchtab config get security.allowedDomains),<domain>" && pinchtab server restart`)
+	`pinchtab config set security.allowedDomains "$(pinchtab config get security.allowedDomains),<domain>"`)
 
 // idpiAllowlistRemedy is the copy-pasteable widening of the allowlist. A hostless target
 // (about:blank) cannot be allowlisted at all, so it gets no remedy instead of one that
