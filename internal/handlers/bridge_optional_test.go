@@ -100,13 +100,57 @@ func interfaceMethods(t *testing.T, expr ast.Expr, decls map[string]*ast.Interfa
 	return name, methods
 }
 
-func isHBridge(e ast.Expr) bool {
+func isBridgeSelector(e ast.Expr) bool {
 	sel, ok := e.(*ast.SelectorExpr)
-	if !ok || sel.Sel.Name != "Bridge" {
-		return false
+	return ok && sel.Sel.Name == "Bridge"
+}
+
+func bridgeAliases(file *ast.File) map[string]bool {
+	aliases := map[string]bool{}
+	ast.Inspect(file, func(n ast.Node) bool {
+		switch s := n.(type) {
+		case *ast.AssignStmt:
+			if len(s.Lhs) != len(s.Rhs) {
+				break
+			}
+			for i, rhs := range s.Rhs {
+				if ident, ok := s.Lhs[i].(*ast.Ident); ok && isBridgeSelector(rhs) {
+					aliases[ident.Name] = true
+				}
+			}
+		case *ast.ValueSpec:
+			for i, v := range s.Values {
+				if i < len(s.Names) && isBridgeSelector(v) {
+					aliases[s.Names[i].Name] = true
+				}
+			}
+		}
+		return true
+	})
+	return aliases
+}
+
+func isBridgeValue(e ast.Expr, aliases map[string]bool) bool {
+	if ident, ok := e.(*ast.Ident); ok {
+		return aliases[ident.Name]
 	}
-	recv, ok := sel.X.(*ast.Ident)
-	return ok && recv.Name == "h"
+	return isBridgeSelector(e)
+}
+
+func typeSwitchSubject(s *ast.TypeSwitchStmt) ast.Expr {
+	switch a := s.Assign.(type) {
+	case *ast.ExprStmt:
+		if ta, ok := a.X.(*ast.TypeAssertExpr); ok {
+			return ta.X
+		}
+	case *ast.AssignStmt:
+		if len(a.Rhs) == 1 {
+			if ta, ok := a.Rhs[0].(*ast.TypeAssertExpr); ok {
+				return ta.X
+			}
+		}
+	}
+	return nil
 }
 
 func optionalCapabilitySites(t *testing.T, fset *token.FileSet, files []*ast.File) []optionalCapabilitySite {
@@ -118,11 +162,23 @@ func optionalCapabilitySites(t *testing.T, fset *token.FileSet, files []*ast.Fil
 		sites = append(sites, optionalCapabilitySite{pos: fset.Position(n.Pos()).String(), iface: name, methods: methods, raw: raw})
 	}
 	for _, file := range files {
+		aliases := bridgeAliases(file)
 		ast.Inspect(file, func(n ast.Node) bool {
 			switch e := n.(type) {
 			case *ast.TypeAssertExpr:
-				if e.Type != nil && isHBridge(e.X) {
+				if e.Type != nil && isBridgeValue(e.X, aliases) {
 					add(e, e.Type, true)
+				}
+			case *ast.TypeSwitchStmt:
+				if subject := typeSwitchSubject(e); subject != nil && isBridgeValue(subject, aliases) {
+					for _, stmt := range e.Body.List {
+						for _, typ := range stmt.(*ast.CaseClause).List {
+							if ident, ok := typ.(*ast.Ident); ok && ident.Name == "nil" {
+								continue
+							}
+							add(typ, typ, true)
+						}
+					}
 				}
 			case *ast.CallExpr:
 				if idx, ok := e.Fun.(*ast.IndexExpr); ok {
@@ -209,6 +265,19 @@ func (h *Handlers) planted() {
 	}
 	_, _ = h.Bridge.(interface{ RecordTabScope(string, string, bool) })
 }
+func (hh *Handlers) plantedReceiver() {
+	_, _ = hh.Bridge.(interface{ RecordTabScope(string, string, bool) })
+}
+func (h *Handlers) plantedAlias() {
+	b := h.Bridge
+	_, _ = b.(interface{ RecordTabScope(string, string, bool) })
+}
+func (h *Handlers) plantedSwitch() {
+	switch h.Bridge.(type) {
+	case nil:
+	case interface{ RecordTabScope(string, string, bool) }:
+	}
+}
 `
 	fset, files := parseHandlerSources(t, map[string]string{"planted.go": planted})
 	var plantedSites []optionalCapabilitySite
@@ -217,8 +286,13 @@ func (h *Handlers) planted() {
 			plantedSites = append(plantedSites, site)
 		}
 	}
-	if len(plantedSites) != 2 || !plantedSites[1].raw {
-		t.Fatalf("planted sites = %+v, want the bridgeAs lookup and the raw assertion", plantedSites)
+	if len(plantedSites) != 5 || plantedSites[0].raw {
+		t.Fatalf("planted sites = %+v, want the bridgeAs lookup and four raw assertions", plantedSites)
+	}
+	for _, site := range plantedSites[1:] {
+		if !site.raw {
+			t.Fatalf("planted site %+v was not flagged as a raw assertion", site)
+		}
 	}
 
 	missing := unreachableCapabilities(plantedSites, ghostChromeAdapterOverRealBridge(t))
