@@ -268,11 +268,31 @@ func resultFromBytes(body []byte, code int) (*mcp.CallToolResult, error) {
 	return mcp.NewToolResultText(string(body)), nil
 }
 
-// mcpRemedyGuidance turns a refusal's details.remedy — one pinchtab CLI line the CLI
-// renders verbatim — into guidance an MCP agent can act on, which runs tools rather than
-// a shell. It fires for any remedy whose verb has a matching tool (resume → pinchtab_resume),
-// so every future single-command remedy is served, not just handoff; a verb with no matching
-// tool, or a multi-command remedy, yields nothing and the raw body stands alone.
+// remedyTool is the MCP tool that performs a pinchtab CLI verb, and the tool parameter
+// its single positional value fills.
+type remedyTool struct {
+	name  string
+	param string
+}
+
+// remedyVerbTools maps a pinchtab CLI verb to its MCP tool EXPLICITLY, because neither the
+// name nor the argument follows from the verb: nav's tool is pinchtab_navigate, snap's is
+// pinchtab_snapshot, and dialog's positional is its action, not a tab id. A verb absent here
+// has no MCP counterpart. RemedyToolForVerb and the whole-binary remedy census pin that
+// every declared remedy verb is either in this table — naming a registered tool and a real
+// parameter — or recorded as counterpart-free, so a new remedy cannot ship untranslated.
+var remedyVerbTools = map[string]remedyTool{
+	"resume": {"pinchtab_resume", "tabId"},
+	"dialog": {"pinchtab_dialog", "action"},
+	"nav":    {"pinchtab_navigate", "url"},
+	"back":   {"pinchtab_back", ""},
+	"snap":   {"pinchtab_snapshot", ""},
+}
+
+// mcpRemedyGuidance turns a refusal's details.remedy — one pinchtab CLI line the CLI renders
+// verbatim — into guidance an MCP agent can act on, which runs tools rather than a shell.
+// A verb without an MCP counterpart, or a multi-command remedy, yields nothing and the raw
+// body stands alone.
 func mcpRemedyGuidance(body []byte) string {
 	segments := remedy.Segments(remedyLine(body))
 	if len(segments) != 1 {
@@ -282,14 +302,40 @@ func mcpRemedyGuidance(body []byte) string {
 	if len(words) < 2 {
 		return ""
 	}
-	tool := "pinchtab_" + words[1]
-	if !isRegisteredTool(tool) {
+	tool, ok := remedyVerbTools[words[1]]
+	if !ok {
 		return ""
 	}
-	if arg := firstPositional(words[2:]); arg != "" {
-		return fmt.Sprintf("call %s with tabId %s", tool, arg)
+	if tool.param != "" {
+		if arg := firstPositional(words[2:]); arg != "" {
+			return fmt.Sprintf("call %s with %s %s", tool.name, tool.param, arg)
+		}
 	}
-	return "call " + tool
+	return "call " + tool.name
+}
+
+// RemedyToolForVerb reports the MCP tool a pinchtab CLI verb maps to, and the tool parameter
+// its positional value fills (empty when the tool takes none). It is the seam the whole-binary
+// remedy census reads to prove the mapping stays complete and correct.
+func RemedyToolForVerb(verb string) (name, param string, ok bool) {
+	tool, ok := remedyVerbTools[verb]
+	return tool.name, tool.param, ok
+}
+
+// ToolInputHasParam reports whether name is a registered tool and, when param is non-empty,
+// whether that tool declares param in its input schema.
+func ToolInputHasParam(name, param string) bool {
+	for _, tool := range allTools() {
+		if tool.Name != name {
+			continue
+		}
+		if param == "" {
+			return true
+		}
+		_, ok := tool.InputSchema.Properties[param]
+		return ok
+	}
+	return false
 }
 
 func remedyLine(body []byte) string {
@@ -311,15 +357,6 @@ func firstPositional(words []string) string {
 		}
 	}
 	return ""
-}
-
-func isRegisteredTool(name string) bool {
-	for _, tool := range allTools() {
-		if tool.Name == name {
-			return true
-		}
-	}
-	return false
 }
 
 // reportsNoSuccess is the funnel's body-level failure rule: an endpoint that answers 200
