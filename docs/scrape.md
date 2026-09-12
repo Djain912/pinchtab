@@ -137,6 +137,25 @@ summary:   contentTypes, httpPages, browserPages, failedPages, recommendations
 without `--output-dir`): a single digest with the site overview, the page tree
 by URL pattern, and each page's content (or its snippet in preview mode).
 
+### Summary counters
+
+`httpPages`, `browserPages` and `failedPages` partition the pages: every page
+falls in exactly one, and the three sum to the page total.
+
+- `failedPages` counts the pages that did not return usable content — a page that
+  failed in both engines (a transport `error`) **or** one whose `statusCode` is
+  `>= 400` (a 4xx/5xx response). A `3xx` redirect and a page that never carried a
+  status (`statusCode` `0`/unset) are **not** failures and stay in
+  `httpPages`/`browserPages`. A non-2xx page the browser then rendered into content
+  (`source: "browser"`) is **not** counted as failed either — the recovery cleared
+  the failure, though the page keeps its original `statusCode`. When `failedPages`
+  is non-zero, the recommendations include `"N of M pages returned errors or
+  4xx/5xx responses"`, so broken links surface in the summary rather than being
+  counted as successful pages.
+- `contentTypes` is the taxonomy of the **successful** pages only: a non-2xx page
+  is excluded, so an error body is never reported as an ordinary `page`. The
+  page's own `statusCode` and `markdown` are left untouched.
+
 ### Schema history
 
 `schemaVersion` is stamped into every report so a consumer can detect format

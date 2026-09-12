@@ -157,6 +157,13 @@ func printScrapeSummary(report scrape.Report) {
 		if p.BrowserError != "" {
 			status += " · browser failed: " + p.BrowserError
 		}
+		// A non-2xx page carries no transport error, so without this it printed as an
+		// ordinary "source: http" line and the failure was invisible next to the count.
+		// scrape.PageFailed is the same predicate the summary partitions on, so the line
+		// and the failedPages count agree — a browser-recovered non-2xx page is not marked.
+		if p.StatusCode >= 400 && scrape.PageFailed(p) {
+			status = fmt.Sprintf("failed: HTTP %d", p.StatusCode)
+		}
 		if p.Error != "" {
 			status = "error: " + p.Error
 		}
