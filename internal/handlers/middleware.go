@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -39,11 +42,51 @@ const (
 // cookie or agent session that authorised it, since auth runs once at connect.
 var streamRevalidateInterval = 15 * time.Second
 
-func isStreamRequest(r *http.Request) bool {
-	if isWebSocketUpgrade(r) {
-		return true
+// streamAuthWriter starts the credential poller the moment the handler commits a
+// long-lived response — a text/event-stream content type or a hijack — rather
+// than trusting a request header the SSE handlers never require. A short request
+// that commits neither never triggers onStream, so it starts no poller.
+type streamAuthWriter struct {
+	http.ResponseWriter
+	onStream func()
+	started  bool
+}
+
+func (w *streamAuthWriter) startOnce() {
+	if !w.started {
+		w.started = true
+		w.onStream()
 	}
-	return strings.Contains(r.Header.Get("Accept"), "text/event-stream")
+}
+
+func (w *streamAuthWriter) maybeStart() {
+	if !w.started && strings.Contains(w.Header().Get("Content-Type"), "text/event-stream") {
+		w.startOnce()
+	}
+}
+
+func (w *streamAuthWriter) WriteHeader(code int) {
+	w.maybeStart()
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *streamAuthWriter) Write(b []byte) (int, error) {
+	w.maybeStart()
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *streamAuthWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (w *streamAuthWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	w.startOnce()
+	if hj, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, fmt.Errorf("underlying ResponseWriter is not a Hijacker")
 }
 
 func pollStreamCredential(ctx context.Context, cancel context.CancelFunc, stillValid func() bool) {
@@ -257,11 +300,13 @@ func AuthMiddlewareWithSessions(live *config.Live, sessions *browsersession.Mana
 			return
 		}
 
-		if revalidate != nil && isStreamRequest(r) {
+		if revalidate != nil {
 			ctx, cancel := context.WithCancel(r.Context())
 			defer cancel()
 			r = r.WithContext(ctx)
-			go pollStreamCredential(ctx, cancel, revalidate)
+			w = &streamAuthWriter{ResponseWriter: w, onStream: func() {
+				go pollStreamCredential(ctx, cancel, revalidate)
+			}}
 		}
 
 		next.ServeHTTP(w, r)

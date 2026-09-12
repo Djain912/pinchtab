@@ -3,11 +3,14 @@ package handlers
 import (
 	"bufio"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +19,7 @@ import (
 	"github.com/pinchtab/pinchtab/internal/browsersession"
 	"github.com/pinchtab/pinchtab/internal/config"
 	"github.com/pinchtab/pinchtab/internal/session"
+	"github.com/pinchtab/pinchtab/internal/srccensus"
 )
 
 func shortenStreamRevalidate(t *testing.T) {
@@ -25,9 +29,10 @@ func shortenStreamRevalidate(t *testing.T) {
 	t.Cleanup(func() { streamRevalidateInterval = prev })
 }
 
-// blockingSSE writes one event then holds the connection open until its request
-// context is cancelled, standing in for every stream handler that loops on
-// r.Context().Done().
+// blockingSSE commits a text/event-stream response, writes one event, then holds
+// the connection open until its request context is cancelled — standing in for
+// every SSE handler that loops on r.Context().Done(). It never inspects the
+// request's Accept header, which is the point of the handler-driven detection.
 func blockingSSE(started chan<- struct{}) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -44,8 +49,6 @@ func blockingSSE(started chan<- struct{}) http.HandlerFunc {
 	}
 }
 
-// awaitStreamEnd reads the first event, runs revoke, and reports whether the
-// body reader unblocked (EOF/err) within the bound.
 func awaitStreamEnd(t *testing.T, resp *http.Response, started <-chan struct{}, revoke func()) bool {
 	t.Helper()
 	reader := bufio.NewReader(resp.Body)
@@ -58,8 +61,7 @@ func awaitStreamEnd(t *testing.T, resp *http.Response, started <-chan struct{}, 
 
 	ended := make(chan struct{})
 	go func() {
-		_, _ = reader.ReadString('\n')
-		_, err := reader.ReadString('\n')
+		var err error
 		for err == nil {
 			_, err = reader.ReadString('\n')
 		}
@@ -74,6 +76,9 @@ func awaitStreamEnd(t *testing.T, resp *http.Response, started <-chan struct{}, 
 	}
 }
 
+// TestStreamEndsWhenCookieSessionRevoked sends NO Accept header: detection must
+// come from the handler committing text/event-stream, not from what the client
+// asked for. A holder of a logged-out cookie opens the stream exactly this way.
 func TestStreamEndsWhenCookieSessionRevoked(t *testing.T) {
 	shortenStreamRevalidate(t)
 
@@ -90,7 +95,6 @@ func TestStreamEndsWhenCookieSessionRevoked(t *testing.T) {
 	defer srv.Close()
 
 	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/events", nil)
-	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Origin", srv.URL)
 	req.AddCookie(&http.Cookie{Name: authn.CookieName, Value: sessionID})
 
@@ -124,7 +128,6 @@ func TestStreamEndsWhenAgentSessionRevoked(t *testing.T) {
 	defer srv.Close()
 
 	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/network/stream", nil)
-	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Authorization", "Session "+token)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -141,23 +144,10 @@ func TestStreamEndsWhenAgentSessionRevoked(t *testing.T) {
 	}
 }
 
+// TestNonStreamRequestSpawnsNoStreamGoroutine is the must-stay-green row: a short
+// request that never commits a stream must start no poller goroutine.
 func TestNonStreamRequestSpawnsNoStreamGoroutine(t *testing.T) {
 	shortenStreamRevalidate(t)
-
-	if isStreamRequest(httptest.NewRequest(http.MethodGet, "/api/events", nil)) {
-		t.Fatal("a plain GET must not be classified as a stream request")
-	}
-	sse := httptest.NewRequest(http.MethodGet, "/api/events", nil)
-	sse.Header.Set("Accept", "text/event-stream")
-	if !isStreamRequest(sse) {
-		t.Fatal("an Accept: text/event-stream request must be a stream request")
-	}
-	ws := httptest.NewRequest(http.MethodGet, "/screencast", nil)
-	ws.Header.Set("Upgrade", "websocket")
-	ws.Header.Set("Connection", "Upgrade")
-	if !isStreamRequest(ws) {
-		t.Fatal("a websocket upgrade must be a stream request")
-	}
 
 	cfg := &config.RuntimeConfig{Token: "server-secret"}
 	sessions := browsersession.NewManager(browsersession.Config{})
@@ -167,6 +157,7 @@ func TestNonStreamRequestSpawnsNoStreamGoroutine(t *testing.T) {
 	}
 	handler := AuthMiddlewareWithSessions(config.NewLive(cfg), sessions, nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
 	}))
 
 	newReq := func() *http.Request {
@@ -197,74 +188,101 @@ func TestNonStreamRequestSpawnsNoStreamGoroutine(t *testing.T) {
 	}
 }
 
-// streamSiteFloor is the set of production handlers that open a long-lived
-// response — the four SSE endpoints and the screencast websocket. Every one is
-// served through the front door's AuthMiddlewareWithSessions (directly or via the
-// proxy it fronts), so the stream-aware credential re-check reaches them all. A
-// new site must be added here deliberately, which is the point at which its
-// routing behind that middleware is confirmed.
-var streamSiteFloor = map[string]bool{
-	"dashboard/handlers_sse.go":          true,
-	"handlers/network.go":                true,
-	"handlers/network_export_stream.go":  true,
-	"orchestrator/handlers_instances.go": true,
-	"handlers/screencast.go":             true,
+// streamSiteFloor is every production site that opens a long-lived response — the
+// four SSE endpoints, the screencast websocket, and the websocket proxy tunnel.
+// Each is served through the front door's AuthMiddlewareWithSessions (directly or
+// via the proxy it fronts), so the stream-aware credential re-check reaches them
+// all. A new site must be added here deliberately, which is where its routing
+// behind that middleware is confirmed.
+var streamSiteFloor = []string{
+	"dashboard/handlers_sse.go",
+	"handlers/network.go",
+	"handlers/network_export_stream.go",
+	"orchestrator/handlers_instances.go",
+	"handlers/screencast.go",
+	"proxy/proxy_ws.go",
 }
 
-func fileOpensStream(src string) bool {
-	return strings.Contains(src, `"Content-Type", "text/event-stream"`) ||
-		strings.Contains(src, "ws.UpgradeHTTP(")
+// streamSitePlumbing are the ResponseWriter Hijack forwarders: they relay Hijack
+// to the underlying writer rather than opening a stream of their own, so they
+// match the hijack matcher without being endpoints. Recorded so a genuinely new
+// endpoint cannot hide among them.
+var streamSitePlumbing = map[string]string{
+	"httpx/httpx.go":         "StatusWriter.Hijack forwards to the underlying ResponseWriter",
+	"handlers/middleware.go": "streamAuthWriter.Hijack forwards; this file is the stream-aware middleware itself",
 }
 
-func scanStreamSites(root string) (map[string]string, error) {
-	sites := map[string]string{}
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
+func basicString(e ast.Expr) string {
+	lit, ok := e.(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return ""
+	}
+	s, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		return ""
+	}
+	return s
+}
+
+// streamSiteKinds parses one source file and reports whether it commits a stream:
+// an SSE Content-Type header set, a ws.UpgradeHTTP call, or a Hijack call. It
+// matches AST call expressions, so a comment or a request-side Accept header set
+// (Set("Accept", ...)) is not a false positive.
+func streamSiteKinds(t *testing.T, name, src string) (sse, upgrade, hijack bool) {
+	t.Helper()
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, name, src, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", name, err)
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
 		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
 		}
-		b, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr
+		switch sel.Sel.Name {
+		case "UpgradeHTTP":
+			upgrade = true
+		case "Hijack":
+			hijack = true
+		case "Set":
+			if len(call.Args) == 2 && basicString(call.Args[0]) == "Content-Type" && basicString(call.Args[1]) == "text/event-stream" {
+				sse = true
+			}
 		}
-		if fileOpensStream(string(b)) {
-			rel := filepath.ToSlash(path)
-			sites[rel] = rel
-		}
-		return nil
+		return true
 	})
-	return sites, err
+	return
 }
 
 func TestStreamSiteCensusStaysBehindStreamAwareMiddleware(t *testing.T) {
-	sites, err := scanStreamSites("..")
-	if err != nil {
-		t.Fatalf("walk internal tree: %v", err)
+	floor := map[string]bool{}
+	for _, name := range streamSiteFloor {
+		floor[name] = false
 	}
 
-	matched := map[string]bool{}
-	for path := range sites {
-		var hit string
-		for suffix := range streamSiteFloor {
-			if strings.HasSuffix(path, suffix) {
-				hit = suffix
-				break
-			}
-		}
-		if hit == "" {
-			t.Errorf("stream site %s is not in streamSiteFloor; confirm it is served behind AuthMiddlewareWithSessions and add it", path)
+	for _, f := range srccensus.Tree(t, "..", 150) {
+		sse, upgrade, hijack := streamSiteKinds(t, f.Name, f.Text)
+		if !sse && !upgrade && !hijack {
 			continue
 		}
-		matched[hit] = true
+		if _, ok := floor[f.Name]; ok {
+			floor[f.Name] = true
+			continue
+		}
+		if _, ok := streamSitePlumbing[f.Name]; ok {
+			continue
+		}
+		t.Errorf("%s opens a stream (sse=%v upgrade=%v hijack=%v) but is not classified; confirm it is served behind AuthMiddlewareWithSessions and add it to streamSiteFloor", f.Name, sse, upgrade, hijack)
 	}
 
-	if len(matched) < len(streamSiteFloor) {
-		for suffix := range streamSiteFloor {
-			if !matched[suffix] {
-				t.Errorf("expected stream site %s was not found; the census floor of %d is not met", suffix, len(streamSiteFloor))
-			}
+	for name, seen := range floor {
+		if !seen {
+			t.Errorf("floor stream site %s was not found; the census floor of %d is not met", name, len(floor))
 		}
 	}
 
@@ -277,31 +295,24 @@ func TestStreamSiteCensusStaysBehindStreamAwareMiddleware(t *testing.T) {
 	}
 }
 
-func TestStreamSiteCensusDetectsAPlantedSite(t *testing.T) {
-	dir := t.TempDir()
-	planted := filepath.Join(dir, "planted.go")
-	src := "package planted\n\nimport \"net/http\"\n\nfunc H(w http.ResponseWriter, r *http.Request) {\n\tw.Header().Set(\"Content-Type\", \"text/event-stream\")\n}\n"
-	if err := os.WriteFile(planted, []byte(src), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	sites, err := scanStreamSites(dir)
-	if err != nil {
-		t.Fatalf("scan: %v", err)
-	}
-	if len(sites) != 1 {
-		t.Fatalf("census did not detect the planted SSE site: found %d sites", len(sites))
+func TestStreamSiteCensusMatcherDetectsPlantedSites(t *testing.T) {
+	sse, _, _ := streamSiteKinds(t, "planted.go", "package p\nimport \"net/http\"\nfunc H(w http.ResponseWriter) { w.Header().Set(\"Content-Type\", \"text/event-stream\") }\n")
+	if !sse {
+		t.Error("matcher missed a planted SSE Content-Type site")
 	}
 
-	wsDir := t.TempDir()
-	wsSrc := "package planted\n\nimport (\n\t\"net/http\"\n\n\t\"github.com/gobwas/ws\"\n)\n\nfunc W(w http.ResponseWriter, r *http.Request) {\n\t_, _, _, _ = ws.UpgradeHTTP(r, w)\n}\n"
-	if err := os.WriteFile(filepath.Join(wsDir, "planted_ws.go"), []byte(wsSrc), 0o600); err != nil {
-		t.Fatal(err)
+	_, upgrade, _ := streamSiteKinds(t, "planted.go", "package p\nfunc H(r, w any) { ws.UpgradeHTTP(r, w) }\n")
+	if !upgrade {
+		t.Error("matcher missed a planted ws.UpgradeHTTP site")
 	}
-	wsSites, err := scanStreamSites(wsDir)
-	if err != nil {
-		t.Fatalf("scan ws: %v", err)
+
+	_, _, hijack := streamSiteKinds(t, "planted.go", "package p\nfunc H(hj any) { hj.Hijack() }\n")
+	if !hijack {
+		t.Error("matcher missed a planted Hijack site")
 	}
-	if len(wsSites) != 1 {
-		t.Fatalf("census did not detect the planted websocket site: found %d sites", len(wsSites))
+
+	noise, _, _ := streamSiteKinds(t, "planted.go", "package p\nimport \"net/http\"\nfunc H(req *http.Request) { req.Header.Set(\"Accept\", \"text/event-stream\") }\n")
+	if noise {
+		t.Error("matcher treated a request-side Accept header as an SSE stream site")
 	}
 }
