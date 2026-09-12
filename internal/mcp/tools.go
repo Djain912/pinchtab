@@ -369,5 +369,6 @@ func allTools() []mcp.Tool {
 			mcp.WithNumber("timeoutSeconds", mcp.Description("Overall HTTP crawl timeout in seconds (default 60)")),
 			browserParam(),
 		),
+		a11yAuditTool(),
 	}
 }
