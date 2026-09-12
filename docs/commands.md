@@ -266,7 +266,7 @@ pinchtab wait --load <state>            # state: ready-state | content-loaded | 
                                         #   content-loaded → readyState in {interactive, complete}
                                         #   network-idle   → 0 in-flight requests for 500ms (override with --idle-for)
 pinchtab wait --fn <expression>         # Wait for JS to become truthy
-pinchtab wait ... --timeout <ms>        # Override timeout (default 10000, max 30000)
+pinchtab wait ... --timeout-ms <ms>     # Override timeout in ms (default 10000, max 30000); --timeout is a deprecated alias
 pinchtab network                        # List captured network requests
 pinchtab network <requestId>            # Show one request in detail
 pinchtab network --stream               # Stream network entries
