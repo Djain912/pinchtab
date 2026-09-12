@@ -16,6 +16,7 @@ import (
 	"github.com/pinchtab/pinchtab/internal/activity"
 	"github.com/pinchtab/pinchtab/internal/api/types"
 	"github.com/pinchtab/pinchtab/internal/bridge"
+	bridgecdpops "github.com/pinchtab/pinchtab/internal/bridge/cdpops"
 	"github.com/pinchtab/pinchtab/internal/browserops"
 	"github.com/pinchtab/pinchtab/internal/browsers"
 	"github.com/pinchtab/pinchtab/internal/config"
@@ -115,6 +116,34 @@ func writeTargetNotFound(w http.ResponseWriter, err error, rr *recovery.Recovery
 		details["recovery"] = rr
 	}
 	httpx.ErrorCode(w, http.StatusNotFound, "ref_not_found", err.Error(), false, details)
+}
+
+// writeNoOptionMatch classifies a select whose value matched no option as a
+// client error: the element was found and resolved, so retrying the identical
+// request can never succeed. details.available carries the structured option
+// list, and details.hint renders it through the CLI's generic guidance path so
+// the caller sees the choices without re-inspecting the page.
+func writeNoOptionMatch(w http.ResponseWriter, kind string, err error, noOption *bridgecdpops.NoOptionMatchError) {
+	httpx.ErrorCode(w, http.StatusUnprocessableEntity, "option_not_found",
+		fmt.Sprintf("action %s: %v", kind, err), false, map[string]any{
+			"available": noOption.Available,
+			"hint":      availableOptionsHint(noOption.Available),
+		})
+}
+
+func availableOptionsHint(options []bridgecdpops.SelectOption) string {
+	if len(options) == 0 {
+		return "the <select> has no options"
+	}
+	rendered := make([]string, len(options))
+	for i, o := range options {
+		if o.Text == "" || o.Text == o.Value {
+			rendered[i] = fmt.Sprintf("%q", o.Value)
+			continue
+		}
+		rendered[i] = fmt.Sprintf("%q (%s)", o.Value, o.Text)
+	}
+	return "available options: " + strings.Join(rendered, ", ")
 }
 
 // actionFailureIsRetryable answers the only question the flag promises: could repeating the
@@ -658,6 +687,11 @@ func (h *Handlers) HandleAction(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(actionErr, ErrTargetNotFound) {
 			writeTargetNotFound(w, actionErr, recoveryResult)
+			return
+		}
+		var noOption *bridgecdpops.NoOptionMatchError
+		if errors.As(actionErr, &noOption) {
+			writeNoOptionMatch(w, req.Kind, actionErr, noOption)
 			return
 		}
 		dispatchMayHaveLanded := submitClick
