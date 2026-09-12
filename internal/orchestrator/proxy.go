@@ -416,14 +416,9 @@ func (o *Orchestrator) handleProxyResponseHeaders(origReq *http.Request, resp *h
 		return
 	}
 
-	if o.instanceMgr != nil {
-		if tabID := tabClosePathID(origReq); tabID != "" {
-			o.instanceMgr.InvalidateTab(tabID)
-		} else if origReq.Method == http.MethodPost && strings.TrimSpace(origReq.URL.Path) == "/close" {
-			if tabID := strings.TrimSpace(resp.Header.Get(activity.HeaderPTTabID)); tabID != "" {
-				o.instanceMgr.InvalidateTab(tabID)
-			}
-		}
+	closedTab := closedTabID(origReq, resp)
+	if o.instanceMgr != nil && closedTab != "" {
+		o.instanceMgr.InvalidateTab(closedTab)
 	}
 
 	// Identity → instance binding writes. Bindings are persisted only after
@@ -441,8 +436,8 @@ func (o *Orchestrator) handleProxyResponseHeaders(origReq *http.Request, resp *h
 		if id := strings.TrimSpace(origReq.Header.Get(activity.HeaderAgentID)); id != "" {
 			o.bindings.BindAgent(id, targetInstanceID)
 		}
-		if tabID := closedTabID(origReq, resp); tabID != "" {
-			o.bindings.ReleaseTab(tabID)
+		if closedTab != "" {
+			o.bindings.ReleaseTab(closedTab)
 		}
 	}
 
