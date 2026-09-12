@@ -1,8 +1,3 @@
-// Package extract fills a flat JSON-schema against a captured accessibility
-// snapshot using the same semantic matcher that backs /find. It is model-free:
-// no network, no model download, no browser. Given a schema and a node list it
-// returns typed data plus per-field ref/score/confidence so an agent can fall
-// back to /find on a low-confidence field.
 package extract
 
 import (
@@ -14,7 +9,6 @@ import (
 	"github.com/pinchtab/pinchtab/internal/selector"
 )
 
-// Type is a supported JSON-schema property type.
 type Type string
 
 const (
@@ -25,35 +19,38 @@ const (
 	TypeArray   Type = "array"
 )
 
-// hintKind classifies how a resolved x-pinchtab-hint drives matching.
-type hintKind int
+type target struct {
+	kind  targetKind
+	value string
+}
+
+type targetKind int
 
 const (
-	hintNone  hintKind = iota
-	hintQuery          // a natural-language query string for the matcher
-	hintRef            // a direct ref to select verbatim
+	targetNone targetKind = iota
+	targetQuery
+	targetRef
 )
 
-// Property is one resolved schema property, ready to match.
 type Property struct {
 	Name        string
 	Type        Type
 	Description string
 	Required    bool
 	Hint        string
+	Items       *Schema
+	Scope       string
+	MinItems    int
+	MaxItems    int
 
-	// hintKindResolved and hintValue are computed by ParseSchema so Resolve
-	// never re-parses the hint (and so hint errors surface at parse time).
-	hintKindResolved hintKind
-	hintValue        string
+	hint  target
+	scope target
 }
 
-// Schema is a parsed object schema with properties in a deterministic order.
 type Schema struct {
 	Properties []Property
 }
 
-// UnsupportedError names the schema path that carries an unsupported construct.
 type UnsupportedError struct {
 	Path   string
 	Reason string
@@ -63,7 +60,6 @@ func (e *UnsupportedError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Path, e.Reason)
 }
 
-// rawSchema mirrors the accepted JSON-schema subset for decoding.
 type rawSchema struct {
 	Type       string                 `json:"type"`
 	Required   []string               `json:"required"`
@@ -74,23 +70,27 @@ type rawProperty struct {
 	Type        string          `json:"type"`
 	Description string          `json:"description"`
 	Hint        string          `json:"x-pinchtab-hint"`
+	Scope       string          `json:"x-pinchtab-scope"`
 	Properties  json.RawMessage `json:"properties"`
+	Items       json.RawMessage `json:"items"`
+	MinItems    int             `json:"minItems"`
+	MaxItems    int             `json:"maxItems"`
 }
 
-// ParseSchema parses a flat object schema. Unsupported constructs return an
-// *UnsupportedError naming the offending path (e.g.
-// "properties.price.type: object is not supported"). Arrays parse successfully
-// and are reported as unsupported at resolution time, per the follow-up task.
 func ParseSchema(data []byte) (Schema, error) {
+	return parseObject(data, "", true)
+}
+
+func parseObject(data []byte, path string, allowArrays bool) (Schema, error) {
 	var raw rawSchema
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return Schema{}, fmt.Errorf("parse schema: %w", err)
 	}
 	if raw.Type != "" && raw.Type != "object" {
-		return Schema{}, &UnsupportedError{Path: "type", Reason: raw.Type + " is not supported"}
+		return Schema{}, &UnsupportedError{Path: join(path, "type"), Reason: raw.Type + " is not supported"}
 	}
 	if len(raw.Properties) == 0 {
-		return Schema{}, &UnsupportedError{Path: "properties", Reason: "an object schema with properties is required"}
+		return Schema{}, &UnsupportedError{Path: join(path, "properties"), Reason: "an object schema with properties is required"}
 	}
 
 	required := make(map[string]bool, len(raw.Required))
@@ -106,8 +106,7 @@ func ParseSchema(data []byte) (Schema, error) {
 
 	props := make([]Property, 0, len(names))
 	for _, name := range names {
-		rp := raw.Properties[name]
-		prop, err := parseProperty(name, rp, required[name])
+		prop, err := parseProperty(join(path, "properties."+name), name, raw.Properties[name], required[name], allowArrays)
 		if err != nil {
 			return Schema{}, err
 		}
@@ -116,11 +115,20 @@ func ParseSchema(data []byte) (Schema, error) {
 	return Schema{Properties: props}, nil
 }
 
-func parseProperty(name string, rp rawProperty, required bool) (Property, error) {
-	path := "properties." + name
+func join(path, leaf string) string {
+	if path == "" {
+		return leaf
+	}
+	return path + "." + leaf
+}
+
+func parseProperty(path, name string, rp rawProperty, required, allowArrays bool) (Property, error) {
 	switch Type(rp.Type) {
-	case TypeString, TypeNumber, TypeInteger, TypeBoolean, TypeArray:
-		// supported (array resolves to unsupported, but parses)
+	case TypeString, TypeNumber, TypeInteger, TypeBoolean:
+	case TypeArray:
+		if !allowArrays {
+			return Property{}, &UnsupportedError{Path: path + ".type", Reason: "nested arrays are not supported"}
+		}
 	case "":
 		return Property{}, &UnsupportedError{Path: path + ".type", Reason: "a property type is required"}
 	default:
@@ -129,6 +137,9 @@ func parseProperty(name string, rp rawProperty, required bool) (Property, error)
 	if len(rp.Properties) > 0 {
 		return Property{}, &UnsupportedError{Path: path + ".properties", Reason: "nested object properties are not supported"}
 	}
+	if rp.MinItems < 0 || rp.MaxItems < 0 {
+		return Property{}, &UnsupportedError{Path: path + ".maxItems", Reason: "item bounds must not be negative"}
+	}
 
 	prop := Property{
 		Name:        name,
@@ -136,50 +147,64 @@ func parseProperty(name string, rp rawProperty, required bool) (Property, error)
 		Description: strings.TrimSpace(rp.Description),
 		Required:    required,
 		Hint:        strings.TrimSpace(rp.Hint),
+		Scope:       strings.TrimSpace(rp.Scope),
+		MinItems:    rp.MinItems,
+		MaxItems:    rp.MaxItems,
 	}
-	if err := resolveHint(&prop, path); err != nil {
+	var err error
+	if prop.hint, err = parseTarget(prop.Hint, path+".x-pinchtab-hint"); err != nil {
 		return Property{}, err
+	}
+	if prop.scope, err = parseTarget(prop.Scope, path+".x-pinchtab-scope"); err != nil {
+		return Property{}, err
+	}
+	if prop.Type == TypeArray {
+		items, err := parseItems(rp.Items, path+".items")
+		if err != nil {
+			return Property{}, err
+		}
+		prop.Items = &items
 	}
 	return prop, nil
 }
 
-// resolveHint validates x-pinchtab-hint against the selector kinds a node list
-// can answer and caches the matcher-ready form. css:/xpath: need a browser and
-// return an *UnsupportedError naming the property path.
-func resolveHint(prop *Property, path string) error {
-	hint := prop.Hint
-	if hint == "" {
-		prop.hintKindResolved = hintNone
-		return nil
+func parseItems(raw json.RawMessage, path string) (Schema, error) {
+	if len(raw) == 0 {
+		return Schema{}, &UnsupportedError{Path: path, Reason: "array items must be an object schema"}
+	}
+	var head struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &head); err != nil {
+		return Schema{}, fmt.Errorf("parse schema: %w", err)
+	}
+	if head.Type != "object" {
+		return Schema{}, &UnsupportedError{Path: path + ".type", Reason: "array items must be an object schema"}
+	}
+	return parseObject(raw, path, false)
+}
+
+func parseTarget(raw, path string) (target, error) {
+	if raw == "" {
+		return target{}, nil
+	}
+	if !selector.HasKnownPrefix(raw) {
+		return target{kind: targetQuery, value: raw}, nil
 	}
 
-	hintPath := path + ".x-pinchtab-hint"
-	if !selector.HasKnownPrefix(hint) {
-		// A bare hint is a natural-language query verbatim.
-		prop.hintKindResolved = hintQuery
-		prop.hintValue = hint
-		return nil
-	}
-
-	sel := selector.Parse(hint)
+	sel := selector.Parse(raw)
 	switch sel.Kind {
 	case selector.KindCSS, selector.KindXPath:
-		return &UnsupportedError{Path: hintPath, Reason: string(sel.Kind) + " selectors need a browser and are not supported"}
+		return target{}, &UnsupportedError{Path: path, Reason: string(sel.Kind) + " selectors need a browser and are not supported"}
 	case selector.KindText:
-		prop.hintKindResolved = hintQuery
-		prop.hintValue = sel.Value
-		return nil
+		return target{kind: targetQuery, value: sel.Value}, nil
 	case selector.KindRef:
-		prop.hintKindResolved = hintRef
-		prop.hintValue = sel.Value
-		return nil
+		return target{kind: targetRef, value: sel.Value}, nil
 	}
 
 	query, ok := sel.SemanticQuery()
 	if !ok {
-		return &UnsupportedError{Path: hintPath, Reason: string(sel.Kind) + " hints are not supported"}
+		return target{}, &UnsupportedError{Path: path, Reason: string(sel.Kind) + " selectors are not supported"}
 	}
-	prop.hintKindResolved = hintQuery
-	prop.hintValue = query
-	return nil
+	return target{kind: targetQuery, value: query}, nil
 }

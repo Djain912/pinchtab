@@ -38,7 +38,7 @@ func TestResolve_FromSnapshotFixtures(t *testing.T) {
 		want := map[string]any{
 			"name":     "Sony WH-1000XM5 Wireless Headphones",
 			"price":    1299.0,
-			"rating":   4.7, // "4.7 out of 5" -> first token 4.7, never 4.75
+			"rating":   4.7,
 			"in_stock": true,
 		}
 		for k, v := range want {
@@ -227,13 +227,13 @@ func TestCoerceNumber(t *testing.T) {
 		ok   bool
 	}{
 		{"$1,299.00", 1299, true},
-		{"−3.5 kg", -3.5, true}, // Unicode minus U+2212
-		{"-3.5 kg", -3.5, true}, // ASCII hyphen
+		{"−3.5 kg", -3.5, true},
+		{"-3.5 kg", -3.5, true},
 		{"call for price", 0, false},
 		{"42", 42, true},
 		{"1,000,000", 1000000, true},
-		{"4.7 out of 5", 4.7, true}, // trailing "5" must not glue onto the token
-		{"2 of 3", 2, true},         // trailing "3" must not glue onto the token
+		{"4.7 out of 5", 4.7, true},
+		{"2 of 3", 2, true},
 		{"", 0, false},
 	}
 	for _, tc := range tests {
@@ -264,8 +264,6 @@ func TestResolve_NotNumericLeavesFieldMissing(t *testing.T) {
 }
 
 func TestResolve_HintSelectorBeatsName(t *testing.T) {
-	// Two plausible price-ish nodes; the name-based query would prefer the one
-	// literally named "Price", but the hint points at the sale price by role/name.
 	nodes := []observe.A11yNode{
 		{Ref: "e1", Role: "region", Name: "Product", Depth: 0},
 		{Ref: "e2", Role: "text", Name: "Price", Text: "$1,299.00", Depth: 1},
@@ -280,8 +278,6 @@ func TestResolve_HintSelectorBeatsName(t *testing.T) {
 	if got.Data["price"] != 999.0 {
 		t.Errorf("price = %#v, want 999", got.Data["price"])
 	}
-
-	// A bare query hint is used verbatim.
 	bare := mustSchema(t, `{"type":"object","properties":{
 		"price":{"type":"number","x-pinchtab-hint":"Sale price"}}}`)
 	if got := Resolve(bare, nodes, Options{}); got.Fields["price"].Ref != "e3" {
@@ -312,21 +308,6 @@ func TestResolve_Deterministic(t *testing.T) {
 	}
 }
 
-func TestResolve_ArrayReportsUnsupported(t *testing.T) {
-	schema := mustSchema(t, `{"type":"object","required":["tags"],"properties":{
-		"tags":{"type":"array","description":"tag list"}}}`)
-	got := Resolve(schema, productNodes(), Options{})
-	if got.Fields["tags"].Reason != reasonUnsupported {
-		t.Errorf("array reason = %q, want %q", got.Fields["tags"].Reason, reasonUnsupported)
-	}
-	if _, present := got.Data["tags"]; present {
-		t.Errorf("unsupported array must not appear in data")
-	}
-	if len(got.Missing) != 1 || got.Missing[0] != "tags" {
-		t.Errorf("missing = %v, want [tags]", got.Missing)
-	}
-}
-
 func TestParseSchema_UnsupportedConstructs(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -339,6 +320,11 @@ func TestParseSchema_UnsupportedConstructs(t *testing.T) {
 		{"non-object root", `{"type":"array","properties":{"price":{"type":"string"}}}`, "type"},
 		{"css hint", `{"type":"object","properties":{"price":{"type":"number","x-pinchtab-hint":"css:.price"}}}`, "properties.price.x-pinchtab-hint"},
 		{"xpath hint", `{"type":"object","properties":{"price":{"type":"number","x-pinchtab-hint":"xpath://span"}}}`, "properties.price.x-pinchtab-hint"},
+		{"css scope", `{"type":"object","properties":{"rows":{"type":"array","x-pinchtab-scope":"css:table","items":{"type":"object","properties":{"id":{"type":"string"}}}}}}`, "properties.rows.x-pinchtab-scope"},
+		{"array without items", `{"type":"object","properties":{"tags":{"type":"array"}}}`, "properties.tags.items"},
+		{"array of strings", `{"type":"object","properties":{"tags":{"type":"array","items":{"type":"string"}}}}`, "properties.tags.items.type"},
+		{"nested array", `{"type":"object","properties":{"rows":{"type":"array","items":{"type":"object","properties":{"tags":{"type":"array","items":{"type":"object","properties":{"x":{"type":"string"}}}}}}}}}`, "properties.rows.items.properties.tags.type"},
+		{"negative maxItems", `{"type":"object","properties":{"rows":{"type":"array","maxItems":-1,"items":{"type":"object","properties":{"x":{"type":"string"}}}}}}`, "properties.rows.maxItems"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -362,7 +348,6 @@ func TestParseSchema_ValidFlatSchema(t *testing.T) {
 	if len(s.Properties) != 3 {
 		t.Fatalf("expected 3 properties, got %d", len(s.Properties))
 	}
-	// Deterministic (alphabetical) property order.
 	wantOrder := []string{"in_stock", "name", "price"}
 	for i, p := range s.Properties {
 		if p.Name != wantOrder[i] {

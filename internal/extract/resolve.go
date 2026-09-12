@@ -13,49 +13,78 @@ import (
 	"github.com/pinchtab/semantic"
 )
 
-// Reasons a field is left missing rather than filled with a wrong-typed value.
 const (
-	reasonNoMatch     = "no_match"
-	reasonNotNumeric  = "not_numeric"
-	reasonNotBoolean  = "not_boolean"
-	reasonUnsupported = "unsupported"
-	reasonRefNotFound = "ref_not_found"
+	reasonNoMatch         = "no_match"
+	reasonNotNumeric      = "not_numeric"
+	reasonNotBoolean      = "not_boolean"
+	reasonRefNotFound     = "ref_not_found"
+	reasonScopeNotFound   = "scope_not_found"
+	reasonNoRepeatedGroup = "no_repeated_group"
+	reasonTooFewItems     = "too_few_items"
 )
 
-// Field value sources, in the order they are tried.
 const (
 	sourceValue   = "value"
 	sourceText    = "text"
 	sourceName    = "name"
 	sourceChecked = "checked"
+	sourceHint    = "hint"
 )
 
-// Options tunes resolution. Zero values fall back to the same defaults /find
-// uses (threshold 0.3, the shared combined matcher).
+const (
+	defaultThreshold = 0.3
+	defaultMaxItems  = 100
+)
+
 type Options struct {
 	Threshold       float64
 	LexicalWeight   float64
 	EmbeddingWeight float64
-	// Matcher overrides the default combined matcher; nil uses the shared one.
-	Matcher semantic.ElementMatcher
+	MaxItems        int
+	Matcher         semantic.ElementMatcher
 }
 
-// FieldResult is the per-field outcome. Ref/Score/Confidence let an agent fall
-// back to /find on a low-confidence field; Reason explains a missing field.
 type FieldResult struct {
-	Ref        string  `json:"ref,omitempty"`
-	Score      float64 `json:"score"`
-	Confidence string  `json:"confidence"`
-	Source     string  `json:"source,omitempty"`
-	Reason     string  `json:"reason,omitempty"`
+	Ref        string       `json:"ref,omitempty"`
+	Score      float64      `json:"score"`
+	Confidence string       `json:"confidence"`
+	Source     string       `json:"source,omitempty"`
+	Reason     string       `json:"reason,omitempty"`
+	Items      []ItemResult `json:"items,omitempty"`
+	Truncated  bool         `json:"truncated,omitempty"`
 }
 
-// Result is the extraction outcome: typed data, per-field diagnostics, and the
-// required fields that could not be filled (never invented).
+type ItemResult struct {
+	Ref    string                 `json:"ref"`
+	Fields map[string]FieldResult `json:"fields"`
+}
+
 type Result struct {
 	Data    map[string]any         `json:"data"`
 	Fields  map[string]FieldResult `json:"fields"`
 	Missing []string               `json:"missing"`
+}
+
+type view struct {
+	nodes []observe.A11yNode
+	descs []semantic.ElementDescriptor
+	index map[string]int
+}
+
+func newView(ordered []observe.A11yNode) view {
+	index := make(map[string]int, len(ordered))
+	for i, n := range ordered {
+		index[n.Ref] = i
+	}
+	return view{nodes: ordered, descs: semdesc.Build(ordered), index: index}
+}
+
+func (v view) node(ref string) (observe.A11yNode, bool) {
+	i, ok := v.index[ref]
+	if !ok {
+		return observe.A11yNode{}, false
+	}
+	return v.nodes[i], true
 }
 
 var (
@@ -70,31 +99,35 @@ func sharedMatcher() semantic.ElementMatcher {
 	return defaultMatcher
 }
 
-// Resolve fills each schema property against the node list. It is deterministic:
-// nodes are canonicalised to document order (by ref) before matching, so the
-// same schema over the same nodes — in any input order — yields identical output.
 func Resolve(schema Schema, nodes []observe.A11yNode, opts Options) Result {
 	if opts.Threshold <= 0 {
-		opts.Threshold = 0.3
+		opts.Threshold = defaultThreshold
 	}
-	matcher := opts.Matcher
-	if matcher == nil {
-		matcher = sharedMatcher()
+	if opts.MaxItems <= 0 {
+		opts.MaxItems = defaultMaxItems
 	}
+	if opts.Matcher == nil {
+		opts.Matcher = sharedMatcher()
+	}
+	return resolveObject(schema, newView(canonicalOrder(nodes)), opts)
+}
 
-	ordered := canonicalOrder(nodes)
-	byRef := make(map[string]observe.A11yNode, len(ordered))
-	for _, n := range ordered {
-		byRef[n.Ref] = n
-	}
-	descs := semdesc.Build(ordered)
-
+func resolveObject(schema Schema, v view, opts Options) Result {
 	result := Result{
 		Data:   map[string]any{},
 		Fields: map[string]FieldResult{},
 	}
 	for _, prop := range schema.Properties {
-		fr, value, ok := resolveField(prop, descs, byRef, matcher, opts)
+		var (
+			fr    FieldResult
+			value any
+			ok    bool
+		)
+		if prop.Type == TypeArray {
+			fr, value, ok = resolveArray(prop, v, opts)
+		} else {
+			fr, value, ok = resolveField(prop, v, opts)
+		}
 		result.Fields[prop.Name] = fr
 		if ok {
 			result.Data[prop.Name] = value
@@ -106,12 +139,8 @@ func Resolve(schema Schema, nodes []observe.A11yNode, opts Options) Result {
 	return result
 }
 
-func resolveField(prop Property, descs []semantic.ElementDescriptor, byRef map[string]observe.A11yNode, matcher semantic.ElementMatcher, opts Options) (FieldResult, any, bool) {
-	if prop.Type == TypeArray {
-		return FieldResult{Confidence: semantic.CalibrateConfidence(0), Reason: reasonUnsupported}, nil, false
-	}
-
-	node, fr, ok := matchNode(prop, descs, byRef, matcher, opts)
+func resolveField(prop Property, v view, opts Options) (FieldResult, any, bool) {
+	node, fr, ok := matchTarget(prop.hint, fieldQuery(prop), v, opts)
 	if !ok {
 		return fr, nil, false
 	}
@@ -125,12 +154,10 @@ func resolveField(prop Property, descs []semantic.ElementDescriptor, byRef map[s
 	return fr, value, true
 }
 
-// matchNode finds the best node for a property: a ref hint selects verbatim,
-// otherwise the matcher scores the name+description(+hint) query.
-func matchNode(prop Property, descs []semantic.ElementDescriptor, byRef map[string]observe.A11yNode, matcher semantic.ElementMatcher, opts Options) (observe.A11yNode, FieldResult, bool) {
-	if prop.hintKindResolved == hintRef {
-		node, found := byRef[prop.hintValue]
-		fr := FieldResult{Ref: prop.hintValue, Score: 1, Confidence: semantic.CalibrateConfidence(1), Source: "hint"}
+func matchTarget(tg target, fallbackQuery string, v view, opts Options) (observe.A11yNode, FieldResult, bool) {
+	if tg.kind == targetRef {
+		node, found := v.node(tg.value)
+		fr := FieldResult{Ref: tg.value, Score: 1, Confidence: semantic.CalibrateConfidence(1), Source: sourceHint}
 		if !found {
 			fr.Score = 0
 			fr.Confidence = semantic.CalibrateConfidence(0)
@@ -140,13 +167,13 @@ func matchNode(prop Property, descs []semantic.ElementDescriptor, byRef map[stri
 		return node, fr, true
 	}
 
-	// TopK spans every descriptor and the winner is chosen here, not taken from
-	// res.BestRef: the combined matcher merges its lexical and embedding halves
-	// concurrently, so its tie ordering is not stable. Per-ref scores are, so a
-	// deterministic pick (score desc, then document order) makes Resolve stable.
-	res, err := matcher.Find(context.Background(), fieldQuery(prop), descs, semantic.FindOptions{
+	query := fallbackQuery
+	if tg.kind == targetQuery {
+		query = tg.value
+	}
+	res, err := opts.Matcher.Find(context.Background(), query, v.descs, semantic.FindOptions{
 		Threshold:       opts.Threshold,
-		TopK:            len(descs),
+		TopK:            len(v.descs),
 		LexicalWeight:   opts.LexicalWeight,
 		EmbeddingWeight: opts.EmbeddingWeight,
 	})
@@ -158,7 +185,7 @@ func matchNode(prop Property, descs []semantic.ElementDescriptor, byRef map[stri
 		return observe.A11yNode{}, fr, false
 	}
 	fr.Ref = best.Ref
-	node, found := byRef[best.Ref]
+	node, found := v.node(best.Ref)
 	if !found {
 		fr.Reason = reasonNoMatch
 		return observe.A11yNode{}, fr, false
@@ -166,11 +193,6 @@ func matchNode(prop Property, descs []semantic.ElementDescriptor, byRef map[stri
 	return node, fr, true
 }
 
-// pickBest chooses the winning match deterministically: highest score, ties
-// broken by document order (numeric ref ascending). Scores are compared rounded
-// because the combined matcher's concurrent merge is only stable to ~1 ULP, so
-// two matches within rounding are a tie the ref order settles. ok is false when
-// empty.
 func pickBest(matches []semantic.ElementMatch) (semantic.ElementMatch, bool) {
 	best, ok := semantic.ElementMatch{}, false
 	var bestScore float64
@@ -184,24 +206,14 @@ func pickBest(matches []semantic.ElementMatch) (semantic.ElementMatch, bool) {
 	return best, ok
 }
 
-// roundScore quantises a heuristic score to 6 decimals so equal-in-practice
-// scores compare equal across runs despite the matcher's 1-ULP jitter.
 func roundScore(s float64) float64 {
 	return math.Round(s*1e6) / 1e6
 }
 
-// fieldQuery builds the matcher query. A resolved hint query wins over the
-// name-based query; otherwise name and description are combined.
 func fieldQuery(prop Property) string {
-	if prop.hintKindResolved == hintQuery {
-		return prop.hintValue
-	}
 	return strings.TrimSpace(prop.Name + " " + prop.Description)
 }
 
-// readValue reads the node's value for a type and coerces it. Priority is
-// Value, Text, Name; booleans consult Checked first. A coercion failure returns
-// ok=false so the field is left missing rather than wrong-typed.
 func readValue(t Type, node observe.A11yNode) (any, string, bool) {
 	if t == TypeBoolean {
 		if node.Checked == observe.CheckedTrue || node.Checked == observe.CheckedFalse || node.Checked == observe.CheckedMixed {
@@ -262,9 +274,6 @@ func coercionReason(t Type) string {
 	}
 }
 
-// canonicalOrder returns a copy of nodes sorted into document order by ref, so
-// resolution is invariant to input node order. Snapshot refs ("e5", "e12") are
-// assigned in pre-order, so their numeric order is document order.
 func canonicalOrder(nodes []observe.A11yNode) []observe.A11yNode {
 	ordered := make([]observe.A11yNode, len(nodes))
 	copy(ordered, nodes)
@@ -281,7 +290,7 @@ func refLess(a, b string) bool {
 		return na < nb
 	}
 	if oka != okb {
-		return oka // numeric refs sort before non-numeric ones
+		return oka
 	}
 	return a < b
 }
