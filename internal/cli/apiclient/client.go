@@ -171,6 +171,21 @@ func DoGetRaw(client *http.Client, base, token, path string, params url.Values) 
 	return body
 }
 
+// DoGetRawCapturingVocab is DoGetRaw plus the vocabulary capture of
+// DoGetCapturingVocab: it returns the raw body unprinted (for a caller that
+// renders its own summary) and persists the response's vocabulary token so a
+// later action echoes it. The a11y axe audit needs this: it re-epochs the tab's
+// ref cache, so an action on a returned ref would be refused 409 against a stale
+// token if the CLI never captured the fresh one.
+func DoGetRawCapturingVocab(client *http.Client, base, token, path string, params url.Values, implicit bool) []byte {
+	var headers http.Header
+	r := request{method: "GET", url: buildURL(base, path, params), respHeaders: &headers}
+	status, body := mustRequest(client, token, r)
+	exitOnAPIError(r, status, body)
+	storeVocabToken(base, headers.Get(vocabTabIDHeader), headers.Get(vocabHeader), implicit)
+	return body
+}
+
 // DoGetRawAndPrint fetches and prints the raw response body (for --snap flag).
 // Best-effort: it reports errors to stderr but does not exit.
 func DoGetRawAndPrint(client *http.Client, base, token, pathWithQuery string) {

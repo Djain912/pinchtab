@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -42,12 +43,14 @@ func (h *Handlers) runAxeAudit(w http.ResponseWriter, r *http.Request, tCtx cont
 	}
 
 	report := audit.BuildAxeReport(raw, assets.AxeVersion, includeIncomplete)
-	h.fillAxeRefs(tCtx, resolvedTabID, &report)
+	vocab := h.fillAxeRefs(tCtx, resolvedTabID, &report)
+	w.Header().Set(vocabHeader, vocab)
 
 	httpx.JSON(w, 200, struct {
-		TabID string `json:"tabId"`
+		TabID           string `json:"tabId"`
+		VocabularyToken string `json:"vocabularyToken"`
 		audit.AxeReport
-	}{resolvedTabID, report})
+	}{resolvedTabID, vocab, report})
 }
 
 // injectAxeIntoAllFrames loads the axe source into every reachable frame's
@@ -74,7 +77,8 @@ func injectAxeIntoAllFrames(tCtx context.Context) {
 func axeRunSnippet(config, selector string) string {
 	target := "document"
 	if selector != "" {
-		target = fmt.Sprintf("(document.querySelector(%q) || document)", selector)
+		encoded, _ := json.Marshal(selector)
+		target = fmt.Sprintf("(document.querySelector(%s) || document)", encoded)
 	}
 	return fmt.Sprintf(`(function(){
   return axe.run(%s, %s).then(function(r){
@@ -94,10 +98,15 @@ func axeRunSnippet(config, selector string) string {
 // an agent can actuate a failing element directly. A node whose target does not
 // resolve to a snapshot ref (a cross-origin iframe, a node not in the tree) is
 // left without one rather than guessed.
-func (h *Handlers) fillAxeRefs(tCtx context.Context, tabID string, report *audit.AxeReport) {
-	backendToRef := h.snapshotBackendRefs(tCtx, tabID)
+// fillAxeRefs returns the vocabulary token of the ref cache the audit published,
+// so the handler can set the X-PinchTab-Vocab header and body field as /snapshot
+// and /capture do — the audit mints a fresh token whenever it re-epochs the tab
+// (first read, or any read after a navigation), and a client that never learns it
+// would echo a stale one and be refused 409 on the ref the audit just handed out.
+func (h *Handlers) fillAxeRefs(tCtx context.Context, tabID string, report *audit.AxeReport) string {
+	backendToRef, vocab := h.snapshotBackendRefs(tCtx, tabID)
 	if len(backendToRef) == 0 {
-		return
+		return vocab
 	}
 	fill := func(violations []audit.AxeViolation) {
 		for i := range violations {
@@ -122,6 +131,7 @@ func (h *Handlers) fillAxeRefs(tCtx context.Context, tabID string, report *audit
 	}
 	fill(report.Violations)
 	fill(report.IncompleteViolations)
+	return vocab
 }
 
 // snapshotBackendRefs builds a full-tree snapshot, stores it as the tab's ref
@@ -131,10 +141,10 @@ func (h *Handlers) fillAxeRefs(tCtx context.Context, tabID string, report *audit
 // computed it without publishing the snapshot it came from. A full tree (not the
 // interactive filter) is used so non-interactive violation targets — images,
 // low-contrast text — still map to a ref.
-func (h *Handlers) snapshotBackendRefs(tCtx context.Context, tabID string) map[int64]string {
+func (h *Handlers) snapshotBackendRefs(tCtx context.Context, tabID string) (map[int64]string, string) {
 	rawNodes, err := bridge.FetchAXTree(tCtx)
 	if err != nil {
-		return nil
+		return nil, ""
 	}
 	flat, _ := bridge.BuildSnapshot(rawNodes, "", -1)
 	cache := bridge.EpochRefs(h.Bridge.GetRefCache(tabID), flat)
@@ -146,7 +156,7 @@ func (h *Handlers) snapshotBackendRefs(tCtx context.Context, tabID string) map[i
 			refs[n.NodeID] = n.Ref
 		}
 	}
-	return refs
+	return refs, cache.DomEpoch
 }
 
 // splitCSVParam splits a comma list query value into trimmed, non-empty items.

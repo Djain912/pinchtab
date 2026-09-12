@@ -51,7 +51,11 @@ fi
 end_test
 
 # ─────────────────────────────────────────────────────────────────
-start_test "a11y axe: a ref-mapped node is actionable via /action"
+# The audit re-epochs the tab's ref cache and mints a fresh vocabulary token, so
+# acting on a returned ref must echo THAT token. An agent that kept a pre-audit
+# token (the nav -> audit -> click flow the card sells) would be refused 409, so
+# the scenario captures the audit's token and proves both directions.
+start_test "a11y axe: a ref-mapped node is actionable with the audit's vocab token"
 
 REF=$(echo "$RESULT" | jq -r 'first(.violations[] | select(.id=="label") | .nodes[] | select(.ref!=null and .ref!="") | .ref)')
 if [ -n "$REF" ] && [ "$REF" != "null" ]; then
@@ -62,8 +66,20 @@ else
   ((ASSERTIONS_FAILED++)) || true
 fi
 
-pt_post /action -d "{\"kind\":\"focus\",\"ref\":\"${REF}\"}"
-assert_ok "focus the failing element by its axe ref"
+VOCAB=$(echo "$RESULT" | jq -r '.vocabularyToken')
+if [ -n "$VOCAB" ] && [ "$VOCAB" != "null" ]; then
+  echo -e "  ${GREEN}✓${NC} audit published a vocabulary token $VOCAB"
+  ((ASSERTIONS_PASSED++)) || true
+else
+  echo -e "  ${RED}✗${NC} audit published no vocabulary token, so an agent cannot act on its refs"
+  ((ASSERTIONS_FAILED++)) || true
+fi
+
+pt_post /action -d "{\"kind\":\"focus\",\"ref\":\"${REF}\",\"vocab\":\"${VOCAB}\"}"
+assert_ok "focus the failing element echoing the audit's own token"
+
+pt_post /action -d "{\"kind\":\"focus\",\"ref\":\"${REF}\",\"vocab\":\"stale-pre-audit-token\"}"
+assert_http_status 409 "a pre-audit token is refused vocab_superseded"
 
 end_test
 

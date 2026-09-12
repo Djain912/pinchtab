@@ -40,6 +40,11 @@ func handleA11yAudit(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp
 		if v, ok := optBool(r, "includeIncomplete"); ok && v {
 			q.Set("includeIncomplete", "true")
 		}
-		return toolResult(c.Get(ctx, "/a11y/audit", routedQuery(r, q)))
+		// The axe engine re-epochs the tab's ref cache and publishes a fresh
+		// vocabulary token. Capture it under the request's tab key (as snapshot
+		// does) so a later pinchtab_click/fill on a returned ref echoes that token
+		// rather than a stale one the server refuses 409. The native engine sends
+		// no token, so this is a no-op there.
+		return toolResult(c.GetCapturingVocab(ctx, "/a11y/audit", routedQuery(r, q), optString(r, "tabId")))
 	}
 }

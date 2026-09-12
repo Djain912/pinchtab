@@ -29,10 +29,15 @@ func BackendNodeIDForSelector(ctx context.Context, frameID, selector string) (in
 		return 0, err
 	}
 
+	encodedSelector, err := json.Marshal(selector)
+	if err != nil {
+		return 0, err
+	}
+
 	var raw json.RawMessage
 	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		return chromedp.FromContext(ctx).Target.Execute(ctx, "Runtime.evaluate", map[string]any{
-			"expression": fmt.Sprintf(`document.querySelector(%q)`, selector),
+			"expression": fmt.Sprintf(`document.querySelector(%s)`, encodedSelector),
 			"contextId":  execID,
 		}, &raw)
 	})); err != nil {
