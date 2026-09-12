@@ -410,6 +410,51 @@ func TestHandleGetTextModeSupersedesRaw(t *testing.T) {
 	}
 }
 
+// The outbound-query tests above prove pinchtab_get_text SENDS mode=markdown;
+// this proves it RETURNS the Markdown the server produces — the coverage the
+// query tests cannot give, since they never read a response body. It drives the
+// tool against a server that answers /text with Markdown structures when (and only
+// when) mode=markdown, and asserts a heading, link, list and table survive into
+// the tool result. The default read gets plain text, so the mode is what changes
+// the shape rather than the fixture.
+func TestHandleGetTextModeMarkdownReturnsMarkdownBody(t *testing.T) {
+	const markdownBody = "# Markdown Fixture\n\nA paragraph with an [inline link](https://example.com/link).\n\n- one\n- two\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n"
+	const plainBody = "Markdown Fixture A paragraph with an inline link one two A B 1 2"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := map[string]any{"url": "http://fixtures/markdown.html", "title": "Markdown Fixture"}
+		if r.URL.Query().Get("mode") == "markdown" {
+			body["extraction"] = "markdown"
+			body["text"] = markdownBody
+		} else {
+			body["extraction"] = "readability"
+			body["text"] = plainBody
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		_ = json.NewEncoder(w).Encode(body)
+	}))
+	defer srv.Close()
+
+	got := resultJSON(t, callTool(t, "pinchtab_get_text", map[string]any{"mode": "markdown"}, srv))
+	if got["extraction"] != "markdown" {
+		t.Errorf("extraction = %v, want markdown", got["extraction"])
+	}
+	text, _ := got["text"].(string)
+	for _, want := range []string{"# ", "](", "- ", "|"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("markdown tool result lost the %q structure:\n%s", want, text)
+		}
+	}
+
+	// The same tool without mode returns plain text, so the Markdown above is the
+	// mode's doing and not the server answering markdown to everything.
+	plain := resultJSON(t, callTool(t, "pinchtab_get_text", map[string]any{}, srv))
+	if pt, _ := plain["text"].(string); strings.Contains(pt, "](") {
+		t.Errorf("default get_text should not carry Markdown link syntax:\n%s", pt)
+	}
+}
+
 // getTextQueryValue reads the first value the mock recorded for a query key. The
 // mock echoes r.URL.Query() (a map of string→[]string) into resp["query"].
 func getTextQueryValue(t *testing.T, r *mcp.CallToolResult, key string) string {
