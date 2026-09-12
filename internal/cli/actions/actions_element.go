@@ -141,7 +141,7 @@ func postActionWithHeaders(client *http.Client, base, token string, cmd *cobra.C
 	snap, _ := cmd.Flags().GetBool("snap")
 	snapDiff, _ := cmd.Flags().GetBool("snap-diff")
 	if snap || snapDiff {
-		fetchAndPrintSnapshot(client, base, token, tabID, snapDiff)
+		fetchAndPrintSnapshot(client, base, token, tabID, snapDiff, tabID == "")
 	}
 
 	text, _ := cmd.Flags().GetBool("text")
@@ -150,7 +150,7 @@ func postActionWithHeaders(client *http.Client, base, token string, cmd *cobra.C
 	}
 }
 
-func fetchAndPrintSnapshot(client *http.Client, base, token, tabID string, diff bool) {
+func fetchAndPrintSnapshot(client *http.Client, base, token, tabID string, diff, implicit bool) {
 	params := "filter=interactive&format=compact"
 	if diff {
 		params += "&diff=true"
@@ -158,7 +158,7 @@ func fetchAndPrintSnapshot(client *http.Client, base, token, tabID string, diff 
 	if tabID != "" {
 		params += "&tabId=" + tabID
 	}
-	apiclient.DoGetRawAndPrint(client, base, token, "/snapshot?"+params)
+	apiclient.DoGetRawAndPrintCapturingVocab(client, base, token, "/snapshot?"+params, implicit)
 }
 
 func fetchAndPrintText(client *http.Client, base, token, tabID string) {

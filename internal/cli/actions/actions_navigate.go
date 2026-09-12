@@ -59,12 +59,18 @@ func historyNav(client *http.Client, base, token, action string, cmd *cobra.Comm
 	printPostActionOutput(client, base, token, tabID, cmd)
 }
 
-// printPostActionOutput runs the shared --snap / --snap-diff / --text tail.
+// printPostActionOutput runs the shared --snap / --snap-diff / --text tail. The
+// snapshot is fetched for the resolved tabID, but the vocabulary token it returns
+// is filed as the CURRENT tab's only when the user named no --tab, so a later
+// implicit ref action (the common nav --snap then fill e0 flow) echoes it — the
+// resolved id is always non-empty here and keying implicit on it would never set
+// the current pointer.
 func printPostActionOutput(client *http.Client, base, token, tabID string, cmd *cobra.Command) {
 	snap, _ := cmd.Flags().GetBool("snap")
 	snapDiff, _ := cmd.Flags().GetBool("snap-diff")
 	if snap || snapDiff {
-		fetchAndPrintSnapshot(client, base, token, tabID, snapDiff)
+		userTab, _ := cmd.Flags().GetString("tab")
+		fetchAndPrintSnapshot(client, base, token, tabID, snapDiff, userTab == "")
 	}
 	if text, _ := cmd.Flags().GetBool("text"); text {
 		fetchAndPrintText(client, base, token, tabID)

@@ -186,10 +186,17 @@ func DoGetRawCapturingVocab(client *http.Client, base, token, path string, param
 	return body
 }
 
-// DoGetRawAndPrint fetches and prints the raw response body (for --snap flag).
-// Best-effort: it reports errors to stderr but does not exit.
-func DoGetRawAndPrint(client *http.Client, base, token, pathWithQuery string) {
-	status, body, err := doRequest(client, token, request{method: "GET", url: base + pathWithQuery})
+// DoGetRawAndPrintCapturingVocab fetches and prints the raw snapshot body (for the
+// --snap / --snap-diff tail) and, on success, persists the response's vocabulary
+// token keyed by the resolved tab (implicit when the caller named no tab), so a ref
+// the snapshot printed can be acted on without a re-snapshot and without a false
+// 409. It stays best-effort — a transport or HTTP failure warns on stderr and
+// returns, never exits (unlike DoGetRawCapturingVocab, which calls exitOnAPIError):
+// this tail runs after an action that already succeeded, so a cosmetic snapshot
+// failure must not turn a successful action into a non-zero exit.
+func DoGetRawAndPrintCapturingVocab(client *http.Client, base, token, pathWithQuery string, implicit bool) {
+	var headers http.Header
+	status, body, err := doRequest(client, token, request{method: "GET", url: base + pathWithQuery, respHeaders: &headers})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "snapshot failed: %v\n", err)
 		return
@@ -198,6 +205,7 @@ func DoGetRawAndPrint(client *http.Client, base, token, pathWithQuery string) {
 		fmt.Fprintf(os.Stderr, "snapshot error %d: %s\n", status, string(body))
 		return
 	}
+	storeVocabToken(base, headers.Get(vocabTabIDHeader), headers.Get(vocabHeader), implicit)
 	fmt.Println(string(body))
 }
 
