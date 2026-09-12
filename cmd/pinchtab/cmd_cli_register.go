@@ -136,7 +136,7 @@ func configureBrowserFlags() {
 	captureCmd.Flags().StringP("output", "o", "", "Save the captured image to this local file path (default: capture-<ts>.jpg)")
 	captureCmd.Flags().StringP("selector", "s", "", "Scope: clips screenshot and filters snapshot subtree to the same element")
 	captureCmd.Flags().String("filter", "", "Snapshot filter: 'interactive' or 'all' (default: interactive)")
-	captureCmd.Flags().String("format", "", "Image format: 'jpeg' (default) or 'png'")
+	captureCmd.Flags().String("format", "", "Image format: 'jpeg' or 'png' (default: inferred from -o .png, otherwise jpeg)")
 	captureCmd.Flags().StringP("quality", "q", "", "JPEG quality (0-100)")
 	captureCmd.Flags().String("depth", "", "Snapshot max depth (-1 for full)")
 	captureCmd.Flags().String("wait", "", "Lifecycle wait: stable (default) | load | none")
