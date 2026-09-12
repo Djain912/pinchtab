@@ -202,7 +202,7 @@ func (h *Handlers) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	defer tCancel()
 	go httpx.CancelOnClientDone(r.Context(), tCancel)
 
-	nodeID, err := h.Bridge.ResolveSelectorToNodeID(tCtx, req.Selector)
+	nodeID, err := h.Bridge.ResolveSelectorToNodeID(tCtx, req.Selector, h.Bridge.GetRefCache(resolvedTabID), h.selectorFrameID(resolvedTabID))
 	if err != nil {
 		respondSelectorFailure(w, fmt.Errorf("%w: upload selector %q: %v", ErrElementNotFound, req.Selector, err))
 		return

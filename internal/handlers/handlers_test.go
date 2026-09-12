@@ -309,7 +309,7 @@ func (m *mockBridge) SetFileInputFiles(ctx context.Context, nodeID int64, paths 
 	return nil
 }
 
-func (m *mockBridge) ResolveSelectorToNodeID(ctx context.Context, selector string) (int64, error) {
+func (m *mockBridge) ResolveSelectorToNodeID(ctx context.Context, selector string, refCache *bridge.RefCache, frameID string) (int64, error) {
 	return 0, nil
 }
 

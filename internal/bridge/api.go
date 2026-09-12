@@ -122,7 +122,7 @@ type BridgeAPI interface {
 	PrintToPDF(ctx context.Context, params PDFParams) ([]byte, error)
 
 	SetFileInputFiles(ctx context.Context, nodeID int64, paths []string) error
-	ResolveSelectorToNodeID(ctx context.Context, selector string) (int64, error)
+	ResolveSelectorToNodeID(ctx context.Context, selector string, refCache *RefCache, frameID string) (int64, error)
 
 	DownloadURL(ctx context.Context, dlURL string, opts DownloadOpts) (*DownloadResult, error)
 
