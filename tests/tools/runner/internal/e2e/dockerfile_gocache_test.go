@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pinchtab/pinchtab/internal/srccensus"
 )
 
 const goBuildCacheMount = "--mount=type=cache,target=/root/.cache/go-build"
 
-var dockerfileWalkSkips = map[string]bool{".git": true, ".tools": true, "node_modules": true, "dist": true, "tmp": true}
+var dockerfileWalkSkips = map[string]bool{".tools": true, "tmp": true}
 
 func isDockerfileName(name string) bool {
 	return name == "Dockerfile" || strings.HasPrefix(name, "Dockerfile.") || strings.HasSuffix(name, ".Dockerfile")
@@ -59,7 +61,7 @@ func TestEveryDockerfileGoBuildKeepsItsCompileCacheAcrossBuilds(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
-			if dockerfileWalkSkips[d.Name()] {
+			if path != root && (srccensus.ExcludedDir(path) || dockerfileWalkSkips[d.Name()]) {
 				return fs.SkipDir
 			}
 			return nil
