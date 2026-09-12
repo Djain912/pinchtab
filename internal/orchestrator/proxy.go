@@ -463,52 +463,33 @@ func closedTabID(req *http.Request, resp *http.Response) string {
 	return tabClosePathID(req)
 }
 
-// tabsCacheRequestAffectsTabs reports whether a successful response should
-// invalidate the per-instance tabs cache. Errs on the side of invalidating
-// rather than serving stale data — the cache is a perf optimization, not
-// a correctness guarantee.
 func tabsCacheRequestAffectsTabs(req *http.Request, resp *http.Response) bool {
 	if req == nil {
 		return false
 	}
-	// X-PinchTab-Tab-Id is a strong signal something changed; invalidate
-	// regardless of the route the request hit.
-	if resp != nil {
-		if strings.TrimSpace(resp.Header.Get(activity.HeaderPTTabID)) != "" {
-			return true
-		}
+	if resp != nil && strings.TrimSpace(resp.Header.Get(activity.HeaderPTTabID)) != "" {
+		return true
 	}
 	if req.Method != http.MethodPost {
 		return false
 	}
 	path := strings.TrimSpace(req.URL.Path)
+	if subpath := instanceRouteSubpath(path); subpath != "" {
+		path = subpath
+	}
+	return tabMutatingRoute(path)
+}
+
+func tabMutatingRoute(path string) bool {
 	switch path {
 	case "/tab", "/close", "/navigate", "/reload", "/back", "/forward":
 		return true
 	}
-	if subpath := instanceRouteSubpath(path); subpath != "" {
-		switch subpath {
-		case "/tab", "/close", "/navigate", "/reload", "/back", "/forward":
-			return true
-		}
-		if strings.HasPrefix(subpath, "/tabs/") {
-			switch {
-			case strings.HasSuffix(subpath, "/close"),
-				strings.HasSuffix(subpath, "/navigate"),
-				strings.HasSuffix(subpath, "/reload"),
-				strings.HasSuffix(subpath, "/back"),
-				strings.HasSuffix(subpath, "/forward"):
-				return true
-			}
-		}
+	if !strings.HasPrefix(path, "/tabs/") {
+		return false
 	}
-	if strings.HasPrefix(path, "/tabs/") {
-		switch {
-		case strings.HasSuffix(path, "/close"),
-			strings.HasSuffix(path, "/navigate"),
-			strings.HasSuffix(path, "/reload"),
-			strings.HasSuffix(path, "/back"),
-			strings.HasSuffix(path, "/forward"):
+	for _, verb := range []string{"/close", "/navigate", "/reload", "/back", "/forward"} {
+		if strings.HasSuffix(path, verb) {
 			return true
 		}
 	}
