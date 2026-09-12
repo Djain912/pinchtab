@@ -252,6 +252,30 @@ func Run(ctx context.Context, input Input, opts RunOptions, crawl Crawler, rende
 	}, nil
 }
 
+// PageMarkdown is one rendered document converted to Markdown through
+// seaportal: the body with the title and description the converter recovered,
+// plus its error. Markdown is empty when the converter errored or produced no
+// content, so a caller can fall back to raw text.
+type PageMarkdown struct {
+	Markdown    string
+	Title       string
+	Description string
+	Err         string
+}
+
+// ToMarkdown converts one document's HTML to Markdown through the seaportal
+// engine. Markdown is blank when the converter errors or yields no content;
+// Title, Description and Err are always reported. It is the single owner of the
+// (html, url) → Markdown conversion shared by enrichPage and the /text handler.
+func ToMarkdown(html, url string) PageMarkdown {
+	r := seaportal.FromHTML(html, url)
+	md := PageMarkdown{Title: r.Title, Description: r.Description, Err: r.Error}
+	if strings.TrimSpace(r.Content) != "" {
+		md.Markdown = r.Content
+	}
+	return md
+}
+
 // enrichPage renders p in the browser and replaces its content with the
 // extraction over the rendered HTML. The HTTP extraction is kept whenever
 // the browser path fails or yields nothing.
@@ -261,25 +285,25 @@ func enrichPage(p *Page, render BrowserRenderer) {
 		p.BrowserError = err.Error()
 		return
 	}
-	r := seaportal.FromHTML(html, p.URL)
-	if r.Error != "" {
-		p.BrowserError = r.Error
+	md := ToMarkdown(html, p.URL)
+	if md.Err != "" {
+		p.BrowserError = md.Err
 		return
 	}
-	if strings.TrimSpace(r.Content) == "" {
+	if md.Markdown == "" {
 		p.BrowserError = "browser extraction produced no content"
 		return
 	}
-	p.Markdown = r.Content
+	p.Markdown = md.Markdown
 	p.Source = SourceBrowser
 	// The browser reached the page and produced content, so an HTTP fetch
 	// failure no longer marks the page as failed.
 	p.Error = ""
-	if r.Title != "" {
-		p.Title = r.Title
+	if md.Title != "" {
+		p.Title = md.Title
 	}
-	if p.Meta == nil && r.Description != "" {
-		p.Meta = map[string]string{"description": r.Description}
+	if p.Meta == nil && md.Description != "" {
+		p.Meta = map[string]string{"description": md.Description}
 	}
 }
 

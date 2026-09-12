@@ -315,7 +315,7 @@ Snapshot query parameters:
 
 Text query parameters:
 
-- `mode=raw` (`mode=full` is an alias; any other value is a 400 naming the accepted ones)
+- `mode=raw` (`mode=full` is an alias), `mode=markdown` (any other value is a 400 naming the accepted ones)
 - `format`
 - `maxChars`
 - `frameId`
@@ -324,6 +324,16 @@ Text query parameters:
 `<main>` (skips `display:none`) and strips nav/footer/ads. Use `mode=raw` for
 full `innerText`, or `/snapshot` for structured UI text like prices and button
 labels.
+
+`mode=markdown` returns the rendered page as Markdown through the seaportal
+converter — the same conversion the site scraper applies — with the JSON
+envelope carrying the converter's `title` and `description` alongside `text`.
+It reads the current frame scope's rendered HTML (the document `/html` returns),
+so a `/frame`-selected iframe converts that frame. `format=text` returns the raw
+Markdown body with `Content-Type: text/markdown; charset=utf-8`, and `maxChars`
+truncates on a line boundary so a cut never splits a table row or link. When the
+converter yields nothing the response falls back to the raw page text and echoes
+`extraction: "markdown_fallback"`.
 
 `mode=raw` and `mode=full` are the same extraction — the whole unfiltered page —
 and are what the CLI's `--raw` and `--full` send. The default extraction keeps

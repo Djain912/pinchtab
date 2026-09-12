@@ -735,3 +735,23 @@ func TestAnUnrecognisedInheritedRecommendationIsForwardedNotDropped(t *testing.T
 		t.Errorf("an inherited recommendation matching neither the regenerated phrases nor the sitemap lines was silently swallowed; the recorded rule says unrecognised advice FORWARDS, since dropping advice that is still true is the worse failure\n got %v", report.Summary.Recommendations)
 	}
 }
+
+func TestToMarkdownConvertsRenderedHTML(t *testing.T) {
+	md := ToMarkdown(renderedHTML, "https://example.com/page")
+	if md.Err != "" {
+		t.Fatalf("unexpected converter error: %s", md.Err)
+	}
+	if md.Title != "Rendered Title" {
+		t.Errorf("Title = %q, want the converter title", md.Title)
+	}
+	if strings.TrimSpace(md.Markdown) == "" {
+		t.Error("Markdown is empty for a rich rendered document")
+	}
+}
+
+func TestToMarkdownEmptyForContentlessDocument(t *testing.T) {
+	md := ToMarkdown("<html><body></body></html>", "https://example.com/empty")
+	if md.Markdown != "" {
+		t.Errorf("Markdown = %q, want empty so the caller falls back", md.Markdown)
+	}
+}
