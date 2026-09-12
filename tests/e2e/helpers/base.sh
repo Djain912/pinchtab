@@ -263,10 +263,11 @@ assert_ref_json_jq() {
 }
 
 SCENARIO_TAB_BASELINE="${SCENARIO_TAB_BASELINE:-}"
+SCENARIO_TAB_BASELINE_OK="${SCENARIO_TAB_BASELINE_OK:-0}"
 
 record_scenario_tab_baseline() {
-  if declare -F _e2e_snapshot_tab_ids >/dev/null 2>&1; then
-    SCENARIO_TAB_BASELINE="$(_e2e_snapshot_tab_ids | tr '\n' ' ')"
+  if declare -F _e2e_record_tab_baseline >/dev/null 2>&1; then
+    _e2e_record_tab_baseline
   fi
 }
 
