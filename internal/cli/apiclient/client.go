@@ -11,41 +11,93 @@ import (
 	"time"
 )
 
-const vocabHeader = "X-PinchTab-Vocab"
+const (
+	vocabHeader      = "X-PinchTab-Vocab"
+	vocabTabIDHeader = "X-PinchTab-Tab-Id"
+	vocabStoreLimit  = 16
+)
+
+// vocabEntry pairs a snapshot's vocabulary token with the tab the server
+// actually resolved it for, so a later action echoes the token only when it
+// targets that same tab.
+type vocabEntry struct {
+	TabID string `json:"tabId"`
+	Token string `json:"token"`
+}
 
 // DoGetCapturingVocab performs a GET like DoGet and, on success, persists the
-// response's vocabulary token for (base, tabKey) so a later action on that tab
-// echoes it and a ref renumbered by an intervening snapshot is refused rather
-// than mis-resolved. The token is delivered as a response header so it survives
-// every snapshot format, including the compact text the CLI defaults to.
-func DoGetCapturingVocab(client *http.Client, base, token, path string, params url.Values, tabKey string) map[string]any {
+// response's vocabulary token keyed by the tab the server resolved (the
+// X-PinchTab-Tab-Id header), not by how the caller spelled --tab. A later action
+// on that tab echoes it and a ref renumbered by an intervening snapshot is
+// refused rather than mis-resolved. The token is delivered as a response header
+// so it survives every snapshot format, including the compact text the CLI
+// defaults to.
+func DoGetCapturingVocab(client *http.Client, base, token, path string, params url.Values) map[string]any {
 	var headers http.Header
 	r := request{method: "GET", url: buildURL(base, path, params), respHeaders: &headers}
 	status, body := mustRequest(client, token, r)
 	exitOnAPIError(r, status, body)
-	storeVocabToken(base, tabKey, headers.Get(vocabHeader))
+	storeVocabToken(base, headers.Get(vocabTabIDHeader), headers.Get(vocabHeader))
 	return printAndDecode(body)
 }
 
-// VocabTokenFor returns the last vocabulary token stored for (base, tabKey), or "".
-func VocabTokenFor(base, tabKey string) string {
-	data, err := os.ReadFile(vocabTokenPath(base, tabKey))
-	if err != nil {
+// VocabTokenFor returns the token stored for a resolved tab id, or "". An empty
+// tabID (an implicit action, whose target the CLI cannot know before the server
+// resolves it) returns "", so the caller omits the token rather than echoing one
+// belonging to whatever tab was current at the last snapshot.
+func VocabTokenFor(base, tabID string) string {
+	if tabID == "" {
 		return ""
 	}
-	return strings.TrimSpace(string(data))
+	for _, e := range loadVocabStore(base) {
+		if e.TabID == tabID {
+			return e.Token
+		}
+	}
+	return ""
 }
 
-func storeVocabToken(base, tabKey, token string) {
-	if token == "" {
+func storeVocabToken(base, tabID, token string) {
+	if tabID == "" || token == "" {
 		return
 	}
-	path := vocabTokenPath(base, tabKey)
-	_ = os.MkdirAll(filepath.Dir(path), 0755)
-	_ = os.WriteFile(path, []byte(token+"\n"), 0644)
+	entries := loadVocabStore(base)
+	kept := entries[:0]
+	for _, e := range entries {
+		if e.TabID != tabID {
+			kept = append(kept, e)
+		}
+	}
+	kept = append(kept, vocabEntry{TabID: tabID, Token: token})
+	if len(kept) > vocabStoreLimit {
+		kept = kept[len(kept)-vocabStoreLimit:]
+	}
+	writeVocabStore(base, kept)
 }
 
-func vocabTokenPath(base, tabKey string) string {
+func loadVocabStore(base string) []vocabEntry {
+	data, err := os.ReadFile(vocabStorePath(base))
+	if err != nil {
+		return nil
+	}
+	var entries []vocabEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil
+	}
+	return entries
+}
+
+func writeVocabStore(base string, entries []vocabEntry) {
+	path := vocabStorePath(base)
+	_ = os.MkdirAll(filepath.Dir(path), 0755)
+	data, err := json.Marshal(entries)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(path, data, 0600)
+}
+
+func vocabStorePath(base string) string {
 	dir := os.Getenv("XDG_STATE_HOME")
 	if dir != "" {
 		dir += "/pinchtab"
@@ -54,11 +106,7 @@ func vocabTokenPath(base, tabKey string) string {
 	} else {
 		dir = "/tmp/pinchtab"
 	}
-	key := tabKey
-	if key == "" {
-		key = "default"
-	}
-	return filepath.Join(dir, "vocab-"+fileSlug(base)+"-"+fileSlug(key))
+	return filepath.Join(dir, "vocab-"+fileSlug(base))
 }
 
 func fileSlug(s string) string {
