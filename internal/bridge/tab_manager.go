@@ -306,6 +306,12 @@ func (tm *TabManager) createTab(url, browserContextID string) (string, context.C
 	return tabID, ctx, cancel, nil
 }
 
+// ErrCannotCloseLastTab is the last-tab precondition: at least one tab must
+// remain or Chrome exits and takes the server down. It is a client precondition,
+// not a server fault, so handlers classify it as a 4xx via errors.Is rather than
+// matching the message text.
+var ErrCannotCloseLastTab = errors.New("cannot close the last tab — at least one tab must remain")
+
 func (tm *TabManager) CloseTab(tabID string) error {
 	if tm == nil {
 		return fmt.Errorf("tab manager not initialized")
@@ -316,7 +322,7 @@ func (tm *TabManager) CloseTab(tabID string) error {
 		return fmt.Errorf("list targets: %w", err)
 	}
 	if len(targets) <= 1 {
-		return fmt.Errorf("cannot close the last tab — at least one tab must remain")
+		return ErrCannotCloseLastTab
 	}
 
 	tm.mu.Lock()

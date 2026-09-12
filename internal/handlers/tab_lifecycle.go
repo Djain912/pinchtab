@@ -3,11 +3,13 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/pinchtab/pinchtab/internal/activity"
+	"github.com/pinchtab/pinchtab/internal/bridge"
 	"github.com/pinchtab/pinchtab/internal/httpx"
 )
 
@@ -167,7 +169,18 @@ func (h *Handlers) closeTab(w http.ResponseWriter, r *http.Request, tabID string
 	}
 
 	if err := h.Bridge.CloseTab(tabID); err != nil {
-		httpx.Error(w, 500, err)
+		var notFound *bridge.TabNotFoundError
+		switch {
+		case errors.As(err, &notFound):
+			// Match every other tab-scoped op: a missing tab is a 404 client error,
+			// not a server fault. WriteTabContextError also carries the crash
+			// annotation when the tab died with the browser.
+			WriteTabContextError(w, err, 404)
+		case errors.Is(err, bridge.ErrCannotCloseLastTab):
+			httpx.ErrorCode(w, http.StatusConflict, "cannot_close_last_tab", err.Error(), false, nil)
+		default:
+			httpx.Error(w, 500, err)
+		}
 		return
 	}
 

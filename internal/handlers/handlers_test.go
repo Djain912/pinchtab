@@ -31,6 +31,7 @@ type mockBridge struct {
 	ensureBrowserCfg  *config.RuntimeConfig
 	dialogManager     *bridge.DialogManager
 	executeActionErr  error
+	closeTabErr       error
 	actionResult      map[string]any
 	autoCloseArmed    []string
 	autoCloseCanceled []string
@@ -105,6 +106,9 @@ func (m *mockBridge) CreateTabInBrowserContext(url, browserContextID string) (st
 }
 
 func (m *mockBridge) CloseTab(tabID string) error {
+	if m.closeTabErr != nil {
+		return m.closeTabErr
+	}
 	if tabID == "fail" {
 		return fmt.Errorf("close failed")
 	}
