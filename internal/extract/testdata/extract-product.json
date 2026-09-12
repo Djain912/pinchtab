@@ -1,0 +1,12 @@
+{
+  "url": "http://fixtures/extract-product.html",
+  "title": "Product — Sony WH-1000XM5",
+  "nodes": [
+    {"ref": "e1", "role": "main", "name": "Product", "depth": 0},
+    {"ref": "e2", "role": "heading", "name": "Sony WH-1000XM5 Wireless Headphones", "depth": 1},
+    {"ref": "e3", "role": "paragraph", "name": "Price", "text": "$1,299.00", "depth": 1},
+    {"ref": "e4", "role": "paragraph", "name": "Rating", "text": "4.7 out of 5", "depth": 1},
+    {"ref": "e5", "role": "checkbox", "name": "In stock", "checked": "true", "depth": 1},
+    {"ref": "e6", "role": "paragraph", "name": "Description", "text": "Industry-leading noise cancellation with up to 30 hours of battery life.", "depth": 1}
+  ]
+}

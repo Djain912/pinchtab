@@ -1,0 +1,11 @@
+{
+  "url": "http://fixtures/extract-article.html",
+  "title": "The Rise of Model-Free Extraction",
+  "nodes": [
+    {"ref": "e1", "role": "article", "name": "Story", "depth": 0},
+    {"ref": "e2", "role": "heading", "name": "The Rise of Model-Free Extraction", "depth": 1},
+    {"ref": "e3", "role": "paragraph", "name": "Author", "text": "Jane Doe", "depth": 1},
+    {"ref": "e4", "role": "paragraph", "name": "Date published", "text": "2026-09-12", "depth": 1},
+    {"ref": "e5", "role": "paragraph", "name": "Body", "text": "Agents have long needed a step between finding one element and scraping a whole page. A schema-driven extractor fills that gap without a model.", "depth": 1}
+  ]
+}
