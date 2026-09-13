@@ -6,11 +6,7 @@ PinchTab offers three levels of agent identification, from simple to fully manag
 
 Every PinchTab server has a bearer token configured in `server.token`. This is the baseline authentication method — it proves the caller is authorized to use the server, but says nothing about *which* agent is making the request.
 
-```bash
-pinchtab --token "your-server-token" nav https://example.com
-```
-
-Or via environment variable:
+The CLI reads it from the local config automatically. To supply it explicitly (for example against another server), use the environment variable — there is no `--token` flag:
 
 ```bash
 export PINCHTAB_TOKEN=your-server-token
@@ -77,7 +73,7 @@ Modes:
 |------|----------|
 | `off` | Agent sessions disabled |
 | `preferred` | Both bearer and session auth accepted (default when enabled) |
-| `required` | Only session auth accepted for agents |
+| `required` | Not implemented; refused at config load (see [Configuration](#configuration)) |
 
 ### Create a Session
 

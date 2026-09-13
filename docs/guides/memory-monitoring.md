@@ -39,16 +39,18 @@ Important limitation:
 
 ## Instance Metrics
 
-For a single running browser:
+For a single running browser, read the instance's own `/metrics`. Against `pinchtab bridge` that is the bridge port; behind `pinchtab server`, go through the instance route, because the server's own `GET /metrics` answers the front door's counters (`"layer": "frontDoor"`) with no `memory` block:
 
 ```bash
-curl http://localhost:9867/metrics
+curl http://localhost:9867/metrics                      # pinchtab bridge
+curl http://localhost:9867/instances/<instanceId>/metrics   # pinchtab server
 ```
 
-Example shape:
+Example shape (abridged; `failures` and `crashes` omitted):
 
 ```json
 {
+  "layer": "instance",
   "metrics": {
     "goHeapAllocMB": 12.5,
     "goHeapSysMB": 24.0,
@@ -99,6 +101,18 @@ curl http://localhost:9867/instances/metrics
 ```
 
 This returns one metrics object per running instance — `instanceId`, `profileName`, `memoryMB`, `renderers`, `page` and `unreadableTargets` — which is the best API for comparing memory across a fleet.
+
+## Page Heap And Leak Hunting
+
+The figures above are instance-wide. For one tab's JavaScript heap, heap snapshots, and snapshot comparison, use the `/memory` endpoints and `pinchtab memory` instead:
+
+```bash
+pinchtab memory --gc                 # GET /memory?gc=true: heap usage and DOM counters
+pinchtab memory snapshot             # POST /memory/snapshot (needs security.allowMemory)
+pinchtab memory compare <base> <head>
+```
+
+`GET /memory` is always available; snapshot, summary and compare need `security.allowMemory` (default off). See [Memory](../reference/memory.md) for the endpoints, response shapes and a leak-hunting walkthrough.
 
 ## Dashboard Monitoring
 

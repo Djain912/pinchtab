@@ -16,7 +16,7 @@ It does not replace the direct action endpoints.
 
 ## Runtime Placement
 
-In dashboard mode, the scheduler is created only when `scheduler.enabled` is true. It is registered directly on the main mux and exposes:
+In server mode, the scheduler is created only when `scheduler.enabled` is true. It is registered directly on the main mux and exposes:
 
 - `POST /tasks`
 - `GET /tasks`
@@ -135,7 +135,7 @@ The scheduler stores the corresponding cancel function so that:
 
 Two deadline paths exist:
 
-- queued task expiry: a background reaper scans queued tasks every second and marks expired ones as failed
+- queued task expiry: a background reaper scans queued tasks every 5 seconds and marks expired ones as failed
 - running task deadline: the per-task context deadline is enforced by the HTTP request to the executor
 
 Queued expiry currently records:
@@ -245,7 +245,7 @@ Custom headers are sent: `X-PinchTab-Event: task.completed` and `X-PinchTab-Task
 
 ### Batch Submission
 
-`POST /tasks/batch` accepts an array of task definitions (up to 50) sharing a single `agentId` and optional `callbackUrl`. Each task is submitted individually through `Submit()`, so queue admission limits apply per-task.
+`POST /tasks/batch` accepts an array of task definitions (up to `scheduler.maxBatchSize`, default 50) sharing a single `agentId` and optional `callbackUrl`. Each task is submitted individually through `Submit()`, so queue admission limits apply per-task.
 
 The batch endpoint supports partial failure: if some tasks are rejected (queue full), the accepted tasks are still submitted and the response includes per-task status.
 

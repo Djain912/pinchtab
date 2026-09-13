@@ -19,13 +19,16 @@ heap snapshot holds every string on the page, tokens included.
 
 ## Usage
 
-`GET /memory?tabId=<id>&gc=true` returns `usedJSHeapSize`, `totalJSHeapSize`,
-`jsHeapSizeLimit`, `documents`, `nodes`, `listeners` and `frames`. `gc=true` runs a
-garbage collection first so two reads compare live memory only.
+`GET /memory?tabId=<id>&gc=true` returns `tabId`, `usedJSHeapSize`, `totalJSHeapSize`,
+`jsHeapSizeLimit`, `documents`, `nodes`, `listeners`, `frames` and `gc`. `gc=true` runs a
+garbage collection first so two reads compare live memory only; a `gc` value that is
+not a boolean is `400 bad_gc`.
 
 ```bash
-pinchtab memory --gc
+pinchtab memory --gc            # --tab <id>, --json
 ```
+
+MCP `pinchtab_memory` takes `tabId`, `gc` and `browser`.
 
 ## Snapshot
 
@@ -33,17 +36,22 @@ pinchtab memory --gc
 `<stateDir>/heapsnapshots/<id>.heapsnapshot` and returns
 `{id, path, bytes, nodeCount, durationMs, tabId}`. The file loads in the Chrome
 DevTools Memory panel. A snapshot larger than `security.memorySnapshotMaxBytes`
-(default 512 MB) is discarded and answered `413 memory_snapshot_too_large`.
+(default 512 MB, capped at 4 GB) is discarded and answered
+`413 memory_snapshot_too_large` (details carry `maxBytes`).
 
 ```bash
 pinchtab memory snapshot                          # prints the id and path
 pinchtab memory snapshot --out app.heapsnapshot   # also copy it locally
 ```
 
+MCP `pinchtab_memory_snapshot` takes `tabId`, `top` and `browser`; it takes the
+snapshot and returns `{id, path, bytes, summary}` in one call.
+
 ## Summary
 
-`GET /memory/snapshot/{snapshotId}/summary?top=20` returns `nodeCount`, `edgeCount`,
-`totalSelfSize`, `topBySize`, `topByCount` (constructor rows of `name`, `count`,
+`GET /memory/snapshot/{snapshotId}/summary?top=20` returns `id`, `path`, `top`,
+`nodeCount`, `edgeCount`, `totalSelfSize`, `constructors` (distinct constructor
+count), `topBySize`, `topByCount` (constructor rows of `name`, `count`,
 `selfSize`) and `duplicateStrings` (`value`, `length`, `count`, `selfSize`).
 
 ```bash
@@ -63,7 +71,7 @@ growing array shows its bytes under `(array)` while `Array` itself stays small.
 | --- | --- | --- |
 | `base` | required | The earlier snapshot id |
 | `head` | required | The later snapshot id |
-| `top` | `20` | Rows in `constructors` and `newDuplicateStrings` (max 200) |
+| `top` | `20` | Rows in `constructors` and `newDuplicateStrings`; values above 200 are clamped to 200, a non-positive or non-integer value is `400 bad_top` |
 | `retained` | `false` | Add `retainedSize` to each returned row, from a dominator tree of `head` |
 
 ```json
@@ -99,7 +107,8 @@ growing array shows its bytes under `(array)` while `Array` itself stays small.
 - Parsed snapshots are cached in memory per snapshot file for the process lifetime,
   so comparing the same ids again, or summarizing one you compared, does not reparse.
 
-Errors: `400 bad_snapshot_id` (missing or malformed id), `400 bad_top`,
+Snapshot ids match `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`; the server names them
+`heap_<YYYYMMDD_HHMMSS>`. Errors: `400 bad_snapshot_id` (missing or malformed id), `400 bad_top`,
 `400 bad_retained`, `404 memory_snapshot_not_found` (details name the `id`),
 `422 memory_snapshot_invalid` (details name the `id` and the broken `section`),
 `403 memory_disabled`.
@@ -111,7 +120,12 @@ pinchtab memory compare <base> <head> --top 5
 pinchtab memory compare <base> <head> --retained --json
 ```
 
-MCP `pinchtab_memory_compare` takes `base`, `head`, `top` and `retained`.
+MCP `pinchtab_memory_compare` takes `base` and `head` (both required), `top`,
+`retained` and `browser`.
+
+Covered by `tests/e2e/scenarios/api/memory-basic.sh`,
+`tests/e2e/scenarios/api/memory-extended.sh` and
+`tests/e2e/scenarios/cli/memory-basic.sh`.
 
 ## Walkthrough: find a leak
 

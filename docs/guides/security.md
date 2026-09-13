@@ -21,13 +21,18 @@ The default security posture is:
 - `security.allowDownload = false`
 - `security.allowCookies = false`
 - `security.allowUpload = false`
+- `security.allowStateExport = false`
+- `security.allowNetworkIntercept = false`
+- `security.allowMemory = false`
+- `security.allowClipboard = false`
+- `security.allowFileScheme = false`
 - `autoSolver.enabled = false`
 - `instanceDefaults.stealthLevel = "light"` (minimal fingerprint normalization only; anti-bot bypass requires explicit opt-in to `medium` or `full`)
 - `security.attach.enabled = false`
 - `security.attach.allowHosts = ["127.0.0.1", "localhost", "::1"]`
 - `security.attach.allowSchemes = ["ws", "wss", "http", "https"]`
 - `security.attach.forwardProxyAuth = false`
-- `security.allowedDomains = ["127.0.0.1", "localhost", "::1"]`
+- `security.allowedDomains` unset (no domain restriction; the SSRF/private-IP guard still applies)
 - `security.trustedProxyCIDRs = []`
 - `security.trustedResolveCIDRs = []`
 - `security.idpi.enabled = true`
@@ -35,7 +40,7 @@ The default security posture is:
 - `security.idpi.scanContent = true`
 - `security.idpi.wrapContent = true`
 
-Use `pinchtab security` to review the current posture and restore the recommended defaults.
+Use `pinchtab security` to review the current posture and `pinchtab security up` to restore the recommended defaults (loopback bind, every capability off, local-only attach, IDPI on). `security up` resets the whole `security` block to the defaults above, so it also clears `security.allowedDomains`; set a local-only allowlist separately if you want one (see [IDPI](#idpi)).
 
 ## Security Philosophy
 
@@ -164,7 +169,7 @@ Recommended practice:
 pinchtab config init
 ```
 
-The dashboard Settings page does not expose or rotate `server.token`. Use `pinchtab config token` to copy the current token (or `pinchtab config token --stdout` to print it where there is no clipboard), or let `pinchtab security` restore or create one if `server.token` is empty.
+The dashboard Settings page does not expose or rotate `server.token`. Use `pinchtab config token` to copy the current token (or `pinchtab config token --stdout` to print it where there is no clipboard), or let `pinchtab security up` create one if `server.token` is empty.
 
 If you are calling the API manually:
 
@@ -195,6 +200,10 @@ Some endpoint families expose much more power than normal navigation and inspect
 - `security.allowDownload`
 - `security.allowCookies`
 - `security.allowUpload`
+- `security.allowStateExport`
+- `security.allowNetworkIntercept`
+- `security.allowMemory`
+- `security.allowClipboard`
 - `security.allowFileScheme`
 
 Why they are considered dangerous:
@@ -205,6 +214,10 @@ Why they are considered dangerous:
 - `download` can fetch and persist remote content. When `security.downloadAllowedDomains` is set, matching domains bypass private-IP SSRF checks (intended for internal hosts such as Docker services). A bare `"*"` matches every host and therefore disables private-IP protection for this endpoint, including loopback. Naming a loopback host (`127.0.0.1`, `localhost`) or using `"*"` lets the download endpoint reach services on the server's own machine, including PinchTab's own local endpoints, so treat either configuration the way you treat `allowFileScheme`.
 - `cookies` can read, write, or clear browser session tokens for the current page
 - `upload` can push local files into browser flows
+- `stateExport` writes cookies and browser storage to disk and loads them back (`/state/*`, `/storage`)
+- `networkIntercept` can rewrite, block, or mock requests and read full request details (`/network/route`, `/network/{requestId}`)
+- `memory` writes V8 heap snapshots, which hold every string on the page, tokens included (`/memory/snapshot`, `/memory/compare`)
+- `clipboard` can read and write the browser clipboard (`/clipboard/*`)
 - `allowFileScheme` permits navigation to `file://` URLs. Because a `file://` URL has no host, it is **not** subject to `allowedDomains` or the SSRF/private-IP guard, so enabling it grants read access (via snapshot/screenshot/scrape) to any local file the server process can read. It stays blocked when a strict-mode `allowedDomains` allowlist is active. Enable only on trusted, single-tenant hosts. `javascript:`, `chrome://`, and `data:` remain rejected regardless.
 
 These are not the same as authentication.
@@ -214,7 +227,7 @@ These are not the same as authentication.
 
 For example, a token-protected server with `security.allowEvaluate = true` is still intentionally exposing JavaScript execution to any caller that has the token.
 
-When disabled, these routes are locked and return a `403` explaining that the endpoint family is disabled in config.
+When disabled, these routes are locked and return a `403` explaining that the endpoint family is disabled in config (codes such as `evaluate_disabled`, `upload_disabled`, `memory_disabled`).
 
 ## Attach Policy
 
@@ -277,7 +290,7 @@ PinchTab's IDPI layer currently does four things:
 - scans extracted content for suspicious prompt-injection patterns
 - wraps text output so downstream systems can treat it as untrusted content
 
-The default local-only IDPI config is:
+IDPI is on by default, but `allowedDomains` is unset, so navigation is not domain-restricted until you set it. A local-only IDPI config looks like this:
 
 ```json
 {
@@ -303,7 +316,7 @@ Important notes:
   keeps refusing private and internal addresses exactly as it does with IDPI off.
   (Enabling IDPI with an empty list used to *remove* that protection, because "the
   scanner found nothing suspicious" was read as "the operator allowed this host".)
-- listing a private or internal host explicitly — `["10.0.0.5"]`, or the default
+- listing a private or internal host explicitly — `["10.0.0.5"]`, or the local-only
   `["127.0.0.1", "localhost", "::1"]` — is what permits navigation to it. That is the
   only way the private-IP guard is relaxed, and it is a positive match by an entry
   that **denotes a host**, never the absence of a list and never a bare `"*"`.
@@ -415,7 +428,7 @@ For short-lived or one-off usage, prefer `pinchtab server` (foreground process, 
 
 Agent session credentials auto-expire after **30 minutes of idle** (`sessions.agent.idleTimeoutSec: 1800`) and have a **24-hour max lifetime** (`sessions.agent.maxLifetimeSec: 86400`) by default.
 
-## Agent Sessions
+## Agent Session Tokens
 
 For automated agents, use **agent sessions** instead of sharing the server bearer token. Each agent gets a dedicated session token (`PINCHTAB_SESSION`) that:
 

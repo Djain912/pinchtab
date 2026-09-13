@@ -9,10 +9,12 @@ The **server** is the main PinchTab process.
 Start it with:
 
 ```bash
-pinchtab
-# or explicitly
 pinchtab server
+# or run it in the background
+pinchtab daemon install
 ```
+
+Bare `pinchtab` does not start a server: it prints whether one is running, the security posture, and next steps (and runs the security setup on first use).
 
 What the server does:
 
@@ -20,6 +22,9 @@ What the server does:
 - manages profiles and instances
 - proxies tab-scoped requests to the correct managed instance
 - can expose shorthand routes such as `/navigate`, `/snapshot`, and `/action`
+
+The HTTP API requires the server token. The `curl` examples on this page omit it for brevity;
+add `-H "Authorization: Bearer $PINCHTAB_TOKEN"` after `export PINCHTAB_TOKEN=$(pinchtab config token --stdout)`.
 
 Important clarification:
 
@@ -271,7 +276,7 @@ These route to the "current" or first running instance.
 
 For most users, this is the right sequence:
 
-1. start the server with `pinchtab`
+1. start the server with `pinchtab server` (or `pinchtab daemon install`)
 2. create a profile if you need persistence
 3. start an instance from that profile
 4. open one or more tabs in that instance

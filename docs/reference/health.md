@@ -17,18 +17,22 @@ curl http://localhost:9867/health
 
 # CLI Alternative (human-readable by default)
 pinchtab health
-# Output: ok
+# Output: ok (followed by next-step hints)
 
 pinchtab health --json              # Full JSON response
 ```
 
+`tabs` counts every browser target, including ones `GET /tabs` hides (such as `about:blank`).
 Bridge-mode health also reports `version`, and may include:
 
 - `crashLogs`
 - `failures`
 - `crashes`
 
-In error cases it returns `503` with `status: "error"` and a `reason`.
+In error cases it returns `503` with `status: "error"`, a `reason` and an error `code`
+(`bridge_unavailable`, `browser_init_failed`, `list_targets_failed`). While the browser is
+restarting it returns `503` `browser_draining` with `status: "draining"`, `retryAfterSeconds`
+and a `Retry-After` header.
 
 ## Server Mode (Dashboard)
 
@@ -44,10 +48,13 @@ curl http://localhost:9867/health
   "uptime": 12345,
   "authRequired": true,
   "profiles": 1,
+  "temporaryProfiles": 0,
+  "quarantinedProfiles": 0,
   "instances": 1,
   "defaultInstance": {
     "id": "inst_abc12345",
-    "status": "running"
+    "status": "running",
+    "responsiveness": "responsive"
   },
   "agents": 0,
   "restartRequired": false
@@ -61,18 +68,22 @@ curl http://localhost:9867/health
 | `version` | PinchTab version |
 | `uptime` | Milliseconds since server start |
 | `authRequired` | `true` when a server token is configured |
-| `profiles` | Number of configured profiles |
+| `profiles` | Number of profiles `GET /profiles` lists (neither temporary nor quarantined) |
+| `temporaryProfiles` | Number of temporary auto-generated instance profiles |
+| `quarantinedProfiles` | Number of quarantined profiles |
 | `instances` | Number of managed instances |
-| `defaultInstance` | The instance shorthand (non-`/instances`) routes use, when present: `id`, `status` and `responsiveness`. With no running routable instance it is the earliest-started one |
+| `defaultInstance` | The instance shorthand (non-`/instances`) routes use: `id`, `status`, `responsiveness`. See note below |
 | `agents` | Connected agent count |
 | `restartRequired` | `true` when file-based config changes need restart |
 | `restartReasons` | Restart reason list when required |
+| `security` | Only for requests authenticated by bearer token or dashboard cookie: `level`, `bind`, `allowedDomains`, `idpiEnabled`, `enabledSensitiveEndpoints`, `guardsDown` |
 | `crashes` | Present once any instance's browser has crashed: `total` and `recent`, the same block bridge `/health` carries, each event naming its `instanceId` |
 | `unresponsiveInstances` | Present while any instance answers its own `/health` but not its browser routes: the ids of those instances |
 
 Notes:
 
-- `defaultInstance` is present when at least one instance exists
+- `defaultInstance` is present when at least one instance exists. It is the earliest-started running instance of the
+  default browser target; with none, it falls back to the earliest-started instance of any status
 - use `defaultInstance.status == "running"` when you want to confirm Chrome is ready
 - strategies such as `always-on` can create an instance automatically at startup
 - `status` does not degrade on a browser crash: the instance is relaunched and is serving again. The crash is history, so it rides beside `status` as `crashes`; a crashed-then-relaunched instance differs from one that never crashed by that key alone. Every tab the dead browser held is gone, and a call to one answers `404` with code `browser_crashed` and a `hint` saying so

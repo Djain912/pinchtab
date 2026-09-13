@@ -4,7 +4,7 @@ Agent sessions provide durable, revocable authentication for automated agents. I
 
 ## Overview
 
-- **Session token**: `ses_<48 hex chars>` — high-entropy, never stored raw (only SHA-256 hash persisted)
+- **Session token**: `ses_<48 hex chars>` (24 random bytes) — never stored raw (only SHA-256 hash persisted)
 - **Session ID**: `ses_<16 hex chars>` — public identifier for management
 - **Auth header**: `Authorization: Session <token>`
 - **Env var**: `PINCHTAB_SESSION` — CLI auto-detects and uses session auth
@@ -58,7 +58,7 @@ server refuses to load, so the repair does not need a hand edit.
 - Tokens are never logged or persisted in plaintext
 - SHA-256 hash comparison using `crypto/subtle.ConstantTimeCompare`
 - Idle timeout (default 30m) and max lifetime (default 24h)
-- Sessions persisted to `agent-sessions.json` (atomic writes)
+- Sessions persisted to `<server.stateDir>/sessions.json` (atomic writes)
 - Each session bound to a specific agentId for activity tracking
 
 > **⚠️ Trusted, controlled environments only.** Agent sessions are meant for operators and automation you already trust: local machines, private networks, CI, or other controlled systems. They are not a multi-tenant isolation boundary and should not be treated as safe for untrusted users, untrusted agents, or public internet exposure.
@@ -129,4 +129,12 @@ pinchtab session revoke ses_abc123def456
 
 ## API Endpoints
 
-See [endpoints.md](../endpoints.md) for full API reference.
+| Route | Purpose |
+| --- | --- |
+| `POST /sessions` | Create a session; body `agentId` (required), optional `label`, `grants` and `browser` (`invalid_browser` when unknown) |
+| `GET /sessions` | List sessions |
+| `GET /sessions/me` | The session authenticating the request |
+| `GET /sessions/{id}` | One session |
+| `POST /sessions/{id}/revoke` | Revoke a session |
+
+`pinchtab session create` also takes `--label`. See [endpoints.md](../endpoints.md) for the full API reference.

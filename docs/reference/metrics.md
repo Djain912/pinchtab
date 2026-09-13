@@ -33,6 +33,10 @@ Every response says which layer its numbers describe:
 }
 ```
 
+`metrics` carries `requestsTotal`, `requestsFailed`, `avgLatencyMs`, `rateLimited`,
+`staleRefRetries`, `rateBucketHosts` and the Go runtime figures `goHeapAllocMB`, `goHeapSysMB`,
+`goNumGoroutine` and `goHeapObjects`. A failure event carries `code` and `message` when it has a reason.
+
 A failure is not always a 4xx. `POST /actions` and `POST /macro` answer 200 with per-item
 results by design, so a run whose steps failed publishes a failure reason instead of a
 status: it counts in `requestsFailed`, appears in `failures.recent` with the run's path,

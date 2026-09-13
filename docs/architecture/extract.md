@@ -81,10 +81,12 @@ above the threshold (default `0.3`, same as `find`):
 `x-pinchtab-hint` accepts either a bare query or a selector, restricted to the
 kinds a node list can answer without a browser:
 
-- a bare string → used verbatim as the query,
+- a bare string → used verbatim as the query (except a bare `eN`, which is a
+  ref, and a bare `//…` XPath, which is rejected),
 - `find:` → the natural-language query,
-- `role:`, `label:`, `placeholder:`, `alt:`, `title:`, `testid:` → routed
-  through `selector.SemanticQuery` so the grammar stays single-sourced with the
+- `role:`, `label:`, `placeholder:`, `alt:`, `title:`, `testid:`, and
+  `first:` / `last:` / `nth:` wrapping one of those → routed through
+  `selector.SemanticQuery` so the grammar stays single-sourced with the
   action and `find` paths,
 - `text:` → the text as a query,
 - `ref:` (or a bare `eN`) → selects that node verbatim; a ref that is not in the
@@ -93,6 +95,14 @@ kinds a node list can answer without a browser:
 
 A hint that resolves beats the name-based query, so an agent can pin an ambiguous
 field (e.g. a sale price among several prices) without renaming the schema.
+
+### Request scope
+
+`POST /extract` also takes an optional top-level `scope`, parsed with the same
+grammar as a hint (`Schema.WithScope`). When set, it is resolved once over the
+whole node list and the entire schema then resolves inside the matched node's
+subtree only. A scope that matches nothing reports every field with reason
+`scope_not_found` and lists the required ones in `missing`.
 
 ## Arrays of objects
 

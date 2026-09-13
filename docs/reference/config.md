@@ -8,22 +8,23 @@ For security posture, token usage, sensitive endpoint policy, and IDPI guidance,
 
 ### `pinchtab config`
 
-Opens the interactive config overview/editor.
+Prints a read-only config overview. It is not an editor; change values with
+`config set`, `config patch`, or by editing the file.
 
-It currently exposes these high-signal settings directly:
+It shows these high-signal effective settings:
 
 - `multiInstance.strategy`
 - `multiInstance.allocationPolicy`
 - `instanceDefaults.stealthLevel`
 - `instanceDefaults.tabEvictionPolicy`
-- `instanceDefaults.tabPolicy.lifecycle`
+- `instanceDefaults.tabPolicy.lifecycle` (with the close delay when an idle lifecycle is on)
 
 It also shows:
 
 - the active config file path
-- the dashboard URL when the server is running
 - the masked server token
-- a `Copy token` action
+- the dashboard URL when the server is running, otherwise `not running`
+- hints for `config get`, `config set`, `config show`, `config token` and `pinchtab security`
 
 ```bash
 pinchtab config
@@ -40,13 +41,16 @@ pinchtab config init
 `config init` respects `PINCHTAB_CONFIG`. If that environment variable is set, the file is created there.
 
 Generated config files include a `$schema` URL for IDE completion and validation.
+The new file gets a generated `server.token`, reported on stderr. If a file already
+exists at that path, `config init` asks before overwriting it.
 
 ### `pinchtab config schema`
 
 Prints the JSON Schema URL for this PinchTab build. Source builds, development
 builds, and versions without a published schema use the `main` schema URL.
-When a matching release schema is known, PinchTab uses that release tag; when a
-newer matching schema is known, PinchTab uses the closest newer tag.
+For a release build PinchTab uses the closest published schema tag at or below its
+own version, so a generated config never points at rules from a newer release; with
+no such tag it uses `main`.
 
 ```bash
 pinchtab config schema
@@ -154,6 +158,8 @@ Supported environment variables:
   (default 3000, sized for agent-driven snapshot/action bursts). Lower it
   (e.g. to 300) when exposing the port beyond localhost. Child instances
   inherit it from the orchestrator's environment.
+- `PINCHTAB_STATE_KEY`: state-file encryption key; when set it wins over
+  `security.stateEncryptionKey`
 
 For remote CLI targeting, use the root `--server` flag instead of config.
 
@@ -212,6 +218,9 @@ Current nested file-config shape:
     },
     "extensionPaths": ["/path/to/pinchtab/extensions"]
   },
+  "browsers": {
+    "default": "chrome"
+  },
   "instanceDefaults": {
     "mode": "headless",
     "noRestore": false,
@@ -240,6 +249,7 @@ Current nested file-config shape:
     "allowScreencast": false,
     "allowDownload": false,
     "allowCookies": false,
+    "allowNetworkIntercept": false,
     "allowMemory": false,
     "allowFileScheme": false,
     "allowedDomains": ["127.0.0.1", "localhost", "::1"],
@@ -248,6 +258,8 @@ Current nested file-config shape:
     "memorySnapshotMaxBytes": 536870912,
     "allowUpload": false,
     "allowClipboard": false,
+    "allowStateExport": false,
+    "stateEncryptionKey": null,
     "uploadMaxRequestBytes": 10485760,
     "uploadMaxFiles": 8,
     "uploadMaxFileBytes": 5242880,
@@ -255,6 +267,7 @@ Current nested file-config shape:
     "maxRedirects": -1,
     "trustedProxyCIDRs": [],
     "trustedResolveCIDRs": [],
+    "trustLoopbackProxy": false,
     "attach": {
       "enabled": false,
       "allowHosts": ["127.0.0.1", "localhost", "::1"],
@@ -337,9 +350,30 @@ Current nested file-config shape:
         "other": false
       }
     }
+  },
+  "sessions": {
+    "dashboard": {
+      "persist": true,
+      "idleTimeoutSec": 604800,
+      "maxLifetimeSec": 604800,
+      "elevationWindowSec": 900,
+      "persistElevationAcrossRestart": false,
+      "requireElevation": false
+    },
+    "agent": {
+      "enabled": true,
+      "mode": "preferred",
+      "idleTimeoutSec": 1800,
+      "maxLifetimeSec": 86400
+    }
   }
 }
 ```
+
+`sessions.agent.*` is described in [Agent Identity](../guides/agent-identity.md);
+`sessions.agent.mode` accepts `off` or `preferred`. `browser.proxy`,
+`browser.targets`, `browser.defaultTarget` and `browser.fallbackOrder` are covered
+under Browser Selection below.
 
 `autoSolver.external` is config-file-only. Capsolver and 2Captcha credentials
 are stored there.
@@ -534,8 +568,9 @@ Rationale: humanized input is useful for compatibility with pages that react poo
 
 | Section | Purpose |
 | --- | --- |
-| `server` | HTTP server settings, engine selection, proxy trust, and network buffer defaults |
-| `browser` | Chrome executable, version pin, extra flags, and extension paths |
+| `server` | HTTP server settings, log level, proxy trust, cookie transport, and network buffer defaults |
+| `browser` | Chrome executable, version pin, extra flags, extension paths, CloakBrowser flags, proxy, and named targets |
+| `browsers` | Default browser selection and the optional `available` allowlist |
 | `instanceDefaults` | Default behavior for managed instances |
 | `security` | Sensitive feature gates, transfer limits, attach policy, and IDPI |
 | `profiles` | Profile storage defaults |
@@ -543,13 +578,17 @@ Rationale: humanized input is useful for compatibility with pages that react poo
 | `timeouts` | Action, navigation, shutdown, and navigation wait delays |
 | `scheduler` | Optional task queue |
 | `observability` | Activity logging, source selection, and retention |
+| `sessions` | Dashboard session cookies and agent sessions |
+| `autoSolver` | Challenge auto-solver behavior, provider keys, and credentials |
 
 ## `config get` And `config set` Support
 
-`pinchtab config get` and `pinchtab config set` only support these top-level sections:
+`pinchtab config get` and `pinchtab config set` accept a `section.field` dotted path in
+these top-level sections:
 
 - `server`
 - `browser`
+- `browsers`
 - `instanceDefaults`
 - `security`
 - `profiles`
@@ -557,19 +596,18 @@ Rationale: humanized input is useful for compatibility with pages that react poo
 - `timeouts`
 - `scheduler`
 - `observability`
+- `sessions`
+- `autoSolver`
 
-They do not expose every field in those sections.
+Every leaf in those sections is reachable, with these exceptions:
 
-Use `pinchtab config patch` or edit `config.json` directly for fields such as:
+- `server.engine` and `browser.provider` are removed settings; setting them is refused
+- `instanceDefaults.headless` is superseded by `instanceDefaults.mode`
+- `browsers.config.*` is a retired block, superseded by `browser.targets`
+- `observability.activity.stateDir` can be read but not set (see Activity Retention)
 
-- `server.networkBufferSize`
-- `browser.extensionPaths`
-- `instanceDefaults.dialogAutoAccept`
-- `instanceDefaults.tabPolicy.*`
-- `security.allowClipboard`
-- `security.idpi.scanTimeoutSec`
-- `security.idpi.shieldThreshold`
-- `observability.activity.events.*`
+List values such as `security.allowedDomains` or `browser.extensionPaths` are set as a
+comma-separated string. `$schema` and `configVersion` are document metadata, not settings.
 
 ## Common Examples
 
@@ -774,9 +812,14 @@ Use `pinchtab config init` to create the current nested format.
 - `multiInstance.instancePortStart <= multiInstance.instancePortEnd`
 - `multiInstance.restart.initBackoffSec <= multiInstance.restart.maxBackoffSec`
 - non-negative timeout values
-- non-negative `server.networkBufferSize`
+- `server.networkBufferSize` between 1 and 10000
+- `server.retainNetworkBodyMaxBytes` between 0 and 10 MiB
+- `security.downloadMaxBytes`, `memorySnapshotMaxBytes` and the `upload*` limits between 1 and their caps,
+  with `uploadMaxFileBytes <= uploadMaxTotalBytes`
 - non-negative `security.idpi.scanTimeoutSec`
-- positive `observability.activity.sessionIdleSec` and `retentionDays`
+- non-negative `observability.activity.sessionIdleSec` and positive `retentionDays`
+- valid `sessions.agent.mode` and positive `sessions.dashboard.*Sec` values
+- `server.engine` and `browser.provider` are rejected as removed settings
 
 Valid enum values:
 
@@ -791,6 +834,7 @@ Valid enum values:
 | `multiInstance.allocationPolicy` | `fcfs`, `round_robin`, `random` |
 | `security.attach.allowSchemes` | `ws`, `wss`, `http`, `https` |
 | `security.attach.forwardProxyAuth` | `true`, `false` |
+| `sessions.agent.mode` | `off`, `preferred` |
 
 ## Notes
 

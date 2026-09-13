@@ -74,6 +74,8 @@ depends on the new page having loaded.
 | `--text` | Output page text after click |
 | `--dialog-action` | Auto-handle JS dialog: `accept` or `dismiss` |
 | `--dialog-text` | Prompt response text (with `--dialog-action accept`) |
+| `--dismiss-banners` | Dismiss cookie/consent banners after a `--wait-nav` click (no-op without `--wait-nav`) |
+| `--dismiss-known-interstitials` | Dismiss a recognized portal interstitial before resolving the click target (refused with `known_interstitial_not_dismissed` when it cannot) |
 | `--x`, `--y` | Click at specific coordinates |
 | `--humanize` | Use humanized bezier+jitter input path (overrides instance config) |
 | `--submit` | Use the once-only submit-click path and include bounded post-submit state in the response |
@@ -106,9 +108,12 @@ pinchtab click --x 100 --y 200           # Click at coordinates
 - The API also accepts `selector` field: `{"kind":"click","selector":"#login"}`
 - Click behavior works like this: omit `mode` for the normal click path, use `mode:"dom"` for `element.click()`, or `mode:"dispatch"` for synthetic click events.
 - Treat `mode` as a broad, low-level escape hatch for click delivery. Occlusion bypass is the common case, but it can also help with pages that need a non-default click path.
-- `mode` and `humanize:true` are mutually exclusive.
+- `mode` and humanize are mutually exclusive — whether humanize comes from `humanize:true` on the request or from `instanceDefaults.humanize:true`.
 - To opt a click into the slower humanized path for a page that needs it, pass `humanize:true` in the action JSON or set `instanceDefaults.humanize:true`.
 - `submit:true` is for terminal form actions where retrying could submit twice. For clicks it sends exactly one DOM click, disables recovery/retry delivery, and reports a bounded `postState` result (`succeeded` when the URL changes or an open modal closes; otherwise `pending`). It requires an element target and cannot be combined with coordinates, `waitNav`, `mode`, or `humanize:true`. It is accepted only on a single `/action` request, not a batch or macro.
+- Ref vocabulary: an action that targets a ref may echo the snapshot's `X-PinchTab-Vocab` token as `vocab` in the body (or the `X-PinchTab-Vocab` request header), with `vocabTab` naming its tab. If a newer snapshot has renumbered that tab's refs, `/action` refuses with a `vocab_superseded` conflict instead of acting on the wrong node — re-snapshot and use the new refs. The CLI attaches the token from your last snapshot automatically. When an action re-epochs the tab's refs, the response carries the new `X-PinchTab-Vocab` header.
+- While a JavaScript dialog is open on the tab, `/action` refuses with a `dialog_blocked` conflict (details carry `dialogType` and `dialogMessage`); answer it with `pinchtab dialog accept|dismiss`, or pass `--dialog-action` on the click that opens it. See [Dialog](./dialog.md).
+- A ref that cannot be resolved answers `404 ref_not_found` with `details.dispatched: false`.
 
 ## Related Pages
 

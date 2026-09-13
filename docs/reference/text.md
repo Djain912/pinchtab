@@ -35,8 +35,16 @@ Default output is human-readable text. Use `--json` for structured output:
 
 ```bash
 pinchtab text                           # Plain text output
-pinchtab text --json                    # JSON: {"url":"...","title":"...","text":"..."}
+pinchtab text --json                    # JSON envelope: url, title, text, truncated, extraction, textLength, rawLength, ...
 ```
+
+An element read (`selector`/`ref`) returns just `{url, title, text}` — the element's
+`innerText` — and ignores `mode`.
+
+When a modal dialog is open in the page, a whole-page read returns the topmost dialog's
+text (reported as `raw`) and element selectors resolve inside it. If the topmost dialog
+changes twice during the read the request fails with `409`; a pending JavaScript dialog
+(alert, confirm, prompt) blocks it with `409 dialog_blocked`.
 
 ## Extraction Mode
 
@@ -53,7 +61,8 @@ text:
 | `rawLength` | Length of `document.body.innerText`, so coverage is computable |
 
 With `format=text` the body stays bare and the mode is reported in the
-`X-PT-Text-Extraction` response header. `mode=raw` never runs the comparison.
+`X-PT-Text-Extraction` response header (`text/markdown` content type for the
+Markdown modes). `mode=raw` never runs the comparison.
 `truncated` keeps its meaning — text cut by `maxChars` — and is unaffected by a
 fallback. The CLI prints a one-line note on stderr when a fallback fired; stdout
 stays text-only.
@@ -113,9 +122,12 @@ curl "http://localhost:9867/text?frameId=FRAME123&format=text"
 | `selector` | Element selector for text extraction |
 | `ref` | Snapshot ref (e.g., `e5`) |
 | `frameId` | Target iframe ID |
-| `mode` | `raw` for innerText, `markdown` for Markdown, default for Readability |
-| `maxChars` | Truncate output |
-| `format` | `text` for plain text response |
+| `tabId` | Target tab (defaults to the current tab) |
+| `mode` | `raw` or its alias `full` for innerText, `markdown` for Markdown, omitted for Readability; any other value is a 400 |
+| `maxChars` | Truncate output to this many characters (positive integer; Markdown is cut on line boundaries) |
+| `format` | `text` or `plain` for a bare text response; default is the JSON envelope |
+
+`GET /tabs/{id}/text` is the same handler with the tab in the path.
 
 Use default mode for article-like pages. Use `--full` / `mode=raw` for UI-heavy
 pages such as dashboards, SERPs, grids, pricing tables, or short log panes that

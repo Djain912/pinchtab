@@ -2,11 +2,20 @@
 
 This page summarizes the live HTTP surface exposed by PinchTab. Some routes are only available in bridge mode, some only in full server mode, and some are gated by security settings.
 
+Most browser routes also answer at a tab-scoped `/tabs/{id}/...` form (for example
+`GET /tabs/{id}/html`), and the blocks below list only the common ones. The routes with no
+tab form are `POST /tab`, console and errors, clipboard, `/stealth/status`,
+`/fingerprint/rotate`, `/solvers`, `/config/autosolver`, cache, the `/state` family, `/macro`,
+screencast and record, memory summary and compare, `/audit`, `/audit/page`, `/scrape` and
+`POST /network/clear`. Handoff and resume exist only in their tab form. The route catalog
+lives in `internal/routes/routes.go`.
+
 ## Health And Server Metadata
 
 ```text
 GET  /health
 POST /ensure-browser
+POST /ensure-chrome (legacy alias for /ensure-browser)
 POST /browser/restart
 GET  /openapi.json
 GET  /help          (alias for /openapi.json)
@@ -51,6 +60,7 @@ POST /api/auth/elevate
 POST /api/auth/logout
 GET  /api/config
 PUT  /api/config
+GET  /dashboard     (dashboard UI; also served at / and /login)
 ```
 
 Notes:
@@ -110,6 +120,7 @@ Navigation request fields:
 - `timeout` optional
 - `blockImages`, `blockMedia`, `blockAds` optional
 - `waitFor`, `waitSelector`, `waitTitle` optional
+- `dismissBanners`, `dispatchOnly` optional
 
 Important behavior:
 
@@ -172,8 +183,20 @@ GET  /snapshot
 GET  /tabs/{id}/snapshot
 GET  /text
 GET  /tabs/{id}/text
+GET  /title
+GET  /url
+GET  /html
+GET  /styles
+GET  /value
+GET  /attr
+GET  /count
+GET  /box
 GET  /visible
 GET  /tabs/{id}/visible
+GET  /enabled
+GET  /checked
+GET  /timing
+GET  /a11y/audit
 POST /find
 POST /tabs/{id}/find
 POST /extract
@@ -184,7 +207,18 @@ GET  /memory
 POST /memory/snapshot
 GET  /memory/snapshot/{snapshotId}/summary
 GET  /memory/compare?base=<id>&head=<id>
+POST /emulation/viewport
+POST /emulation/geolocation
+POST /emulation/offline
+POST /emulation/headers
+POST /emulation/credentials
+POST /emulation/media
+GET  /stealth/status
+POST /fingerprint/rotate
 ```
+
+The `/emulation/*` routes back the CLI's `pinchtab set` subcommands. `/a11y/audit` is
+described in [reference/a11y.md](reference/a11y.md).
 
 `/memory` reads the tab's JavaScript heap and DOM counters; the snapshot, summary and
 compare routes need `security.allowMemory` — see [reference/memory.md](reference/memory.md).
@@ -213,7 +247,10 @@ cardinality, and zero is the honest answer to "how many".
 
 `/evaluate` is intentionally separate from selector frame scope. `GET/POST /frame` only affects selector-based `/snapshot` and `/action` calls, not arbitrary JavaScript evaluation.
 
-`GET /action` decodes a subset of the action fields and refuses, with `400` naming the field, any parameter it cannot express rather than silently dropping it — so a modifier chord, a drag, `waitNav` or `humanize` must be sent as `POST /action` with a JSON body. A parameter the action request does not declare at all is refused the same way, with a `did you mean` hint for a near miss, so `?modifers=8` or `?Modifiers=8` no longer dispatches a plain click and answers `200`. The accepted set is the action request's own fields plus the parameters only the GET form carries, which today is `timeout` — a per-request action timeout in seconds, clamped to 0–60, that the POST form sends in its body instead. Cache-busters and stray parameters must be dropped from the URL.
+`GET /action` decodes a subset of the action fields and refuses, with `400` naming the field, any parameter it cannot express rather than silently dropping it — so a modifier chord, a drag, `waitNav` or `humanize` must be sent as `POST /action` with a JSON body. A parameter the action request does not declare at all is refused the same way, with a `did you mean` hint for a near miss, so `?modifers=8` or `?Modifiers=8` no longer dispatches a plain click and answers `200`. The accepted set is the action request's own fields plus the parameters only the GET form carries, which today is `timeout`.
+`timeout` is a per-request action timeout in seconds, honoured when it is above 0 and at most
+60 (any other value falls back to the configured action timeout). The POST body has no
+equivalent field, so a POST action always uses the configured action timeout. Cache-busters and stray parameters must be dropped from the URL.
 
 `GET /snapshot` validates its cost controls the same way but resolves the unknown-parameter
 question differently, and the difference is deliberate. A bad VALUE is refused with a `400`
@@ -280,6 +317,8 @@ Action targeting fields:
 - `waitNav`
 - `dialogAction` and `dialogText`
 - `humanize`
+- `toSelector`, `toX`/`toY` and `dragX`/`dragY` (drag)
+- `submit`, `mode` and `modifiers` (click)
 
 `fill` and `type` write the string in `text`; `fill` also accepts it as `value`, which is the
 field `select` reads. A `fill` carrying neither is rejected — send `"text": ""` to clear a
@@ -320,7 +359,8 @@ Snapshot query parameters:
 - `depth`
 - `format`
 - `noAnimations`
-- `output`
+- `output` (with `path` when `output=file`)
+- `tabId`
 
 `selector` on `/snapshot` follows the same rule: it only searches the current frame scope. It does not automatically pierce into iframes, and cross-origin iframe descendants are not inlined.
 
@@ -330,6 +370,8 @@ Text query parameters:
 - `format`
 - `maxChars`
 - `frameId`
+- `selector` or `ref` to read one element
+- `tabId`
 
 `/text` default mode picks the first **visible** `<article>` / `[role="main"]` /
 `<main>` (skips `display:none`) and strips nav/footer/ads. Use `mode=raw` for
@@ -445,6 +487,9 @@ Screenshot query parameters:
 - `raw=true`
 - `output=file`
 - `noAnimations=true`
+- `selector` — capture one element
+- `annotate=true` — bake numbered ref boxes into the image
+- `beyondViewport=true` — capture the full document (ignored with `selector`)
 - `scale=<float>` — rescale the output bitmap (e.g. `0.5` = half size,
   `0.25` = quarter). Default `1`.
 
@@ -587,6 +632,19 @@ Notes:
 - `.gif` format uses pure Go encoding (always available).
 - Only one recording per bridge instance.
 
+## Site Audit And Scrape
+
+```text
+POST /audit/page
+POST /audit
+POST /scrape
+```
+
+`POST /audit/page` audits one `url`; `POST /audit` takes `urls`, a `sitemapUrl` or SeaPortal
+results; `POST /scrape` takes the crawl root `url`. These back `pinchtab audit` and
+`pinchtab scrape` — see [audit.md](audit.md) and [scrape.md](scrape.md) for the bodies and
+report shapes.
+
 ## Downloads, Uploads, Cookies, And Clipboard
 
 ```text
@@ -615,7 +673,7 @@ Notes:
 - download automatically decompresses `.gz` files and returns the decompressed content
 - `security.downloadAllowedDomains` can whitelist specific domains (bypasses SSRF checks for matching domains). Setting `["*"]` matches every host and disables private-IP protection for this endpoint, including loopback. Naming a loopback host (`127.0.0.1`, `localhost`) or using `"*"` lets the download endpoint reach services on the server's own machine, including PinchTab's own local endpoints. A host that is neither matched nor public is refused with code `download_host_blocked`, and the response carries the `config set` line that names it.
 - clipboard endpoints are gated by `security.allowClipboard`
-- upload uses a JSON body with `selector`, `files`, and optional `fileNames`
+- upload uses a JSON body with `selector` (default `input[type=file]`), `files` (base64) and/or `paths` (files already inside `<stateDir>/uploads`), and optional `fileNames`
 - `fileNames` is index-aligned with `files` and sets the name the page sees in `file.name` — send it, or every upload arrives as `upload-<i>.bin` and forms gating on `accept=".csv"` or `file.name.endsWith(...)` reject it. Without a name the extension is sniffed from content, which cannot identify text formats (`.csv`, `.json`, `.txt`, `.md`, `.html`) because they have no magic bytes. A supplied name wins over the sniffed type even when the two disagree, matching what a browser sends. Only the basename is used: any directory part is dropped.
 
 ## Storage
@@ -646,10 +704,10 @@ POST body fields:
 - `type` — `local` or `session` (required)
 - `tabId` — optional
 
-DELETE body fields:
+DELETE body fields (the body itself is optional):
 
-- `type` — `local` or `session` (required)
-- `key` — optional (if omitted, clears entire storage)
+- `type` — `local`, `session` or `all` (default `all`, both stores)
+- `key` — optional (if omitted, clears the whole store); refused together with `type: all`
 - `tabId` — optional
 
 ## State
@@ -731,6 +789,12 @@ GET  /tabs/{id}/network/stream
 GET  /tabs/{id}/network/export
 GET  /tabs/{id}/network/export/stream
 GET  /tabs/{id}/network/{requestId}
+GET  /network/route
+POST /network/route
+DELETE /network/route
+GET  /tabs/{id}/network/route
+POST /tabs/{id}/network/route
+DELETE /tabs/{id}/network/route
 POST /dialog
 POST /tabs/{id}/dialog
 GET  /console
@@ -766,6 +830,7 @@ Network query parameters:
 - `type`
 - `limit`
 - `bufferSize`
+- `broken=true` — answer with the broken-asset list (`broken`, `count`) instead of entries
 - `body=true` on detail requests
 - `bodyMode=auto|retained-preferred|retained-only|live-only` on detail requests to choose how response bodies are resolved
 - `timeoutMs` on detail requests to bound the retained-body wait window (default 2000, max 30000)
@@ -800,6 +865,12 @@ Network export query parameters:
 - all standard network filters (`filter`, `method`, `status`, `type`, `limit`)
 
 The `/export` endpoint returns the full capture as a single response. The `/export/stream` endpoint writes entries to a file as they arrive (SSE progress events sent to the caller). The streamed file is atomically renamed on completion.
+
+Interception rules (`/network/route`, gated by `security.allowNetworkIntercept`): `POST` takes
+`pattern` (substring or `*`/`?` glob), `action` (`continue`, `abort` or `fulfill`), and for a
+fulfill `body`, `contentType` and `status`, plus optional `resourceType` and `method`. `DELETE`
+takes `pattern` in the query or body and removes every rule when it is omitted; `GET` lists the
+tab's rules.
 
 Dialog body fields:
 
@@ -888,6 +959,7 @@ POST /profiles/{id}/reset
 GET  /profiles/{id}/logs
 GET  /profiles/{id}/analytics
 POST /profiles/import
+POST /profiles/prune
 PATCH /profiles/meta
 GET  /instances
 GET  /instances/{id}
@@ -906,6 +978,12 @@ GET  /instances/{id}/logs/stream
 GET  /instances/{id}/tabs
 POST /instances/{id}/tabs/open
 POST /instances/{id}/tab
+POST /instances/{id}/close
+POST /instances/{id}/cookies
+POST /instances/{id}/audit
+POST /instances/{id}/scrape
+POST /instances/{id}/cache/clear
+GET  /instances/{id}/cache/status
 ```
 
 Notes:
@@ -919,6 +997,8 @@ Notes:
 - create profiles explicitly with `POST /profiles`; `name` is no longer supported on `/instances/launch`
 - `/profiles/{id}/start` uses `headless`
 - attach routes are gated by `security.attach`
+- `POST /profiles/prune` removes quarantined profile directories; see the `pinchtab profiles prune` section of [commands.md](commands.md)
+- `/instances/{id}/close|cookies|audit|scrape|cache/*` proxy the same route to that instance
 
 ## Activity And Scheduler
 
@@ -947,7 +1027,6 @@ Activity query parameters include:
 - `profileName`
 - `tabId`
 - `action`
-- `engine`
 - `pathPrefix`
 
 Activity attribution and source behavior:
@@ -962,7 +1041,7 @@ Scheduler routes are only present when `scheduler.enabled` is true.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/sessions` | Create a new agent session (body: `{agentId, label?}`) |
+| `POST` | `/sessions` | Create a new agent session (body: `{agentId, label?, grants?, browser?}`) |
 | `GET` | `/sessions` | List all agent sessions |
 | `GET` | `/sessions/me` | Get current session (requires `Authorization: Session` auth) |
 | `GET` | `/sessions/{id}` | Get session details by ID |
@@ -987,13 +1066,17 @@ Some endpoints are intentionally disabled unless the matching config allows them
 These gates are not ordinary feature toggles. Enabling them is a documented, non-default, security-reducing choice that widens the control surface available to callers.
 
 - `/evaluate` and `/tabs/{id}/evaluate` -> `security.allowEvaluate`
+- `/macro` -> `security.allowMacro`
+- `GET /network/{requestId}`, `POST /network/clear` and the `/network/route` family (plus tab-scoped variants) -> `security.allowNetworkIntercept`
+- `/memory/snapshot`, `/memory/snapshot/{snapshotId}/summary` and `/memory/compare` -> `security.allowMemory`
 - `/download` and `/tabs/{id}/download` -> `security.allowDownload`
 - `GET/POST/DELETE /cookies` and `GET/POST/DELETE /tabs/{id}/cookies` -> `security.allowCookies`
 - `/upload` and `/tabs/{id}/upload` -> `security.allowUpload`
 - clipboard routes -> `security.allowClipboard`
 - attach routes -> `security.attach`
 - screencast routes -> `security.allowScreencast`
-- storage routes (`/storage`, `/tabs/{id}/storage`) and the full state-management family (`/state/list`, `/state/show`, `/state/save`, `/state/load`, `DELETE /state`, `POST /state/clean`) -> `security.allowStateExport`
+- storage routes (`/storage`, `/tabs/{id}/storage`) and the full state-management family
+  (`GET /state`, `/state/list`, `/state/show`, `/state/save`, `/state/load`, `DELETE /state`, `POST /state/clean`) -> `security.allowStateExport`
 
 ## Error Response Format
 

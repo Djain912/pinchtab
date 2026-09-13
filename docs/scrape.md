@@ -110,7 +110,7 @@ Each HTTP-extracted page is scored for whether the browser should re-render it:
 - **thin-content** (extraction shorter than the static-ok threshold) routes: a
   probable JavaScript shell.
 
-`--enrich-all` forces every non-404 page to the browser; `--no-browser` records
+`--enrich-all` forces every page except not-found (404 / 410) to the browser; `--no-browser` records
 the verdict on each page but renders nothing.
 
 ## Report anatomy

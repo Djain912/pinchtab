@@ -22,7 +22,7 @@ route the request to the instance that owns it.
 | --- | --- | --- | --- | --- |
 | `schema` | object or string | yes | - | JSON schema describing the data; see [Schema Subset](#schema-subset) |
 | `tabId` | string | no | active tab | Tab ID when using `POST /extract` |
-| `scope` | string | no | whole page | Confine every field to the subtree of one element: a ref (`e12`), `role:`, `text:` or a plain query. CSS and XPath are refused |
+| `scope` | string | no | whole page | Confine every field to the subtree of one element: a bare ref (`e12`), `role:`, `text:` or a plain query. CSS and XPath are refused (`400`) |
 | `threshold` | float | no | `0.3` | Minimum match score per field |
 | `maxItems` | int | no | `100` | Cap on items per array |
 
@@ -141,5 +141,5 @@ pinchtab click e7
 | `400` | invalid JSON, missing `schema`, or an unsupported schema or `scope` (the message names the path) |
 | `403` | blocked by IDPI in strict mode |
 | `404` | tab not found |
-| `409` | a JavaScript dialog is blocking the tab |
-| `500` | Chrome not initialized or snapshot unavailable |
+| `409` | `dialog_blocked`: a JavaScript dialog is blocking the tab (answer it with `pinchtab dialog`) |
+| `500` | Chrome not initialized, snapshot unavailable, or the snapshot has no elements |
