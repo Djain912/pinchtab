@@ -50,6 +50,8 @@ type TabManager struct {
 	guardOnce         sync.Once
 	guardActive       bool
 	mu                sync.RWMutex
+	freezeVeto        func(tabID string) bool
+	setFrozen         func(ctx context.Context, frozen bool) error
 
 	// pendingClicks tracks in-flight click actions that may open a popup.
 	// Keyed by the opener tab's raw CDP target ID. Read by the popup guard
@@ -76,6 +78,7 @@ func NewTabManager(browserCtx context.Context, cfg *config.RuntimeConfig, idMgr 
 		onTabSetup: onTabSetup,
 		logStore:   logStore,
 		executor:   NewTabExecutor(maxParallel),
+		setFrozen:  setTabFrozen,
 	}
 }
 
@@ -127,6 +130,28 @@ func browserExecutorContext(ctx context.Context) (context.Context, error) {
 		return nil, fmt.Errorf("no browser executor available")
 	}
 	return cdp.WithExecutor(ctx, c.Browser), nil
+}
+
+func (tm *TabManager) LiveTabContexts() map[string]context.Context {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+	out := make(map[string]context.Context, len(tm.tabs))
+	for id, entry := range tm.tabs {
+		if entry.Ctx != nil && entry.Ctx.Err() == nil {
+			out[id] = entry.Ctx
+		}
+	}
+	return out
+}
+
+func (tm *TabManager) trackedTabIDs() []string {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+	ids := make([]string, 0, len(tm.tabs))
+	for id := range tm.tabs {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 func (tm *TabManager) CreateTab(url string) (string, context.Context, context.CancelFunc, error) {
@@ -221,6 +246,13 @@ func (tm *TabManager) createTab(url, browserContextID string) (string, context.C
 		_ = SetResourceBlocking(ctx, blockPatterns)
 	}
 
+	// Capture must be enabled before navigation: a page can throw from its first
+	// synchronous script, before Navigate returns and before any later listener
+	// could observe the exception.
+	if tm.shouldEagerlyCaptureConsole() {
+		tm.setupConsoleCapture(ctx, rawCDPID)
+	}
+
 	// Start network capture before navigation so CDP events are captured.
 	if tm.netMonitor != nil {
 		if err := tm.netMonitor.StartCapture(ctx, tabID); err != nil {
@@ -256,10 +288,6 @@ func (tm *TabManager) createTab(url, browserContextID string) (string, context.C
 		}
 	}
 
-	if tm.shouldEagerlyCaptureConsole() {
-		tm.setupConsoleCapture(ctx, rawCDPID)
-	}
-
 	tm.mu.Lock()
 	tm.tabs[tabID] = &TabEntry{
 		Ctx:                   ctx,
@@ -278,6 +306,12 @@ func (tm *TabManager) createTab(url, browserContextID string) (string, context.C
 	return tabID, ctx, cancel, nil
 }
 
+// ErrCannotCloseLastTab is the last-tab precondition: at least one tab must
+// remain or Chrome exits and takes the server down. It is a client precondition,
+// not a server fault, so handlers classify it as a 4xx via errors.Is rather than
+// matching the message text.
+var ErrCannotCloseLastTab = errors.New("cannot close the last tab — at least one tab must remain")
+
 func (tm *TabManager) CloseTab(tabID string) error {
 	if tm == nil {
 		return fmt.Errorf("tab manager not initialized")
@@ -288,7 +322,7 @@ func (tm *TabManager) CloseTab(tabID string) error {
 		return fmt.Errorf("list targets: %w", err)
 	}
 	if len(targets) <= 1 {
-		return fmt.Errorf("cannot close the last tab — at least one tab must remain")
+		return ErrCannotCloseLastTab
 	}
 
 	tm.mu.Lock()
@@ -310,7 +344,7 @@ func (tm *TabManager) CloseTab(tabID string) error {
 	execCtx, execErr := browserExecutorContext(closeCtx)
 	if execErr != nil {
 		if !tracked {
-			return fmt.Errorf("tab %s not found", tabID)
+			return tabNotFound(tabID)
 		}
 		slog.Debug("close target skipped", "tabId", tabID, "cdpId", cdpTargetID, "err", execErr)
 		tm.purgeTrackedTabState(tabID, cdpTargetID)
@@ -319,7 +353,7 @@ func (tm *TabManager) CloseTab(tabID string) error {
 
 	if err := target.CloseTarget(target.ID(cdpTargetID)).Do(execCtx); err != nil {
 		if !tracked {
-			return fmt.Errorf("tab %s not found", tabID)
+			return tabNotFound(tabID)
 		}
 		slog.Debug("close target CDP", "tabId", tabID, "cdpId", cdpTargetID, "err", err)
 	}
@@ -331,7 +365,7 @@ func (tm *TabManager) FocusTab(tabID string) error {
 	if tm == nil {
 		return fmt.Errorf("tab manager not initialized")
 	}
-	ctx, resolvedID, err := tm.TabContext(tabID)
+	ctx, _, err := tm.TabContext(tabID)
 	if err != nil {
 		return err
 	}
@@ -341,14 +375,6 @@ func (tm *TabManager) FocusTab(tabID string) error {
 	})); err != nil {
 		return fmt.Errorf("bring to front: %w", err)
 	}
-
-	tm.mu.Lock()
-	tm.currentTab = resolvedID
-	if entry, ok := tm.tabs[resolvedID]; ok {
-		entry.LastUsed = time.Now()
-	}
-	tm.mu.Unlock()
-
 	return nil
 }
 

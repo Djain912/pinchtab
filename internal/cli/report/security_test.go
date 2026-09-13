@@ -244,7 +244,7 @@ func TestApplyRecommendedSecurityDefaults(t *testing.T) {
 				Enabled:    &attachEnabled,
 				AllowHosts: []string{"chrome.internal"},
 			},
-			IDPI: config.IDPIConfig{
+			IDPI: &config.IDPIConfig{
 				Enabled: false,
 			},
 		},
@@ -301,7 +301,7 @@ func TestRestoreSecurityDefaults(t *testing.T) {
 				Enabled:    &attachEnabled,
 				AllowHosts: []string{"chrome.internal"},
 			},
-			IDPI: config.IDPIConfig{
+			IDPI: &config.IDPIConfig{
 				Enabled: false,
 			},
 		},

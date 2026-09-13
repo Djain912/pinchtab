@@ -112,7 +112,7 @@ func (h *Handlers) HandleSnapshot(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	defer h.armAutoCloseIfEnabled(resolvedTabID)
+	defer h.armIdleLifecycle(resolvedTabID)
 	defer cancel()
 
 	if reqNoAnim && !h.Config.NoAnimations {
@@ -140,7 +140,7 @@ func (h *Handlers) HandleSnapshot(w http.ResponseWriter, r *http.Request) {
 			if !ghostRoute {
 				modalNodeID, modalOpen, modalErr = bridge.TopmostModalNodeID(tCtx, frameScope)
 				if modalErr != nil {
-					httpx.Error(w, selectorResolutionHTTPStatus(modalErr), modalErr)
+					respondSelectorFailure(w, modalErr)
 					return
 				}
 			}
@@ -151,7 +151,7 @@ func (h *Handlers) HandleSnapshot(w http.ResponseWriter, r *http.Request) {
 			if !ghostRoute {
 				afterNodeID, afterOpen, recheckErr := bridge.TopmostModalNodeID(tCtx, frameScope)
 				if recheckErr != nil {
-					httpx.Error(w, selectorResolutionHTTPStatus(recheckErr), fmt.Errorf("recheck topmost dialog: %w", recheckErr))
+					respondSelectorFailure(w, fmt.Errorf("recheck topmost dialog: %w", recheckErr))
 					return
 				}
 				if modalNodeID != afterNodeID || modalOpen != afterOpen {
@@ -159,7 +159,7 @@ func (h *Handlers) HandleSnapshot(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if scopeErr != nil {
-				httpx.Error(w, selectorResolutionHTTPStatus(scopeErr), scopeErr)
+				respondSelectorFailure(w, scopeErr)
 				return
 			}
 			rawNodes, scopeNodeID, stable = candidateNodes, candidateScope, true
@@ -218,9 +218,9 @@ func (h *Handlers) HandleSnapshot(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if elemInfo != "" {
-			scopedEmptyHint = fmt.Sprintf("Element exists in DOM (%s) but has no accessible nodes. Use `text --selector %s` or `eval` to extract content.", elemInfo, selector)
+			scopedEmptyHint = fmt.Sprintf("Element exists in DOM (%s) but has no accessible nodes. Use `text` with the same selector, or `eval`, to extract content.", elemInfo)
 		} else if descErr == nil {
-			scopedEmptyHint = fmt.Sprintf("Element exists in DOM but has no accessible nodes. Use `text --selector %s` or `eval` to extract content.", selector)
+			scopedEmptyHint = "Element exists in DOM but has no accessible nodes. Use `text` with the same selector, or `eval`, to extract content."
 		}
 	}
 
@@ -237,7 +237,7 @@ func (h *Handlers) HandleSnapshot(w http.ResponseWriter, r *http.Request) {
 
 	cache := bridge.EpochRefs(prev, flat)
 	h.Bridge.SetRefCache(resolvedTabID, cache)
-	w.Header().Set(vocabHeader, cache.DomEpoch)
+	publishVocab(w, resolvedTabID, cache.DomEpoch)
 
 	h.recordResolvedURL(r, url)
 

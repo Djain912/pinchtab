@@ -59,12 +59,17 @@ func historyNav(client *http.Client, base, token, action string, cmd *cobra.Comm
 	printPostActionOutput(client, base, token, tabID, cmd)
 }
 
-// printPostActionOutput runs the shared --snap / --snap-diff / --text tail.
+// printPostActionOutput runs the shared --snap / --snap-diff / --text tail. The
+// snapshot is fetched for the resolved tabID, but the vocabulary token it returns
+// is filed as the CURRENT tab's only when the user named no --tab, so a later
+// implicit ref action (the common nav --snap then fill e0 flow) echoes it — the
+// resolved id is always non-empty here and keying implicit on it would never set
+// the current pointer.
 func printPostActionOutput(client *http.Client, base, token, tabID string, cmd *cobra.Command) {
 	snap, _ := cmd.Flags().GetBool("snap")
 	snapDiff, _ := cmd.Flags().GetBool("snap-diff")
 	if snap || snapDiff {
-		fetchAndPrintSnapshot(client, base, token, tabID, snapDiff)
+		fetchAndPrintSnapshot(client, base, token, cmd, tabID, snapDiff)
 	}
 	if text, _ := cmd.Flags().GetBool("text"); text {
 		fetchAndPrintText(client, base, token, tabID)
@@ -99,22 +104,22 @@ func Navigate(client *http.Client, base, token string, url string, cmd *cobra.Co
 	result, usedFallback := postNavigate(client, base, token, req, false)
 	resultTabID := tabIDFromNavigateResult(result)
 	reportFallbackNewTab(cmd, usedFallback, req.tabID, resultTabID)
+	stdout := navigateStdoutFor(cmd)
 	if resultTabID != "" {
-		fmt.Println(resultTabID)
+		if stdout.tabID {
+			fmt.Println(resultTabID)
+		} else {
+			fmt.Fprintln(os.Stderr, resultTabID)
+		}
 	}
-
-	// The landed URL is the cheap signal that the page is not the one asked for,
-	// but a second line would break `TAB=$(pinchtab nav URL)` — command
-	// substitution captures every line. So it is printed only for a human at a
-	// terminal, which is what --print-tab-id already promised.
-	if !tabIDOnly(cmd) {
+	if stdout.landed {
 		if landed := landedURL(result); landed != "" {
 			output.Value(landed)
 		}
 	}
 
 	if !isIdentifiedCaller(cmd) {
-		output.Hint(cli.NoSessionHint)
+		output.Advisory(cli.NoSessionHint)
 	}
 
 	printPostActionOutput(client, base, token, resultTabID, cmd)
@@ -122,9 +127,23 @@ func Navigate(client *http.Client, base, token string, url string, cmd *cobra.Co
 	return resultTabID
 }
 
-// tabIDOnly reports whether stdout must carry nothing but the tab ID: either
-// --print-tab-id was passed, or stdout is not a terminal, which is the shape a
-// capture or a pipeline has.
+type navigateStdout struct {
+	tabID  bool
+	landed bool
+}
+
+func navigateStdoutFor(cmd *cobra.Command) navigateStdout {
+	captured := tabIDOnly(cmd)
+	return navigateStdout{tabID: !captured || !payloadRequested(cmd), landed: !captured}
+}
+
+func payloadRequested(cmd *cobra.Command) bool {
+	snap, _ := cmd.Flags().GetBool("snap")
+	snapDiff, _ := cmd.Flags().GetBool("snap-diff")
+	text, _ := cmd.Flags().GetBool("text")
+	return snap || snapDiff || text
+}
+
 func tabIDOnly(cmd *cobra.Command) bool {
 	if only, _ := cmd.Flags().GetBool("print-tab-id"); only {
 		return true

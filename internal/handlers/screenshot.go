@@ -89,8 +89,17 @@ func (h *Handlers) HandleScreenshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	vocabBefore := h.tabVocab(resolvedTabID)
 	clip, clipErr := h.resolveScreenshotClip(tCtx, resolvedTabID, req.selector)
+	h.publishVocabIfReepoched(w, resolvedTabID, vocabBefore)
 	if clipErr != nil {
+		// A selector that matched nothing answers like every other read verb,
+		// named code included; a clip failure is still a server fault and keeps
+		// the crash annotation, which is what that path exists for.
+		if clipErr.status == http.StatusNotFound {
+			respondSelectorFailure(w, clipErr.err)
+			return
+		}
 		h.errorWithCrashContext(w, clipErr.status, clipErr.err)
 		return
 	}
@@ -146,7 +155,8 @@ func (h *Handlers) resolveScreenshotClip(ctx context.Context, tabID, selector st
 	}
 	nodeID, err := h.resolveSelectorNodeID(ctx, tabID, selector)
 	if err != nil {
-		return nil, &statusError{400, frameScopedSelectorError("selector", err)}
+		wrapped := frameScopedSelectorError("selector", err)
+		return nil, &statusError{selectorFailureStatus(wrapped), wrapped}
 	}
 	clip, err := bridge.ScreenshotClipForNode(ctx, nodeID)
 	if err != nil {
@@ -161,6 +171,7 @@ func (h *Handlers) serveAnnotatedScreenshot(w http.ResponseWriter, ctx context.C
 		httpx.Error(w, 500, fmt.Errorf("annotate: %w", err))
 		return
 	}
+	h.publishTabVocab(w, tabID)
 	if req.raw {
 		writeRawImage(w, img, imageContentType(outFormat), "annotated screenshot write")
 		return

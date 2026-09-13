@@ -335,7 +335,7 @@ func getSecurityField(s *SecurityConfig, field string) (string, error) {
 		return getAttachField(&s.Attach, strings.TrimPrefix(field, "attach."))
 	}
 	if strings.HasPrefix(field, "idpi.") {
-		return getIDPIField(&s.IDPI, strings.TrimPrefix(field, "idpi."))
+		return getIDPIField(s.IDPI, strings.TrimPrefix(field, "idpi."))
 	}
 
 	switch field {
@@ -357,6 +357,8 @@ func getSecurityField(s *SecurityConfig, field string) (string, error) {
 		return formatStringPtr(s.StateEncryptionKey), nil
 	case "allowNetworkIntercept":
 		return formatBoolPtr(s.AllowNetworkIntercept), nil
+	case "allowMemory":
+		return formatBoolPtr(s.AllowMemory), nil
 	case "allowFileScheme":
 		return formatBoolPtr(s.AllowFileScheme), nil
 	case "allowedDomains":
@@ -365,10 +367,10 @@ func getSecurityField(s *SecurityConfig, field string) (string, error) {
 		return strings.Join(s.DownloadAllowedDomains, ","), nil
 	case "downloadMaxBytes":
 		return formatIntPtr(s.DownloadMaxBytes), nil
+	case "memorySnapshotMaxBytes":
+		return formatIntPtr(s.MemorySnapshotMaxBytes), nil
 	case "allowUpload":
 		return formatBoolPtr(s.AllowUpload), nil
-	case "enableActionGuards":
-		return formatBoolPtr(s.EnableActionGuards), nil
 	case "uploadMaxRequestBytes":
 		return formatIntPtr(s.UploadMaxRequestBytes), nil
 	case "uploadMaxFiles":
@@ -456,6 +458,9 @@ func getAttachField(a *AttachConfig, field string) (string, error) {
 }
 
 func getIDPIField(i *IDPIConfig, field string) (string, error) {
+	if i == nil {
+		i = &IDPIConfig{}
+	}
 	switch field {
 	case "enabled":
 		return strconv.FormatBool(i.Enabled), nil

@@ -33,12 +33,6 @@ func (s currentTabScope) Description() string {
 	return "global"
 }
 
-// defaultCurrentTabCap caps the number of session/agent → tab entries
-// the instance keeps in memory. When new entries push past the cap, the
-// least-recently-touched one is evicted. The cap exists because we no
-// longer push session-revoke notices over the wire — entries for dead
-// sessions accumulate until pushed out by normal traffic, and the cap
-// keeps that bounded.
 const defaultCurrentTabCap = 5000
 
 // currentTabEntry holds a tab id plus a per-entry tick used as the LRU

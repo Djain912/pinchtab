@@ -214,6 +214,7 @@ func (b *Bridge) wireTabManager(browserCtx context.Context) {
 	// wire, so no cross-reinit duplication). External hooks recorded on the
 	// bridge are re-applied so they survive the TabManager swap.
 	b.TabManager.AddTabRemovedHook(b.dropFetchPauseSuppression)
+	b.SetFreezeVeto(b.tabHandoffPaused)
 	b.tabRemovedHooksMu.Lock()
 	hooks := make([]func(string), len(b.externalTabRemovedHooks))
 	copy(hooks, b.externalTabRemovedHooks)
@@ -312,20 +313,20 @@ func (b *Bridge) FocusTab(tabID string) error {
 	return tm.FocusTab(tabID)
 }
 
-func (b *Bridge) ScheduleAutoClose(tabID string) {
+func (b *Bridge) ScheduleIdleLifecycle(tabID string) {
 	tm, err := b.tabManager()
 	if err != nil {
 		return
 	}
-	tm.ScheduleAutoClose(tabID)
+	tm.ScheduleIdleLifecycle(tabID)
 }
 
-func (b *Bridge) CancelAutoClose(tabID string) {
+func (b *Bridge) CancelIdleLifecycle(tabID string) {
 	tm, err := b.tabManager()
 	if err != nil {
 		return
 	}
-	tm.CancelAutoClose(tabID)
+	tm.CancelIdleLifecycle(tabID)
 }
 
 func (b *Bridge) Lock(tabID, owner string, ttl time.Duration) error {

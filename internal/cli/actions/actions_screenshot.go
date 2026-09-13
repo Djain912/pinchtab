@@ -72,7 +72,7 @@ func Screenshot(client *http.Client, base, token string, cmd *cobra.Command) {
 
 	if annotate {
 		params.Set("annotate", "true")
-		raw := apiclient.DoGetRaw(client, base, token, "/screenshot", params)
+		raw := apiclient.DoGetRaw(client, base, token, "/screenshot", params, apiclient.CaptureVocab(params.Get("tabId") == ""))
 		if raw == nil {
 			return
 		}

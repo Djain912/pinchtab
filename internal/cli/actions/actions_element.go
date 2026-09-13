@@ -2,7 +2,11 @@ package actions
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 
@@ -122,25 +126,27 @@ func postActionWithHeaders(client *http.Client, base, token string, cmd *cobra.C
 	}
 
 	if _, ok := body["vocab"]; !ok {
-		if tok := apiclient.VocabTokenFor(base, tabID); tok != "" {
+		if vocabTab, tok := apiclient.VocabForAction(base, tabID); tok != "" {
 			body["vocab"] = tok
+			body["vocabTab"] = vocabTab
 		}
 	}
 
+	opts := []apiclient.RequestOption{apiclient.WithHeaders(headers), apiclient.CaptureVocab(namedNoTab(cmd))}
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 	if jsonOutput {
-		apiclient.DoPostWithHeaders(client, base, token, path, body, headers)
+		apiclient.DoPost(client, base, token, path, body, opts...)
 		return
 	}
 
-	result := apiclient.DoPostQuietWithHeaders(client, base, token, path, body, headers)
+	result := apiclient.DoPostQuiet(client, base, token, path, body, opts...)
 	kind, _ := body["kind"].(string)
 	printActionResult(kind, result)
 
 	snap, _ := cmd.Flags().GetBool("snap")
 	snapDiff, _ := cmd.Flags().GetBool("snap-diff")
 	if snap || snapDiff {
-		fetchAndPrintSnapshot(client, base, token, tabID, snapDiff)
+		fetchAndPrintSnapshot(client, base, token, cmd, tabID, snapDiff)
 	}
 
 	text, _ := cmd.Flags().GetBool("text")
@@ -149,15 +155,33 @@ func postActionWithHeaders(client *http.Client, base, token string, cmd *cobra.C
 	}
 }
 
-func fetchAndPrintSnapshot(client *http.Client, base, token, tabID string, diff bool) {
-	params := "filter=interactive&format=compact"
+func namedNoTab(cmd *cobra.Command) bool {
+	tab, _ := cmd.Flags().GetString("tab")
+	return tab == ""
+}
+
+// fetchAndPrintSnapshot is the --snap / --snap-diff tail. It stays best-effort —
+// a transport or HTTP failure warns on stderr and returns, never exits: this tail
+// runs after an action that already succeeded, so a cosmetic snapshot failure
+// must not turn a successful action into a non-zero exit.
+func fetchAndPrintSnapshot(client *http.Client, base, token string, cmd *cobra.Command, tabID string, diff bool) {
+	params := url.Values{"filter": {"interactive"}, "format": {"compact"}}
 	if diff {
-		params += "&diff=true"
+		params.Set("diff", "true")
 	}
 	if tabID != "" {
-		params += "&tabId=" + tabID
+		params.Set("tabId", tabID)
 	}
-	apiclient.DoGetRawAndPrint(client, base, token, "/snapshot?"+params)
+	body, err := apiclient.DoRawE(client, base, token, http.MethodGet, "/snapshot", apiclient.WithQuery(params), apiclient.CaptureVocab(namedNoTab(cmd)))
+	var statusErr *apiclient.StatusError
+	switch {
+	case errors.As(err, &statusErr):
+		fmt.Fprintf(os.Stderr, "snapshot error %d: %s\n", statusErr.Status, string(statusErr.Body))
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "snapshot failed: %v\n", errors.Unwrap(err))
+	default:
+		fmt.Println(string(body))
+	}
 }
 
 func fetchAndPrintText(client *http.Client, base, token, tabID string) {
@@ -193,6 +217,9 @@ func printActionResult(kind string, result map[string]any) {
 		return
 	}
 	if actionResult, ok := result["result"].(map[string]any); ok {
+		// A submit reports its own bounded post-state, which says more than "it
+		// moved" — so it is the headline, and the navigation rides underneath it
+		// rather than replacing it.
 		if postState, ok := actionResult["postState"].(map[string]any); ok {
 			status, _ := postState["status"].(string)
 			signal, _ := postState["signal"].(string)
@@ -200,15 +227,44 @@ func printActionResult(kind string, result map[string]any) {
 			case "pending":
 				output.Value("PENDING")
 				output.Hint("submit post-state is still pending; do not retry automatically")
+				printNavigationOutcome(actionResult)
 				return
 			case "succeeded":
 				output.Value("SUCCEEDED " + signal)
+				printNavigationOutcome(actionResult)
 				return
 			}
+		}
+		// A click that moved the page succeeded. It used to exit 1 with a 409, which
+		// is the signal every agent loop and CI harness branches on, so the natural
+		// reaction — retry — re-clicked on the page the first click had reached.
+		if actionResult["navigated"] == true {
+			landed, _ := actionResult["url"].(string)
+			output.Value("OK navigated " + landed)
+			printStaleRefsHint()
+			return
 		}
 	}
 
 	output.Success()
+}
+
+// printNavigationOutcome reports the landing for an action whose headline is
+// something else. Every form that navigates says where it landed, including the
+// forms that declare the navigation — those are the ones whose next action depends
+// on the new page, so they are the ones that most need to hear their refs are dead.
+func printNavigationOutcome(actionResult map[string]any) {
+	if actionResult["navigated"] != true {
+		return
+	}
+	if landed, _ := actionResult["url"].(string); landed != "" {
+		output.Value("navigated " + landed)
+	}
+	printStaleRefsHint()
+}
+
+func printStaleRefsHint() {
+	output.Hint("every ref from your last snapshot is dead — run `pinchtab snap -i` before the next action")
 }
 
 func setPointBody(body map[string]any, x, y float64) {

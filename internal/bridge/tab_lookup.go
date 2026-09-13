@@ -9,14 +9,33 @@ import (
 	"github.com/chromedp/cdproto/target"
 )
 
-func (tm *TabManager) markAccessed(tabID string) {
+func (tm *TabManager) markAccessed(tabID string) error {
 	tm.mu.Lock()
-	tm.accessed[tabID] = true
-	if entry, ok := tm.tabs[tabID]; ok {
-		entry.LastUsed = time.Now()
-	}
 	tm.currentTab = tabID
 	tm.mu.Unlock()
+	return tm.touchTab(tabID)
+}
+
+func (tm *TabManager) CurrentTabID() string {
+	if tm == nil {
+		return ""
+	}
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+	return tm.selectCurrentTrackedTab()
+}
+
+func (tm *TabManager) TabLastUsed(tabID string) (time.Time, bool) {
+	if tm == nil {
+		return time.Time{}, false
+	}
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+	entry, ok := tm.tabs[tabID]
+	if !ok {
+		return time.Time{}, false
+	}
+	return entry.LastUsed, true
 }
 
 // selectCurrentTrackedTab returns the current tab ID, falling back to the most
@@ -105,15 +124,16 @@ func (tm *TabManager) TabContext(tabID string) (context.Context, string, error) 
 	}
 
 	if !ok {
-		return nil, "", fmt.Errorf("tab %s not found", tabID)
+		return nil, "", tabNotFound(tabID)
 	}
 
 	if entry.Ctx == nil {
 		return nil, "", fmt.Errorf("tab %s has no active context", tabID)
 	}
 
-	tm.markAccessed(tabID)
-
+	if err := tm.markAccessed(tabID); err != nil {
+		return nil, "", err
+	}
 	return entry.Ctx, tabID, nil
 }
 

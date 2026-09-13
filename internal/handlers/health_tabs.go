@@ -13,6 +13,34 @@ type tabHandoffReader interface {
 	TabHandoffState(tabID string) (bridge.TabHandoffState, bool)
 }
 
+type currentTabReader interface {
+	CurrentTabID() string
+}
+
+var _ currentTabReader = (*bridge.Bridge)(nil)
+
+const IncludeTransientTabsQuery = "includeTransient"
+
+func includeTransientTabs(r *http.Request) bool {
+	return r.URL.Query().Get(IncludeTransientTabsQuery) == "1"
+}
+
+func (h *Handlers) listedCurrentTabID(r *http.Request, targets []bridge.TabTarget) string {
+	if !currentTabScopeFromRequest(r).IsGlobal() {
+		tabID, _ := h.scopedCurrentTabForRequest(r)
+		return tabID
+	}
+	if reader, ok := bridgeAs[currentTabReader](h.Bridge); ok {
+		if tabID := reader.CurrentTabID(); tabID != "" {
+			return tabID
+		}
+	}
+	if len(targets) > 0 {
+		return targets[0].TargetID
+	}
+	return ""
+}
+
 func (h *Handlers) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	if h.Bridge == nil {
 		writeUnavailable(w, 503, "bridge_unavailable", "bridge not initialized")
@@ -112,9 +140,8 @@ func (h *Handlers) HandleMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) HandleTabMetrics(w http.ResponseWriter, r *http.Request) {
-	tabID := r.PathValue("id")
-	if tabID == "" {
-		httpx.Error(w, 400, fmt.Errorf("missing tab id"))
+	tabID, ok := requirePathTabID(w, r)
+	if !ok {
 		return
 	}
 
@@ -128,7 +155,7 @@ func (h *Handlers) HandleTabMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mem, err := h.Bridge.GetMemoryMetrics(tabID)
+	mem, err := h.Bridge.GetAggregatedMemoryMetrics()
 	if err != nil {
 		httpx.Error(w, 500, fmt.Errorf("failed to get metrics: %w", err))
 		return
@@ -161,15 +188,12 @@ func (h *Handlers) HandleTabs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentTabID := ""
-	if _, resolvedID, err := h.tabContext(r, ""); err == nil {
-		currentTabID = resolvedID
-	}
+	currentTabID := h.listedCurrentTabID(r, targets)
+	keepTransient := includeTransientTabs(r)
 
 	tabs := make([]map[string]any, 0, len(targets))
 	appendTab := func(t bridge.TabTarget) {
-		// Skip the initial about:blank tab that Chrome creates on launch
-		if bridge.IsTransientURL(t.URL, h.Config.Port) {
+		if !keepTransient && bridge.IsTransientURL(t.URL, h.Config.Port) {
 			return
 		}
 		tabID := t.TargetID
@@ -182,7 +206,7 @@ func (h *Handlers) HandleTabs(w http.ResponseWriter, r *http.Request) {
 		if t.BrowserContextID != "" {
 			entry["browserContextId"] = t.BrowserContextID
 		}
-		if hr, ok := h.Bridge.(tabHandoffReader); ok {
+		if hr, ok := bridgeAs[tabHandoffReader](h.Bridge); ok {
 			if hs, ok := hr.TabHandoffState(tabID); ok {
 				entry["status"] = hs.Status
 				entry["handoffReason"] = hs.Reason

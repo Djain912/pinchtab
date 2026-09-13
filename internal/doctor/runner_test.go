@@ -30,6 +30,21 @@ func TestSummarize_Counts(t *testing.T) {
 	}
 }
 
+func TestSummarizeDoesNotCountPresenceAsABrowserLaunch(t *testing.T) {
+	results := []CheckResult{
+		{Name: "cloakbrowser_present", Status: StatusPass},
+		{Name: "cdp_reachable", Status: StatusSkip, LaunchesBrowser: true},
+		{Name: "fingerprint_flags_accepted", Status: StatusSkip, LaunchesBrowser: true},
+	}
+	got := Summarize(results)
+	if got.BrowserLaunched != 0 {
+		t.Fatalf("BrowserLaunched = %d, want 0 when only the presence check ran", got.BrowserLaunched)
+	}
+	if strings.HasPrefix(Verdict(got), "Clean:") {
+		t.Fatalf("Verdict() = %q, must not call a presence-only run clean", Verdict(got))
+	}
+}
+
 func TestExitCode(t *testing.T) {
 	cases := []struct {
 		name string
@@ -56,6 +71,7 @@ func TestRun_RegistryOrdering_Chrome(t *testing.T) {
 	wantOrder := []string{
 		"config_file",
 		"chrome_present",
+		"cdp_reachable",
 		"handle_decisions",
 		"binary_exists",
 		"binary_executable",
@@ -114,8 +130,8 @@ func TestKnownCheck(t *testing.T) {
 	if !KnownCheck(cfg, "binary_exists") {
 		t.Error("binary_exists should be known for chrome provider")
 	}
-	if KnownCheck(cfg, "cdp_reachable") {
-		t.Error("cdp_reachable should not be known for chrome provider")
+	if !KnownCheck(cfg, "cdp_reachable") {
+		t.Error("cdp_reachable should be known for chrome provider")
 	}
 	if KnownCheck(cfg, "nonsense") {
 		t.Error("unknown check name should report false")
@@ -232,7 +248,7 @@ func TestWriteText_FormatsResults(t *testing.T) {
 		{Name: "linux_fonts_present", Status: StatusSkip, Detail: "not linux", Duration: time.Microsecond},
 	}
 	var buf bytes.Buffer
-	WriteText(&buf, "cloak", "", results)
+	WriteText(&buf, "cloak", "", results, "")
 	out := buf.String()
 	if !strings.Contains(out, "pinchtab doctor (browser=cloak)") {
 		t.Errorf("missing header in output:\n%s", out)
@@ -243,6 +259,9 @@ func TestWriteText_FormatsResults(t *testing.T) {
 	if !strings.Contains(out, "1 passed, 1 failed, 1 skipped, 0 warnings.") {
 		t.Errorf("missing or wrong summary:\n%s", out)
 	}
+	if !strings.Contains(out, ScopeStatement) {
+		t.Errorf("missing doctor scope statement:\n%s", out)
+	}
 }
 
 func TestWriteJSON_Structure(t *testing.T) {
@@ -251,7 +270,7 @@ func TestWriteJSON_Structure(t *testing.T) {
 		{Name: "binary_starts", Status: StatusFail, Detail: "broken", Err: errors.New("broken")},
 	}
 	var buf bytes.Buffer
-	if err := WriteJSON(&buf, "cloak", "default", results); err != nil {
+	if err := WriteJSON(&buf, "cloak", "default", results, ""); err != nil {
 		t.Fatal(err)
 	}
 	var report jsonReport
@@ -269,6 +288,19 @@ func TestWriteJSON_Structure(t *testing.T) {
 	}
 	if report.Summary.Passed != 1 || report.Summary.Failed != 1 {
 		t.Errorf("summary wrong: %+v", report.Summary)
+	}
+	if report.Scope != ScopeStatement || report.Verdict == "" {
+		t.Errorf("scope/verdict missing from JSON report: %+v", report)
+	}
+}
+
+func TestVerdictDoesNotCallSkippedBrowserChecksClean(t *testing.T) {
+	got := Verdict(Summary{Passed: 3, Skipped: 3})
+	if strings.HasPrefix(got, "Clean:") {
+		t.Fatalf("Verdict() = %q, must not call an installation-only run clean", got)
+	}
+	if !strings.Contains(got, "No check launched a browser") {
+		t.Fatalf("Verdict() = %q, want skipped-browser explanation", got)
 	}
 }
 
@@ -337,5 +369,25 @@ func TestBinaryStarts_DoesNotPassWithoutAVersion(t *testing.T) {
 	}
 	if !strings.Contains(r.Detail, "no version") {
 		t.Errorf("detail = %q, want it to say no version was returned", r.Detail)
+	}
+}
+
+func TestRunWithConfigErrorFailsConfigAndSkipsDependentChecks(t *testing.T) {
+	err := errors.New(`sessions.agent.mode: unsupported value "required"`)
+	results := RunWithConfigError(context.Background(), &config.RuntimeConfig{DefaultBrowser: config.BrowserChrome}, "", err)
+	if len(results) < 2 {
+		t.Fatalf("results = %v, want a report with dependent checks", results)
+	}
+	if results[0].Name != "config_file" || results[0].Status != StatusFail || !strings.Contains(results[0].Detail, "sessions.agent.mode") {
+		t.Fatalf("config result = %+v, want failing field-specific diagnosis", results[0])
+	}
+	for _, result := range results[1:] {
+		if result.Status != StatusSkip || !strings.Contains(result.Detail, "valid loaded configuration") {
+			t.Fatalf("dependent result = %+v, want explicit config-dependent skip", result)
+		}
+	}
+	filtered := RunWithConfigError(context.Background(), &config.RuntimeConfig{DefaultBrowser: config.BrowserChrome}, "binary_exists", err)
+	if len(filtered) != 2 || filtered[0].Name != "config_file" || filtered[0].Status != StatusFail || filtered[1].Name != "binary_exists" || filtered[1].Status != StatusSkip {
+		t.Fatalf("filtered results = %+v, want config failure plus requested dependent skip", filtered)
 	}
 }

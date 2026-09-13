@@ -14,6 +14,7 @@ func vocabEchoServer(t *testing.T, token string, lastActionBody *string) *httpte
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/snapshot" {
+			w.Header().Set("X-PinchTab-Tab-Id", r.URL.Query().Get("tabId"))
 			w.Header().Set("X-PinchTab-Vocab", token)
 			_, _ = w.Write([]byte(`{"status":"ok"}`))
 			return

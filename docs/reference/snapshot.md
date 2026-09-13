@@ -10,10 +10,10 @@ Selector scoping is explicit. `selector=...` only searches the current frame sco
 curl "http://localhost:9867/snapshot?filter=interactive"
 # CLI Alternative (defaults to compact text output)
 pinchtab snap -i
-# Output
-[e5] link "More information..."
+# Output: a "# <title> | <url> | <N> nodes" header line, then one node per line
+e5:link "More information..."
 
-# Use --full or --compact=false for JSON
+# --json (same as --compact=false) keeps the interactive filter; --full returns every node as JSON
 pinchtab snap --full
 ```
 
@@ -23,10 +23,11 @@ pinchtab snap --full
 |------|-------------|
 | `-i`, `--interactive` | Filter to interactive elements + headings (default: true) |
 | `-c`, `--compact` | Compact text output (default: true) |
+| `--json` | JSON output, keeping the interactive filter (same as `--compact=false`) |
 | `-d`, `--diff` | Show diff from previous snapshot |
-| `--full` | Full JSON output (shorthand for `--interactive=false --compact=false`) |
+| `--full` | Full JSON output (shorthand for `--interactive=false --json`) |
 | `--text` | Text output format |
-| `-s`, `--selector` | CSS selector to scope snapshot |
+| `-s`, `--selector` | Selector to scope the snapshot (also accepted as the positional `[selector]` argument) |
 | `--max-tokens` | Maximum token budget |
 | `--depth` | Tree depth limit |
 | `--tab` | Target specific tab |
@@ -46,13 +47,41 @@ pinchtab snap --max-tokens 2000         # Limit output size
 
 | Parameter | Description |
 |-----------|-------------|
+| `tabId` | Target tab (defaults to the current tab) |
 | `filter` | `interactive` for interactive + headings, `all` (default) for the whole tree |
 | `interactive` | Boolean alias for `filter`: `true` is `filter=interactive`, `false` is `filter=all`. Contradicting an explicit `filter` is a 400 |
 | `format` | `compact`, `text`, `yaml`, or default JSON. The CLI and the MCP tool both ask for `compact`; the HTTP default is unchanged |
 | `diff` | `true` for diff mode |
-| `selector` | CSS selector to scope |
-| `maxTokens` | Token budget limit |
-| `depth` | Tree depth limit |
+| `selector` | Unified selector (ref, CSS, XPath, text, …) to scope |
+| `maxTokens` | Token budget limit (positive integer; anything else is a 400) |
+| `depth` | Tree depth limit (`-1` = no limit; below `-1` is a 400) |
+| `noAnimations` | `true` disables animations once before capturing |
+| `output` | `file` writes the snapshot under the state dir's `snapshots/` and returns `{path, size, format, timestamp}` |
+| `path` | With `output=file`, a file path inside the state dir (anything outside is a 400) |
+
+`GET /tabs/{id}/snapshot` is the same handler with the tab in the path.
+
+Unknown query parameters are not rejected; they are echoed back as `ignoredParams` (JSON/YAML) or a `# ignored params:` comment line (compact/text) so a mistyped flag is visible.
+
+## Response
+
+The default JSON body carries `url`, `title`, `route`, `nodes`, `count` and `vocabularyToken`,
+plus `truncated`/`maxTokens` when the budget cut the tree and `hint` when a selector matched an
+element with no accessible nodes. `vocabularyToken` names the ref vocabulary this snapshot
+issued; every snapshot also sets it on the `X-PinchTab-Vocab` response header (with
+`X-PinchTab-Tab-Id`), whatever the format. Echo it as `vocab` on ref-based actions (the CLI does this for you):
+an action that targets a ref under a token other than the tab's current one is refused with
+`409 vocab_superseded` — re-snapshot and use the new refs.
+
+When a modal dialog is open in the page, the snapshot is scoped to the topmost dialog's
+subtree. If the topmost dialog changes twice while the snapshot is being taken, the request
+fails with `409` — retry after the page settles. A pending JavaScript dialog (alert,
+confirm, prompt) blocks the read with `409 dialog_blocked` until it is answered with
+`pinchtab dialog`.
+
+A tab whose document is `hidden` (a background tab) is rendered before the accessibility read:
+PinchTab enables focus emulation and waits for a painted frame (up to 1s), so content that
+only lays out when visible still appears in the tree.
 
 ## What a format costs, and what it carries
 
