@@ -546,6 +546,15 @@
       ]
     },
     "api/extract-extended.sh": {
+      "services": [
+        "pinchtab",
+        "pinchtab-secure",
+        "fixtures"
+      ],
+      "ready": [
+        "E2E_SERVER",
+        "E2E_SECURE_SERVER"
+      ],
       "tags": [
         "extract",
         "idpi",

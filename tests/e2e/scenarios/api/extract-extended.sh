@@ -32,21 +32,15 @@ end_test
 # ─────────────────────────────────────────────────────────────────
 start_test "extract: strict mode blocks the injection page like /find"
 
-strict_extract_and_find() {
-  pt_post /navigate -d "{\"url\":\"${FIXTURES_URL}/idpi-inject.html\"}"
-  assert_ok "navigate to the injection page in strict mode"
-  pt_post /extract -d "{\"schema\":${INJECT_SCHEMA}}"
-  assert_http_status 403 "extract blocked by IDPI"
-  assert_contains "$RESULT" "idpi" "block names the scanner"
-  pt_post /find -d '{"query":"heading"}'
-  assert_http_status 403 "find blocked the same way"
-}
+secure_post /navigate -d "{\"url\":\"${FIXTURES_URL}/idpi-inject.html\"}"
+assert_ok "navigate to the injection page in strict mode"
 
-if e2e_curl -sf "${E2E_SECURE_SERVER}/health" >/dev/null 2>&1; then
-  with_server "$E2E_SECURE_SERVER" strict_extract_and_find
-else
-  skip_test "no strict-mode server in this suite (the IDPI guard is built at startup, so a config PUT cannot flip it); strict mode is pinned by the handlers unit test"
-fi
+secure_post /extract -d "{\"schema\":${INJECT_SCHEMA}}"
+assert_http_status 403 "extract blocked by IDPI"
+assert_contains "$RESULT" "idpi" "block names the scanner"
+
+secure_post /find -d '{"query":"heading"}'
+assert_http_status 403 "find blocked the same way"
 
 end_test
 

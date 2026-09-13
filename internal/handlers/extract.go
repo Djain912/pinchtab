@@ -22,13 +22,14 @@ type extractRequest struct {
 }
 
 type extractResponse struct {
-	Data         map[string]any                 `json:"data"`
-	Fields       map[string]extract.FieldResult `json:"fields"`
-	Missing      []string                       `json:"missing"`
-	Truncated    bool                           `json:"truncated"`
-	LatencyMs    int64                          `json:"latency_ms"`
-	ElementCount int                            `json:"element_count"`
-	IDPIWarning  string                         `json:"idpiWarning,omitempty"`
+	Data            map[string]any                 `json:"data"`
+	Fields          map[string]extract.FieldResult `json:"fields"`
+	Missing         []string                       `json:"missing"`
+	Truncated       bool                           `json:"truncated"`
+	LatencyMs       int64                          `json:"latency_ms"`
+	ElementCount    int                            `json:"element_count"`
+	VocabularyToken string                         `json:"vocabularyToken,omitempty"`
+	IDPIWarning     string                         `json:"idpiWarning,omitempty"`
 }
 
 // @Endpoint POST /extract
@@ -39,9 +40,11 @@ type extractResponse struct {
 // @Param threshold float body Minimum match score per field (optional, default: 0.3)
 // @Param maxItems int body Cap on array items (optional, default: 100)
 //
-// @Response 200 application/json Typed data plus per-field ref, score and confidence
+// @Response 200 application/json Typed data plus per-field ref, score and confidence, the vocabularyToken for follow-up ref actions (also in X-PinchTab-Vocab), and X-PinchTab-Tab-Id naming the resolved tab
 // @Response 400 application/json Missing or unsupported schema, naming the offending path
+// @Response 403 application/json IDPI strict mode blocked injected content on the page or in the extracted values
 // @Response 404 application/json Tab not found
+// @Response 409 application/json A JavaScript dialog is blocking the tab
 // @Response 500 application/json Snapshot error
 func (h *Handlers) HandleExtract(w http.ResponseWriter, r *http.Request) {
 	if err := h.ensureBrowser(h.Config); err != nil {
@@ -58,7 +61,7 @@ func (h *Handlers) HandleExtract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctxTab, resolvedTabID, ok := h.guardedTabContext(w, r, req.TabID, guardDialogBlocked|guardDomainPolicy)
+	ctxTab, resolvedTabID, ok := h.guardedTabContextWithHeader(w, r, req.TabID, guardDialogBlocked|guardDomainPolicy)
 	if !ok {
 		return
 	}
@@ -67,36 +70,64 @@ func (h *Handlers) HandleExtract(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	go httpx.CancelOnClientDone(r.Context(), cancel)
 
-	nodes, serr := h.acquireExtractNodes(w, tCtx, resolvedTabID)
+	nodes, vocab, serr := h.acquireExtractNodes(w, tCtx, resolvedTabID)
 	if serr != nil {
 		httpx.Error(w, serr.status, serr.err)
 		return
 	}
 
-	idpiWarning, blocked := h.scanFindCorpusForIDPI(w, tCtx, nodes)
+	start := time.Now()
+	result := extract.ResolveContext(tCtx, schema, nodes, extract.Options{Threshold: req.Threshold, MaxItems: req.MaxItems, Matcher: h.Matcher})
+
+	idpiWarning, blocked := h.scanFindCorpusForIDPI(w, tCtx, nodes, extractedStrings(result.Data)...)
 	if blocked {
 		return
 	}
 
-	start := time.Now()
-	result := extract.Resolve(schema, nodes, extract.Options{Threshold: req.Threshold, MaxItems: req.MaxItems})
-
 	h.recordActivity(r, activity.Update{Action: "extract"})
-	httpx.JSON(w, 200, buildExtractResponse(result, len(nodes), idpiWarning, start))
+	resp := buildExtractResponse(result, len(nodes), idpiWarning, start)
+	resp.VocabularyToken = vocab
+	httpx.JSON(w, 200, resp)
 }
 
-func (h *Handlers) acquireExtractNodes(w http.ResponseWriter, ctx context.Context, tabID string) ([]bridge.A11yNode, *statusError) {
+func (h *Handlers) acquireExtractNodes(w http.ResponseWriter, ctx context.Context, tabID string) ([]bridge.A11yNode, string, *statusError) {
 	result, err := h.Bridge.Snapshot(ctx, tabID, "", bridge.ContentParams{})
 	if err != nil {
-		return nil, &statusError{500, fmt.Errorf("snapshot: %w", err)}
+		return nil, "", &statusError{500, fmt.Errorf("snapshot: %w", err)}
 	}
 	if len(result.Nodes) == 0 {
-		return nil, &statusError{500, fmt.Errorf("no elements found in snapshot for tab %s — navigate first", tabID)}
+		return nil, "", &statusError{500, fmt.Errorf("no elements found in snapshot for tab %s — navigate first", tabID)}
 	}
 	cache := bridge.EpochRefs(h.Bridge.GetRefCache(tabID), result.Nodes)
 	h.Bridge.SetRefCache(tabID, cache)
 	publishVocab(w, tabID, cache.DomEpoch)
-	return result.Nodes, nil
+	return result.Nodes, cache.DomEpoch, nil
+}
+
+func extractedStrings(v any) []string {
+	switch t := v.(type) {
+	case string:
+		return []string{t}
+	case map[string]any:
+		var out []string
+		for _, e := range t {
+			out = append(out, extractedStrings(e)...)
+		}
+		return out
+	case []map[string]any:
+		var out []string
+		for _, e := range t {
+			out = append(out, extractedStrings(e)...)
+		}
+		return out
+	case []any:
+		var out []string
+		for _, e := range t {
+			out = append(out, extractedStrings(e)...)
+		}
+		return out
+	}
+	return nil
 }
 
 func (h *Handlers) HandleTabExtract(w http.ResponseWriter, r *http.Request) {

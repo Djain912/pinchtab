@@ -42,6 +42,7 @@ type Options struct {
 	EmbeddingWeight float64
 	MaxItems        int
 	Matcher         semantic.ElementMatcher
+	ctx             context.Context
 }
 
 type FieldResult struct {
@@ -100,6 +101,11 @@ func sharedMatcher() semantic.ElementMatcher {
 }
 
 func Resolve(schema Schema, nodes []observe.A11yNode, opts Options) Result {
+	return ResolveContext(context.Background(), schema, nodes, opts)
+}
+
+func ResolveContext(ctx context.Context, schema Schema, nodes []observe.A11yNode, opts Options) Result {
+	opts.ctx = ctx
 	if opts.Threshold <= 0 {
 		opts.Threshold = defaultThreshold
 	}
@@ -171,7 +177,7 @@ func matchTarget(tg target, fallbackQuery string, v view, opts Options) (observe
 	if tg.kind == targetQuery {
 		query = tg.value
 	}
-	res, err := opts.Matcher.Find(context.Background(), query, v.descs, semantic.FindOptions{
+	res, err := opts.Matcher.Find(opts.ctx, query, v.descs, semantic.FindOptions{
 		Threshold:       opts.Threshold,
 		TopK:            len(v.descs),
 		LexicalWeight:   opts.LexicalWeight,

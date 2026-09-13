@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/pinchtab/pinchtab/internal/httpx"
@@ -112,27 +113,30 @@ func (h *Handlers) openAPIDocument(description string) map[string]any {
 		},
 	}
 	extractResponses := map[string]any{
-		"200": map[string]any{
-			"description": "Typed data with per-field diagnostics",
+		strconv.Itoa(http.StatusOK): map[string]any{
+			"description": "Typed data with per-field diagnostics; X-PinchTab-Tab-Id names the resolved tab and X-PinchTab-Vocab carries the vocabularyToken",
 			"content": map[string]any{
 				"application/json": map[string]any{
 					"schema": map[string]any{
 						"type": "object",
 						"properties": map[string]any{
-							"data":          map[string]any{"type": "object", "description": "Values coerced to the schema types; arrays hold one object per repeated group"},
-							"fields":        map[string]any{"type": "object", "description": "Per property: ref, score, confidence, source, reason, and for arrays items plus truncated"},
-							"missing":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-							"truncated":     map[string]any{"type": "boolean"},
-							"latency_ms":    map[string]any{"type": "integer"},
-							"element_count": map[string]any{"type": "integer"},
-							"idpiWarning":   map[string]any{"type": "string"},
+							"data":            map[string]any{"type": "object", "description": "Values coerced to the schema types; arrays hold one object per repeated group"},
+							"fields":          map[string]any{"type": "object", "description": "Per property: ref, score, confidence, source, reason, and for arrays items plus truncated"},
+							"missing":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+							"truncated":       map[string]any{"type": "boolean"},
+							"latency_ms":      map[string]any{"type": "integer"},
+							"element_count":   map[string]any{"type": "integer"},
+							"vocabularyToken": map[string]any{"type": "string", "description": "Ref vocabulary the returned refs belong to; follow-up ref actions are accepted against it"},
+							"idpiWarning":     map[string]any{"type": "string"},
 						},
 					},
 				},
 			},
 		},
-		"400": map[string]any{"description": "Missing or unsupported schema; the message names the offending path"},
-		"404": map[string]any{"description": "Tab not found"},
+		strconv.Itoa(http.StatusBadRequest): map[string]any{"description": "Missing or unsupported schema; the message names the offending path"},
+		strconv.Itoa(http.StatusForbidden):  map[string]any{"description": "IDPI strict mode blocked injected content on the page or in the extracted values"},
+		strconv.Itoa(http.StatusNotFound):   map[string]any{"description": "Tab not found"},
+		strconv.Itoa(http.StatusConflict):   map[string]any{"description": "A JavaScript dialog is blocking the tab"},
 	}
 	for _, p := range []string{"/extract", "/tabs/{id}/extract"} {
 		if op, ok := paths[p]["post"].(map[string]any); ok {
