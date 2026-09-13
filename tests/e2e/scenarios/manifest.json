@@ -12,6 +12,18 @@
         "pr"
       ]
     },
+    "api/dialog-guard-basic.sh": {
+      "tags": [
+        "dialogs",
+        "pr"
+      ]
+    },
+    "cli/dialog-guard-basic.sh": {
+      "tags": [
+        "dialogs",
+        "pr"
+      ]
+    },
     "api/wait-url-basic.sh": {
       "tags": [
         "wait",
