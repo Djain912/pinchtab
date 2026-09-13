@@ -137,6 +137,35 @@ fi
 end_test
 
 # ─────────────────────────────────────────────────────────────────
+start_test "pinchtab extract --json, --explain, --tab and a scope that matches nothing"
+
+pt_ok nav "$PRODUCT_PAGE"
+PRODUCT_TAB=$(echo "$PT_OUT" | tr -d '[:space:]')
+pt_ok nav "$LIST_PAGE" --new-tab
+
+pt_ok extract --schema "$SCHEMAS/product.schema.json" --tab "$PRODUCT_TAB" --json
+assert_out_jq '.data.price' '1299' "--tab reads the product tab while the list tab is current"
+assert_out_jq '.fields.name.ref | test("^e[0-9]+$")' 'true' "--json prints the envelope with field refs"
+assert_out_jq '.vocabularyToken | length > 0' 'true' "--json envelope carries the vocabulary token"
+
+pt_ok extract --schema "$SCHEMAS/product.schema.json" --tab "$PRODUCT_TAB" --explain
+if awk -F'\t' '$1 == "price" && NF == 6 && $2 ~ /^e[0-9]+$/ && $4 ~ /^[0-9]+\.[0-9][0-9]$/ {found=1} END {exit !found}' <<<"$PT_OUT"; then
+  pass_assert "--explain row has field, ref, confidence, score, source and reason columns"
+else
+  fail_assert "--explain has no six-column price row: $PT_OUT"
+fi
+
+pt_ok extract --schema "$SCHEMAS/product.schema.json" --tab "$PRODUCT_TAB" --scope ref:e99999
+assert_out_jq '. == {}' 'true' "a scope that matches nothing extracts no data"
+if grep -q "missing required fields: inStock, name, price" <<<"$PT_ERR"; then
+  pass_assert "missing required fields reported on stderr with exit 0"
+else
+  fail_assert "no missing-required note on stderr: $PT_ERR"
+fi
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
 start_test "docs curl example returns typed data"
 
 pt_ok nav "$PRODUCT_PAGE"

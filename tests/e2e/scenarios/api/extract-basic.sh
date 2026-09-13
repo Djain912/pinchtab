@@ -113,3 +113,37 @@ assert_json_eq "$RESULT" '.data.products | length' '6' "tab-scoped route resolve
 
 end_test
 
+# ─────────────────────────────────────────────────────────────────
+start_test "extract: request-level scope confines every field to one subtree"
+
+AMOUNTS_SCHEMA='{"type":"object","properties":{"entries":{"type":"array","items":{"type":"object","properties":{"amount":{"type":"number","description":"price"}}}}}}'
+
+pt_post /navigate -d "{\"url\":\"${FIXTURES_URL}/extract-list.html\"}"
+assert_ok "navigate to extract-list.html"
+
+pt_post /extract -d "{\"schema\":${AMOUNTS_SCHEMA}}"
+assert_ok "unscoped extract"
+assert_json_eq "$RESULT" '.data.entries | length' '6' "unscoped entries come from the 6-product grid"
+
+pt_post /extract -d "{\"schema\":${AMOUNTS_SCHEMA},\"scope\":\"role:table\"}"
+assert_ok "extract scoped to role:table"
+assert_json_eq "$RESULT" '.data.entries | length' '5' "scope role:table reads the 5 table rows"
+TABLE_REF=$(echo "$RESULT" | jq -r '.fields.entries.ref')
+
+pt_post /extract -d "{\"schema\":${AMOUNTS_SCHEMA},\"scope\":\"ref:${TABLE_REF}\"}"
+assert_ok "extract scoped to ref:${TABLE_REF}"
+assert_json_eq "$RESULT" '.data.entries | length' '5' "scope ref:<table ref> reads the same 5 rows"
+
+pt_post /extract -d "{\"schema\":${PRODUCT_SCHEMA},\"scope\":\"ref:e99999\"}"
+assert_ok "a scope that matches nothing still answers 200"
+assert_json_eq "$RESULT" '.data' '{}' "no data outside a missing scope"
+assert_json_eq "$RESULT" '[.fields[].reason] | unique | join(",")' 'scope_not_found' "every field reports scope_not_found"
+assert_json_eq "$RESULT" '.missing | sort | join(",")' 'inStock,name,price' "required fields are listed as missing"
+
+pt_post /extract -d "{\"schema\":${AMOUNTS_SCHEMA},\"scope\":\"css:table\"}"
+assert_http_error 400 "scope: css" "a CSS scope is a 400 naming scope"
+
+pt_post /extract -d "{\"schema\":${AMOUNTS_SCHEMA},\"scope\":\"xpath://table\"}"
+assert_http_error 400 "scope: xpath" "an XPath scope is a 400 naming scope"
+
+end_test
