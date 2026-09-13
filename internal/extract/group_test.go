@@ -167,7 +167,7 @@ func TestResolveArray_ScopeForcesContainer(t *testing.T) {
 		t.Errorf("links = %v, want 4 nav items", list)
 	}
 
-	for _, scope := range []string{"ref:e63", "ref:e64"} {
+	for _, scope := range []string{"ref:e63", "ref:e64", "e63", "e64"} {
 		byRef := mustSchema(t, `{"type":"object","properties":{
 			"rows":{"type":"array","x-pinchtab-scope":"`+scope+`","items":{"type":"object","properties":{
 				"order":{"type":"integer","description":"order number"}}}}}}`)
@@ -361,5 +361,30 @@ func TestSchemaWithScopeRefusesABrowserSelectorNamingTheScope(t *testing.T) {
 	ue, ok := err.(*UnsupportedError)
 	if !ok || ue.Path != "scope" {
 		t.Fatalf("err = %v (%T), want an UnsupportedError at path scope", err, err)
+	}
+}
+
+func TestRequestScopeAcceptsABareRefLikeTheFieldsTablePrintsIt(t *testing.T) {
+	nodes := loadSnapshot(t, "extract-list.json")
+	schema := mustSchema(t, `{"type":"object","properties":{
+		"entries":{"type":"array","items":{"type":"object","properties":{
+			"amount":{"type":"number","description":"price"}}}}}}`)
+	for _, scope := range []string{"ref:e64", "e64"} {
+		scoped, err := schema.WithScope(scope)
+		if err != nil {
+			t.Fatalf("WithScope(%q): %v", scope, err)
+		}
+		if n := len(items(t, Resolve(scoped, nodes, Options{}), "entries")); n != 5 {
+			t.Errorf("scope %q entries = %d, want the 5 table rows", scope, n)
+		}
+	}
+}
+
+func TestHintAcceptsABareRef(t *testing.T) {
+	schema := mustSchema(t, `{"type":"object","properties":{
+		"colour":{"type":"string","x-pinchtab-hint":"e5"}}}`)
+	got := Resolve(schema, productNodes(), Options{})
+	if got.Fields["colour"].Ref != "e5" || got.Data["colour"] != "Midnight Black" {
+		t.Errorf("colour = %+v data=%v, want the e5 node's text", got.Fields["colour"], got.Data["colour"])
 	}
 }

@@ -320,6 +320,8 @@ func TestParseSchema_UnsupportedConstructs(t *testing.T) {
 		{"non-object root", `{"type":"array","properties":{"price":{"type":"string"}}}`, "type"},
 		{"css hint", `{"type":"object","properties":{"price":{"type":"number","x-pinchtab-hint":"css:.price"}}}`, "properties.price.x-pinchtab-hint"},
 		{"xpath hint", `{"type":"object","properties":{"price":{"type":"number","x-pinchtab-hint":"xpath://span"}}}`, "properties.price.x-pinchtab-hint"},
+		{"bare xpath hint", `{"type":"object","properties":{"price":{"type":"number","x-pinchtab-hint":"//span"}}}`, "properties.price.x-pinchtab-hint"},
+		{"bare xpath scope", `{"type":"object","properties":{"rows":{"type":"array","x-pinchtab-scope":"(//table)[1]","items":{"type":"object","properties":{"id":{"type":"string"}}}}}}`, "properties.rows.x-pinchtab-scope"},
 		{"css scope", `{"type":"object","properties":{"rows":{"type":"array","x-pinchtab-scope":"css:table","items":{"type":"object","properties":{"id":{"type":"string"}}}}}}`, "properties.rows.x-pinchtab-scope"},
 		{"array without items", `{"type":"object","properties":{"tags":{"type":"array"}}}`, "properties.tags.items"},
 		{"array of strings", `{"type":"object","properties":{"tags":{"type":"array","items":{"type":"string"}}}}`, "properties.tags.items.type"},

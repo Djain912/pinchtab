@@ -134,6 +134,10 @@ pt_post /extract -d "{\"schema\":${AMOUNTS_SCHEMA},\"scope\":\"ref:${TABLE_REF}\
 assert_ok "extract scoped to ref:${TABLE_REF}"
 assert_json_eq "$RESULT" '.data.entries | length' '5' "scope ref:<table ref> reads the same 5 rows"
 
+pt_post /extract -d "{\"schema\":${AMOUNTS_SCHEMA},\"scope\":\"${TABLE_REF}\"}"
+assert_ok "extract scoped to the bare ref ${TABLE_REF}"
+assert_json_eq "$RESULT" '.data.entries | length' '5' "a bare ref scope reads the same 5 rows as ref:"
+
 pt_post /extract -d "{\"schema\":${PRODUCT_SCHEMA},\"scope\":\"ref:e99999\"}"
 assert_ok "a scope that matches nothing still answers 200"
 assert_json_eq "$RESULT" '.data' '{}' "no data outside a missing scope"
@@ -145,5 +149,8 @@ assert_http_error 400 "scope: css" "a CSS scope is a 400 naming scope"
 
 pt_post /extract -d "{\"schema\":${AMOUNTS_SCHEMA},\"scope\":\"xpath://table\"}"
 assert_http_error 400 "scope: xpath" "an XPath scope is a 400 naming scope"
+
+pt_post /extract -d "{\"schema\":${AMOUNTS_SCHEMA},\"scope\":\"//table\"}"
+assert_http_error 400 "scope: xpath" "a bare XPath scope is a 400 naming scope"
 
 end_test

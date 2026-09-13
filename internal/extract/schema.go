@@ -199,11 +199,11 @@ func parseTarget(raw, path string) (target, error) {
 	if raw == "" {
 		return target{}, nil
 	}
-	if !selector.HasKnownPrefix(raw) {
+	sel := selector.Parse(raw)
+	if sel.Kind == selector.KindCSS && !selector.HasKnownPrefix(raw) {
 		return target{kind: targetQuery, value: raw}, nil
 	}
 
-	sel := selector.Parse(raw)
 	switch sel.Kind {
 	case selector.KindCSS, selector.KindXPath:
 		return target{}, &UnsupportedError{Path: path, Reason: string(sel.Kind) + " selectors need a browser and are not supported"}

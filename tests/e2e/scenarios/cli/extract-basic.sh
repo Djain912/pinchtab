@@ -114,6 +114,11 @@ assert_out_jq '.entries | length' '6' "unscoped amounts come from the 6-product 
 doc_ok 'pinchtab extract --schema amounts.schema.json --scope role:table'
 assert_out_jq '.entries | length' '5' "--scope role:table reads the 5 table rows"
 
+pt_ok extract --schema "$SCHEMAS/amounts.schema.json" --scope role:table --json
+TABLE_REF=$(jq -r '.fields.entries.ref' <<<"$PT_OUT")
+pt_ok extract --schema "$SCHEMAS/amounts.schema.json" --scope "$TABLE_REF"
+assert_out_jq '.entries | length' '5' "--scope with the bare ref ${TABLE_REF} reads the same 5 rows"
+
 end_test
 
 # ─────────────────────────────────────────────────────────────────
