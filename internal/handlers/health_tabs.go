@@ -19,6 +19,12 @@ type currentTabReader interface {
 
 var _ currentTabReader = (*bridge.Bridge)(nil)
 
+const IncludeTransientTabsQuery = "includeTransient"
+
+func includeTransientTabs(r *http.Request) bool {
+	return r.URL.Query().Get(IncludeTransientTabsQuery) == "1"
+}
+
 func (h *Handlers) listedCurrentTabID(r *http.Request, targets []bridge.TabTarget) string {
 	if !currentTabScopeFromRequest(r).IsGlobal() {
 		tabID, _ := h.scopedCurrentTabForRequest(r)
@@ -183,10 +189,11 @@ func (h *Handlers) HandleTabs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	currentTabID := h.listedCurrentTabID(r, targets)
+	keepTransient := includeTransientTabs(r)
 
 	tabs := make([]map[string]any, 0, len(targets))
 	appendTab := func(t bridge.TabTarget) {
-		if bridge.IsTransientURL(t.URL, h.Config.Port) {
+		if !keepTransient && bridge.IsTransientURL(t.URL, h.Config.Port) {
 			return
 		}
 		tabID := t.TargetID

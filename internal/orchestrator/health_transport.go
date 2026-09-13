@@ -11,6 +11,7 @@ import (
 
 	"github.com/pinchtab/pinchtab/internal/activity"
 	"github.com/pinchtab/pinchtab/internal/bridge"
+	"github.com/pinchtab/pinchtab/internal/handlers"
 	"github.com/pinchtab/pinchtab/internal/sanitize"
 )
 
@@ -38,11 +39,15 @@ type memoryMetrics struct {
 }
 
 func (o *Orchestrator) instanceGet(ctx context.Context, inst *InstanceInternal, path string) (*http.Response, error) {
-	return o.instanceRequest(ctx, http.MethodGet, inst, path, nil)
+	return o.instanceQueryRequest(ctx, http.MethodGet, inst, path, "", nil)
 }
 
 func (o *Orchestrator) instanceRequest(ctx context.Context, method string, inst *InstanceInternal, path string, header http.Header) (*http.Response, error) {
-	target, err := o.instancePathURL(inst, path, "")
+	return o.instanceQueryRequest(ctx, method, inst, path, "", header)
+}
+
+func (o *Orchestrator) instanceQueryRequest(ctx context.Context, method string, inst *InstanceInternal, path, rawQuery string, header http.Header) (*http.Response, error) {
+	target, err := o.instancePathURL(inst, path, rawQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +64,15 @@ func (o *Orchestrator) instanceRequest(ctx context.Context, method string, inst 
 }
 
 func (o *Orchestrator) fetchTabs(inst *InstanceInternal) ([]remoteTab, error) {
-	resp, err := o.instanceGet(context.Background(), inst, "/tabs")
+	return o.fetchTabList(inst, "")
+}
+
+func (o *Orchestrator) fetchOwnedTabs(inst *InstanceInternal) ([]remoteTab, error) {
+	return o.fetchTabList(inst, handlers.IncludeTransientTabsQuery+"=1")
+}
+
+func (o *Orchestrator) fetchTabList(inst *InstanceInternal, rawQuery string) ([]remoteTab, error) {
+	resp, err := o.instanceQueryRequest(context.Background(), http.MethodGet, inst, "/tabs", rawQuery, nil)
 	if err != nil {
 		return nil, err
 	}

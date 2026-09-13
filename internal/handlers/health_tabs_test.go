@@ -172,6 +172,52 @@ func TestHandleTabs_Success(t *testing.T) {
 	}
 }
 
+func TestHandleTabs_TransientTabsListedOnlyWhenFlagged(t *testing.T) {
+	targets := []bridge.TabTarget{
+		{TargetID: "real", URL: "https://example.com/", Type: "page"},
+		{TargetID: "blank", URL: "about:blank", Type: "page"},
+		{TargetID: "file", URL: "file:///tmp/page.html", Type: "page"},
+		{TargetID: "own-port", URL: "http://localhost:9867/dashboard", Type: "page"},
+	}
+	cases := []struct {
+		name  string
+		query string
+		want  []string
+	}{
+		{name: "default", query: "", want: []string{"real"}},
+		{name: "flagged", query: "?" + IncludeTransientTabsQuery + "=1", want: []string{"real", "blank", "file", "own-port"}},
+		{name: "flag off", query: "?" + IncludeTransientTabsQuery + "=0", want: []string{"real"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &Handlers{
+				Bridge: &MockBridge{targets: targets, currentTabID: "real"},
+				Config: &config.RuntimeConfig{Port: "9867"},
+			}
+			w := httptest.NewRecorder()
+			h.HandleTabs(w, httptest.NewRequest("GET", "/tabs"+tc.query, nil))
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+			}
+			var resp struct {
+				Tabs []struct {
+					ID string `json:"id"`
+				} `json:"tabs"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			got := make([]string, 0, len(resp.Tabs))
+			for _, tab := range resp.Tabs {
+				got = append(got, tab.ID)
+			}
+			if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+				t.Fatalf("tabs = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestHandleTabs_EnsureBrowserFailureStopsBeforeEnumeration(t *testing.T) {
 	mockBridge := &MockBridge{ensureBrowserErr: "attach failed"}
 	h := &Handlers{Bridge: mockBridge, Config: &config.RuntimeConfig{}}

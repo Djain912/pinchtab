@@ -185,12 +185,12 @@ func (o *Orchestrator) findRunningInstanceByTabID(tabID string) (*InstanceIntern
 	o.mu.RUnlock()
 
 	for _, inst := range instances {
-		tabs, err := o.fetchTabs(inst)
+		tabs, err := o.fetchOwnedTabs(inst)
 		if err != nil {
 			continue
 		}
 		for _, tab := range tabs {
-			if tab.ID == tabID || o.idMgr.TabIDFromCDPTarget(tab.ID) == tabID {
+			if tab.ID == tabID {
 				return inst, nil
 			}
 		}
