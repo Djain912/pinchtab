@@ -53,6 +53,34 @@ else
   ((ASSERTIONS_FAILED++)) || true
 fi
 
+DEFAULT_IDS=""
+for _ in 1 2 3 4 5 6 7 8; do
+  pt_get /health
+  DEFAULT_IDS="${DEFAULT_IDS}$(echo "$RESULT" | jq -r '.defaultInstance.id // empty')"$'\n'
+done
+DEFAULT_ID=$(printf '%s' "$DEFAULT_IDS" | head -1)
+if [ -n "$DEFAULT_ID" ] && [ "$(printf '%s' "$DEFAULT_IDS" | sort -u | wc -l | tr -d ' ')" = "1" ]; then
+  pass_assert "health defaultInstance stays ${DEFAULT_ID} across calls with two instances"
+else
+  fail_assert "health defaultInstance changed between calls: $(printf '%s' "$DEFAULT_IDS" | tr '\n' ' ')"
+fi
+if [ "$DEFAULT_ID" != "$ATTACHED_INST_ID" ]; then
+  pass_assert "health defaultInstance is the earlier instance, not the attached bridge"
+else
+  fail_assert "health defaultInstance named the later-attached bridge ${ATTACHED_INST_ID}"
+fi
+
+pt_post /navigate "{\"url\":\"${FIXTURES_URL}/index.html\"}"
+assert_ok "shorthand navigate"
+assert_tab_id "shorthand navigate returned tabId"
+pt_get /instances/tabs
+SHORTHAND_INST_ID=$(echo "$RESULT" | jq -r --arg tab "$TAB_ID" '[.[] | select(.id == $tab or .tabId == $tab)][0].instanceId // empty')
+if [ -n "$SHORTHAND_INST_ID" ] && [ "$SHORTHAND_INST_ID" = "$DEFAULT_ID" ]; then
+  pass_assert "health defaultInstance is the instance shorthand routes use"
+else
+  fail_assert "shorthand route used '${SHORTHAND_INST_ID}' but health defaultInstance is '${DEFAULT_ID}'"
+fi
+
 pt_post "/instances/${ATTACHED_INST_ID}/stop" '{}'
 assert_ok "stop attached bridge instance"
 

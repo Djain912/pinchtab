@@ -63,7 +63,7 @@ curl http://localhost:9867/health
 | `authRequired` | `true` when a server token is configured |
 | `profiles` | Number of configured profiles |
 | `instances` | Number of managed instances |
-| `defaultInstance` | First managed instance info, when present: `id`, `status` and `responsiveness` |
+| `defaultInstance` | The instance shorthand (non-`/instances`) routes use, when present: `id`, `status` and `responsiveness`. With no running routable instance it is the earliest-started one |
 | `agents` | Connected agent count |
 | `restartRequired` | `true` when file-based config changes need restart |
 | `restartReasons` | Restart reason list when required |

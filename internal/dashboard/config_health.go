@@ -60,6 +60,28 @@ type crashReporter interface {
 	CrashSummary() bridge.CrashSummary
 }
 
+type defaultInstancer interface {
+	DefaultInstance() (bridge.Instance, bool)
+}
+
+func defaultInstanceInfo(lister InstanceLister, instances []bridge.Instance) *healthInstanceInfo {
+	def, ok := bridge.Instance{}, false
+	if d, isDefaulter := lister.(defaultInstancer); isDefaulter {
+		def, ok = d.DefaultInstance()
+	}
+	if !ok {
+		if len(instances) == 0 {
+			return nil
+		}
+		def = instances[0]
+	}
+	return &healthInstanceInfo{
+		ID:             def.ID,
+		Status:         def.Status,
+		Responsiveness: def.Responsiveness,
+	}
+}
+
 func (c *ConfigAPI) healthInfo(includeSecurity bool) (healthEnvelope, error) {
 	_, _, restartReasons, err := c.currentConfig()
 	if err != nil {
@@ -101,13 +123,7 @@ func (c *ConfigAPI) healthInfo(includeSecurity bool) (healthEnvelope, error) {
 		instances := c.instances.List()
 		instanceCount = len(instances)
 		unresponsive = unresponsiveInstanceIDs(instances)
-		if len(instances) > 0 {
-			defaultInst = &healthInstanceInfo{
-				ID:             instances[0].ID,
-				Status:         instances[0].Status,
-				Responsiveness: instances[0].Responsiveness,
-			}
-		}
+		defaultInst = defaultInstanceInfo(c.instances, instances)
 	}
 	status := types.HealthStatusOK
 	if len(unresponsive) > 0 {

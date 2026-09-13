@@ -35,16 +35,40 @@ func (o *Orchestrator) List() []bridge.Instance {
 
 	result := make([]bridge.Instance, 0, len(o.instances))
 	for _, inst := range o.instances {
-		copyInst := inst.Instance
-		copyInst.Status = effectiveInstanceStatus(copyInst.Status, instanceIsActive(inst))
-		copyInst.Responsiveness = bridge.NormalizeResponsiveness(copyInst.Responsiveness)
-		if crashes, ok := o.crashes[inst.ID]; ok && crashes.Total > 0 {
-			summary := crashes
-			copyInst.Crashes = &summary
-		}
-		result = append(result, copyInst)
+		result = append(result, o.instanceViewLocked(inst))
 	}
+	sort.Slice(result, func(i, j int) bool {
+		if !result[i].StartTime.Equal(result[j].StartTime) {
+			return result[i].StartTime.Before(result[j].StartTime)
+		}
+		return result[i].ID < result[j].ID
+	})
 	return result
+}
+
+func (o *Orchestrator) instanceViewLocked(inst *InstanceInternal) bridge.Instance {
+	view := inst.Instance
+	view.Status = effectiveInstanceStatus(view.Status, instanceIsActive(inst))
+	view.Responsiveness = bridge.NormalizeResponsiveness(view.Responsiveness)
+	if crashes, ok := o.crashes[inst.ID]; ok && crashes.Total > 0 {
+		summary := crashes
+		view.Crashes = &summary
+	}
+	return view
+}
+
+func (o *Orchestrator) DefaultInstance() (bridge.Instance, bool) {
+	match, _, err := o.defaultRouteMatch()
+	if err != nil {
+		return bridge.Instance{}, false
+	}
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	inst := o.firstRunningLocked(match)
+	if inst == nil {
+		return bridge.Instance{}, false
+	}
+	return o.instanceViewLocked(inst), true
 }
 
 type instanceProbe struct {
@@ -196,65 +220,80 @@ func (o *Orchestrator) FirstRunningURL() string {
 }
 
 func (o *Orchestrator) FirstRunningURLForBrowser(browser string) string {
+	return o.firstRunningURL(browserMatcher(browser))
+}
+
+// browserMatcher has no legacy empty-Browser fallback: a request for a
+// SPECIFIC browser must not be routed to an instance of unknown provenance.
+// Browserless legacy instances stay reachable via FirstRunningURL.
+func browserMatcher(browser string) func(*InstanceInternal) bool {
 	browser = strings.TrimSpace(browser)
 	if browser == "" {
-		return o.FirstRunningURL()
+		return nil
 	}
 	normalized := config.NormalizeBrowser(browser)
-	// No legacy empty-Browser fallback here: a request for a SPECIFIC
-	// browser must not be routed to an instance of unknown provenance.
-	// Browserless legacy instances stay reachable via FirstRunningURL.
-	return o.firstRunningURL(func(inst *InstanceInternal) bool {
+	return func(inst *InstanceInternal) bool {
 		return inst != nil && inst.Browser == normalized
-	})
+	}
 }
 
 func (o *Orchestrator) firstRunningURL(match func(*InstanceInternal) bool) string {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
-	// Collect running instances and sort by start time for determinism.
-	type candidate struct {
-		start time.Time
-		url   string
+	if inst := o.firstRunningLocked(match); inst != nil {
+		return inst.URL
 	}
-	var candidates []candidate
+	return ""
+}
+
+func (o *Orchestrator) firstRunningLocked(match func(*InstanceInternal) bool) *InstanceInternal {
+	var first *InstanceInternal
 	for _, inst := range o.instances {
-		if inst.Status == "running" && instanceIsActive(inst) {
-			if inst.URL == "" {
-				continue
-			}
-			if match != nil && !match(inst) {
-				continue
-			}
-			candidates = append(candidates, candidate{start: inst.StartTime, url: inst.URL})
+		if inst.Status != "running" || !instanceIsActive(inst) || inst.URL == "" {
+			continue
+		}
+		if match != nil && !match(inst) {
+			continue
+		}
+		if first == nil || startsBefore(inst, first) {
+			first = inst
 		}
 	}
-	if len(candidates) == 0 {
-		return ""
+	return first
+}
+
+func startsBefore(a, b *InstanceInternal) bool {
+	if !a.StartTime.Equal(b.StartTime) {
+		return a.StartTime.Before(b.StartTime)
 	}
-	sort.Slice(candidates, func(i, j int) bool {
-		if candidates[i].start.Equal(candidates[j].start) {
-			return candidates[i].url < candidates[j].url
+	if a.URL != b.URL {
+		return a.URL < b.URL
+	}
+	return a.ID < b.ID
+}
+
+func (o *Orchestrator) defaultRouteMatch() (func(*InstanceInternal) bool, int, error) {
+	resolved, err := config.ResolveDefaultBrowserTarget(o.cfg())
+	if err != nil {
+		return nil, http.StatusBadRequest, err
+	}
+	if resolved != nil && !resolved.Legacy {
+		if resolved.Provider == "" {
+			return nil, http.StatusBadRequest, fmt.Errorf("no default browser target configured and none requested")
 		}
-		return candidates[i].start.Before(candidates[j].start)
-	})
-	return candidates[0].url
+		return browserMatcher(resolved.Provider), 0, nil
+	}
+	return nil, 0, nil
 }
 
 func (o *Orchestrator) FirstRunningURLForRequest(r *http.Request) (string, int, error) {
 	requested := ExtractRequestedBrowser(r)
 	if requested == "" {
-		resolved, err := config.ResolveDefaultBrowserTarget(o.cfg())
+		match, status, err := o.defaultRouteMatch()
 		if err != nil {
-			return "", http.StatusBadRequest, err
+			return "", status, err
 		}
-		if resolved != nil && !resolved.Legacy {
-			if resolved.Provider == "" {
-				return "", http.StatusBadRequest, fmt.Errorf("no default browser target configured and none requested")
-			}
-			return o.FirstRunningURLForBrowser(resolved.Provider), 0, nil
-		}
-		return o.FirstRunningURL(), 0, nil
+		return o.firstRunningURL(match), 0, nil
 	}
 
 	if _, err := config.ParseBrowser(requested, nil); err != nil {

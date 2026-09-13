@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pinchtab/pinchtab/internal/bridge"
 	"github.com/pinchtab/pinchtab/internal/config"
 	"github.com/pinchtab/pinchtab/internal/profiles"
 )
@@ -85,5 +86,45 @@ func TestHealthCountsEachProfileInExactlyOneBucketThatReconcilesWithTheListing(t
 		if entry["temporary"] == true {
 			t.Errorf("the default listing served a temporary profile, so profiles cannot be reconciled against it: %v", entry)
 		}
+	}
+}
+
+type routedInstances struct {
+	instances []bridge.Instance
+	def       bridge.Instance
+	routable  bool
+}
+
+func (s routedInstances) List() []bridge.Instance { return s.instances }
+
+func (s routedInstances) DefaultInstance() (bridge.Instance, bool) { return s.def, s.routable }
+
+func TestHealthDefaultInstanceNamesTheRoutedInstanceRatherThanTheFirstListed(t *testing.T) {
+	listed := []bridge.Instance{
+		{ID: "inst_first", Status: "stopped"},
+		{ID: "inst_routed", Status: "running", Responsiveness: bridge.ResponsivenessResponsive},
+	}
+	lister := routedInstances{instances: listed, def: listed[1], routable: true}
+	for i := 0; i < 10; i++ {
+		def, _ := healthBody(t, lister)["defaultInstance"].(map[string]any)
+		if def["id"] != "inst_routed" || def["status"] != "running" || def["responsiveness"] != bridge.ResponsivenessResponsive {
+			t.Fatalf("call %d: defaultInstance = %v, want the routed inst_routed", i, def)
+		}
+	}
+}
+
+func TestHealthDefaultInstanceFallsBackToTheFirstListedWithoutARoutedInstance(t *testing.T) {
+	listed := []bridge.Instance{{ID: "inst_starting", Status: "starting"}, {ID: "inst_other", Status: "starting"}}
+	for name, lister := range map[string]InstanceLister{
+		"no routable instance":   routedInstances{instances: listed},
+		"lister without routing": plainInstances{instances: listed},
+	} {
+		def, _ := healthBody(t, lister)["defaultInstance"].(map[string]any)
+		if def["id"] != "inst_starting" || def["status"] != "starting" {
+			t.Errorf("%s: defaultInstance = %v, want the first listed inst_starting", name, def)
+		}
+	}
+	if _, present := healthBody(t, routedInstances{})["defaultInstance"]; present {
+		t.Error("defaultInstance present with no instances")
 	}
 }
