@@ -588,6 +588,8 @@ func (h *Handlers) HandleAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	vocabBefore := h.tabVocab(resolvedTabID)
+
 	actionTimeout := effectiveCfg.ActionTimeout
 	if r.Method == http.MethodGet {
 		if v := r.URL.Query().Get("timeout"); v != "" {
@@ -671,6 +673,7 @@ func (h *Handlers) HandleAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, actionBackend, recoveryResult, actionErr := h.executeActionResilient(tCtx, &req, effectiveCfg, resolvedTabID, refMissing)
+	h.publishVocabIfReepoched(w, resolvedTabID, vocabBefore)
 	submitTimeoutWithDialog := submitClick && isTimeoutWithPendingDialog(actionErr, resolvedTabID, h.Bridge)
 	if submitClick && !submitTimeoutWithDialog && (actionErr == nil || errors.Is(actionErr, context.DeadlineExceeded)) {
 		actionTimedOut := errors.Is(actionErr, context.DeadlineExceeded)

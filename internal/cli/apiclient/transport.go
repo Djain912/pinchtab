@@ -20,10 +20,26 @@ type request struct {
 	url     string
 	body    map[string]any
 	headers map[string]string
-	// respHeaders, when non-nil, receives the response headers so a caller can
-	// read one (the vocabulary token) without changing doRequest's return shape,
-	// which mustRequest and the other verbs share.
-	respHeaders *http.Header
+	base    string
+	vocab   *vocabCapture
+}
+
+type vocabCapture struct {
+	implicit bool
+}
+
+type RequestOption func(*request)
+
+func CaptureVocab(implicit bool) RequestOption {
+	return func(r *request) { r.vocab = &vocabCapture{implicit: implicit} }
+}
+
+func newRequest(method, base, url string, body map[string]any, headers map[string]string, opts []RequestOption) request {
+	r := request{method: method, url: url, body: body, headers: headers, base: base}
+	for _, opt := range opts {
+		opt(&r)
+	}
+	return r
 }
 
 func buildURL(base, path string, params url.Values) string {
@@ -62,15 +78,15 @@ func doRequest(client *http.Client, token string, r request) (int, []byte, error
 		return 0, nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if r.respHeaders != nil {
-		*r.respHeaders = resp.Header
-	}
 	// A short read is a failed request, never a body: a connection dropping
 	// mid-response would otherwise reach the caller as a fragment carrying its
 	// status, and the CLI would parse or print the fragment as the answer.
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return resp.StatusCode, nil, fmt.Errorf("read response from %s: %w", r.url, err)
+	}
+	if r.vocab != nil && resp.StatusCode < http.StatusBadRequest {
+		storeVocabToken(r.base, resp.Header.Get(vocabTabIDHeader), resp.Header.Get(vocabHeader), r.vocab.implicit)
 	}
 	return resp.StatusCode, body, nil
 }

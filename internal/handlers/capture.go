@@ -174,7 +174,7 @@ func (h *Handlers) HandleCapture(w http.ResponseWriter, r *http.Request) {
 
 	cache := bridge.EpochRefs(h.Bridge.GetRefCache(resolvedTabID), result.Nodes)
 	h.Bridge.SetRefCache(resolvedTabID, cache)
-	w.Header().Set(vocabHeader, cache.DomEpoch)
+	publishVocab(w, resolvedTabID, cache.DomEpoch)
 
 	imageInfo := map[string]any{
 		"format":           result.ImageFormat,

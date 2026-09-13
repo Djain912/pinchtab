@@ -94,3 +94,32 @@ func TestAnUnbuildableRequestFailsBeforeTheWire(t *testing.T) {
 		})
 	}
 }
+
+func TestCaptureVocabStoresOnlyASuccessfulResponsesToken(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		want   string
+	}{
+		{"success", http.StatusOK, "ep_new"},
+		{"refused", http.StatusConflict, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set(vocabTabIDHeader, "tab1")
+				w.Header().Set(vocabHeader, "ep_new")
+				w.WriteHeader(tc.status)
+			}))
+			defer srv.Close()
+
+			r := newRequest(http.MethodPost, srv.URL, srv.URL+"/find", map[string]any{"query": "x"}, nil, []RequestOption{CaptureVocab(true)})
+			if _, _, err := doRequest(srv.Client(), "", r); err != nil {
+				t.Fatal(err)
+			}
+			if got := VocabTokenFor(srv.URL, "tab1"); got != tc.want {
+				t.Errorf("stored token = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

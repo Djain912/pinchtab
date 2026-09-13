@@ -8,12 +8,15 @@ import (
 	"go/token"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/pinchtab/pinchtab/internal/activity"
 	"github.com/pinchtab/pinchtab/internal/bridge"
 	"github.com/pinchtab/pinchtab/internal/config"
+	"github.com/pinchtab/semantic"
 )
 
 type vocabMockBridge struct {
@@ -226,15 +229,104 @@ func TestEveryRefPublishSiteRoutesThroughTheEpochRefBook(t *testing.T) {
 		}
 	}
 
-	if !fileMentionsIdent(t, "snapshot.go", "vocabHeader") {
+	if !fileCallsAnyIdent(t, "snapshot.go", "publishVocab") {
 		t.Error("snapshot.go does not emit the token in a response header, so a client reading a compact/text snapshot cannot obtain it")
 	}
 	if !fileMentionsString(t, "snapshot.go", "vocabularyToken") {
 		t.Error("snapshot.go does not carry the token in its JSON body, so a JSON snapshot consumer cannot echo it")
 	}
-	if !fileMentionsIdent(t, "capture.go", "vocabHeader") {
+	if !fileCallsAnyIdent(t, "capture.go", "publishVocab") {
 		t.Error("capture.go does not emit the token in a response header, so a /capture client cannot obtain it uniformly with /snapshot")
 	}
+}
+
+func TestEveryReEpochSitePublishesTheVocabularyOnItsResponse(t *testing.T) {
+	publishers := map[string][]string{
+		"snapshot.go":            {"snapshot.go"},
+		"capture.go":             {"capture.go"},
+		"extract.go":             {"extract.go"},
+		"a11y_axe.go":            {"a11y_axe.go"},
+		"find.go":                {"find.go", "actions.go"},
+		"screenshot_annotate.go": {"screenshot.go", "annotate.go"},
+		"action_execution.go":    {"actions.go"},
+		"handlers.go":            {"actions.go"},
+		"actions.go":             {"actions.go"},
+	}
+	publishHelpers := []string{"publishVocab", "publishTabVocab", "publishVocabIfReepoched"}
+
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		if !fileCallsSelector(t, file, "EpochRefs") && !fileCallsSelector(t, file, "refreshRefCache") {
+			continue
+		}
+		answering, ok := publishers[file]
+		if !ok {
+			t.Errorf("%s re-epochs a tab's refs but no response is recorded as publishing the vocabulary for it; publish through publishVocab and add a row", file)
+			continue
+		}
+		for _, pub := range answering {
+			if !fileCallsAnyIdent(t, pub, publishHelpers...) {
+				t.Errorf("%s answers for the re-epoch in %s but never calls a vocab publish helper, so its response leaves the client echoing a superseded token", pub, file)
+			}
+		}
+	}
+
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") || file == "action_execution.go" {
+			continue
+		}
+		if fileSetsHeader(t, file, "vocabHeader") {
+			t.Errorf("%s sets the vocab header directly; publication goes through publishVocab so every publisher also names the tab the token belongs to", file)
+		}
+	}
+}
+
+func fileCallsAnyIdent(t *testing.T, name string, idents ...string) bool {
+	found := false
+	ast.Inspect(parseHandlerFile(t, name), func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		var got string
+		switch fn := call.Fun.(type) {
+		case *ast.Ident:
+			got = fn.Name
+		case *ast.SelectorExpr:
+			got = fn.Sel.Name
+		}
+		for _, id := range idents {
+			if got == id {
+				found = true
+			}
+		}
+		return true
+	})
+	return found
+}
+
+func fileSetsHeader(t *testing.T, name, headerIdent string) bool {
+	found := false
+	ast.Inspect(parseHandlerFile(t, name), func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || len(call.Args) == 0 {
+			return true
+		}
+		if se, ok := call.Fun.(*ast.SelectorExpr); !ok || se.Sel.Name != "Set" {
+			return true
+		}
+		if id, ok := call.Args[0].(*ast.Ident); ok && id.Name == headerIdent {
+			found = true
+		}
+		return true
+	})
+	return found
 }
 
 func parseHandlerFile(t *testing.T, name string) *ast.File {
@@ -259,17 +351,6 @@ func fileCallsSelector(t *testing.T, name, sel string) bool {
 	return found
 }
 
-func fileMentionsIdent(t *testing.T, name, ident string) bool {
-	found := false
-	ast.Inspect(parseHandlerFile(t, name), func(n ast.Node) bool {
-		if id, ok := n.(*ast.Ident); ok && id.Name == ident {
-			found = true
-		}
-		return true
-	})
-	return found
-}
-
 func fileMentionsString(t *testing.T, name, lit string) bool {
 	found := false
 	ast.Inspect(parseHandlerFile(t, name), func(n ast.Node) bool {
@@ -279,4 +360,85 @@ func fileMentionsString(t *testing.T, name, lit string) bool {
 		return true
 	})
 	return found
+}
+
+type reepochingVocabBridge struct {
+	vocabMockBridge
+	next *bridge.RefCache
+}
+
+func (m *reepochingVocabBridge) ExecuteAction(ctx context.Context, kind string, req bridge.ActionRequest) (map[string]any, error) {
+	if m.next != nil {
+		m.refCache = m.next
+	}
+	return m.vocabMockBridge.ExecuteAction(ctx, kind, req)
+}
+
+func TestAnActionThatReEpochsTheTabPublishesTheNewVocabulary(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		next *bridge.RefCache
+		want string
+	}{
+		{"re-epoched", &bridge.RefCache{DomEpoch: "fresh"}, "fresh"},
+		{"untouched", nil, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mb := &reepochingVocabBridge{
+				vocabMockBridge: vocabMockBridge{
+					mockBridge: mockBridge{availableActions: []string{bridge.ActionClick}},
+					refCache:   &bridge.RefCache{DomEpoch: "current"},
+				},
+				next: tc.next,
+			}
+			h := New(mb, &config.RuntimeConfig{ActionTimeout: time.Second}, nil, nil, nil)
+			w, _ := postVocabAction(h, `{"kind":"click","x":10,"y":20,"tabId":"tab1"}`, "")
+			if !mb.executeCalled {
+				t.Fatalf("the action did not reach ExecuteAction (status %d): %s", w.Code, w.Body.String())
+			}
+			if got := w.Header().Get(vocabHeader); got != tc.want {
+				t.Errorf("vocab header = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+type autoRefreshFindBridge struct {
+	findMockBridge
+	fresh *bridge.RefCache
+	reads int
+}
+
+func (m *autoRefreshFindBridge) GetRefCache(string) *bridge.RefCache {
+	m.reads++
+	if m.reads == 1 {
+		return nil
+	}
+	return m.fresh
+}
+
+func TestFindPublishesTheVocabularyItsAutoRefreshMinted(t *testing.T) {
+	mb := &autoRefreshFindBridge{fresh: &bridge.RefCache{
+		DomEpoch: "ep_fresh",
+		Nodes:    []bridge.A11yNode{{Ref: "e11", Role: "link", Name: "Go page 2"}},
+		Refs:     map[string]int64{"e11": 11},
+	}}
+	h := New(mb, &config.RuntimeConfig{ActionTimeout: 10 * time.Second}, nil, nil, nil)
+	h.Matcher = semantic.NewLexicalMatcher()
+
+	w := httptest.NewRecorder()
+	h.HandleFind(w, httptest.NewRequest("POST", "/find", strings.NewReader(`{"query":"Go page 2"}`)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", w.Code, w.Body.String())
+	}
+	if mb.reads < 2 {
+		t.Fatalf("find read the ref cache %d time(s); the auto-refresh path was not taken", mb.reads)
+	}
+	if got := w.Header().Get(vocabHeader); got != "ep_fresh" {
+		t.Errorf("vocab header = %q, want the token the refresh minted", got)
+	}
+	if got := w.Header().Get(activity.HeaderPTTabID); got != "tab1" {
+		t.Errorf("tab header = %q, want tab1 so a client keys the token to the resolved tab", got)
+	}
 }

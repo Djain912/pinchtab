@@ -42,12 +42,7 @@ type vocabStore struct {
 // is delivered as a response header so it survives every snapshot format,
 // including the compact text the CLI defaults to.
 func DoGetCapturingVocab(client *http.Client, base, token, path string, params url.Values, implicit bool) map[string]any {
-	var headers http.Header
-	r := request{method: "GET", url: buildURL(base, path, params), respHeaders: &headers}
-	status, body := mustRequest(client, token, r)
-	exitOnAPIError(r, status, body)
-	storeVocabToken(base, headers.Get(vocabTabIDHeader), headers.Get(vocabHeader), implicit)
-	return printAndDecode(body)
+	return DoGet(client, base, token, path, params, CaptureVocab(implicit))
 }
 
 // VocabForAction returns the tab id to tag and the token to echo for an action.
@@ -160,12 +155,12 @@ func doAndRender(client *http.Client, token string, r request) map[string]any {
 	return printAndDecode(body)
 }
 
-func DoGet(client *http.Client, base, token, path string, params url.Values) map[string]any {
-	return doAndRender(client, token, request{method: "GET", url: buildURL(base, path, params)})
+func DoGet(client *http.Client, base, token, path string, params url.Values, opts ...RequestOption) map[string]any {
+	return doAndRender(client, token, newRequest("GET", base, buildURL(base, path, params), nil, nil, opts))
 }
 
-func DoGetRaw(client *http.Client, base, token, path string, params url.Values) []byte {
-	r := request{method: "GET", url: buildURL(base, path, params)}
+func DoGetRaw(client *http.Client, base, token, path string, params url.Values, opts ...RequestOption) []byte {
+	r := newRequest("GET", base, buildURL(base, path, params), nil, nil, opts)
 	status, body := mustRequest(client, token, r)
 	exitOnAPIError(r, status, body)
 	return body
@@ -178,12 +173,7 @@ func DoGetRaw(client *http.Client, base, token, path string, params url.Values) 
 // ref cache, so an action on a returned ref would be refused 409 against a stale
 // token if the CLI never captured the fresh one.
 func DoGetRawCapturingVocab(client *http.Client, base, token, path string, params url.Values, implicit bool) []byte {
-	var headers http.Header
-	r := request{method: "GET", url: buildURL(base, path, params), respHeaders: &headers}
-	status, body := mustRequest(client, token, r)
-	exitOnAPIError(r, status, body)
-	storeVocabToken(base, headers.Get(vocabTabIDHeader), headers.Get(vocabHeader), implicit)
-	return body
+	return DoGetRaw(client, base, token, path, params, CaptureVocab(implicit))
 }
 
 // DoGetRawAndPrintCapturingVocab fetches and prints the raw snapshot body (for the
@@ -195,8 +185,7 @@ func DoGetRawCapturingVocab(client *http.Client, base, token, path string, param
 // this tail runs after an action that already succeeded, so a cosmetic snapshot
 // failure must not turn a successful action into a non-zero exit.
 func DoGetRawAndPrintCapturingVocab(client *http.Client, base, token, pathWithQuery string, implicit bool) {
-	var headers http.Header
-	status, body, err := doRequest(client, token, request{method: "GET", url: base + pathWithQuery, respHeaders: &headers})
+	status, body, err := doRequest(client, token, newRequest("GET", base, base+pathWithQuery, nil, nil, []RequestOption{CaptureVocab(implicit)}))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "snapshot failed: %v\n", err)
 		return
@@ -205,19 +194,18 @@ func DoGetRawAndPrintCapturingVocab(client *http.Client, base, token, pathWithQu
 		fmt.Fprintf(os.Stderr, "snapshot error %d: %s\n", status, string(body))
 		return
 	}
-	storeVocabToken(base, headers.Get(vocabTabIDHeader), headers.Get(vocabHeader), implicit)
 	fmt.Println(string(body))
 }
 
-func DoPost(client *http.Client, base, token, path string, body map[string]any) map[string]any {
-	return DoPostWithHeaders(client, base, token, path, body, nil)
+func DoPost(client *http.Client, base, token, path string, body map[string]any, opts ...RequestOption) map[string]any {
+	return DoPostWithHeaders(client, base, token, path, body, nil, opts...)
 }
 
 // DoPostQuiet is like DoPost but does not print the response body. Callers are
 // responsible for rendering whatever output is appropriate (e.g. a single
 // field for machine-friendly piping).
-func DoPostQuiet(client *http.Client, base, token, path string, body map[string]any) map[string]any {
-	return DoPostQuietWithHeaders(client, base, token, path, body, nil)
+func DoPostQuiet(client *http.Client, base, token, path string, body map[string]any, opts ...RequestOption) map[string]any {
+	return DoPostQuietWithHeaders(client, base, token, path, body, nil, opts...)
 }
 
 // DoPostRaw sends a POST and returns the raw response body without printing.
@@ -262,14 +250,14 @@ func DoPostQuietWithStatus(client *http.Client, base, token, path string, body m
 }
 
 // DoPostQuietWithHeaders is like DoPostQuiet but allows custom headers.
-func DoPostQuietWithHeaders(client *http.Client, base, token, path string, body map[string]any, headers map[string]string) map[string]any {
-	statusCode, respBody, result := doPostQuietWithStatus(client, base, token, path, body, headers)
+func DoPostQuietWithHeaders(client *http.Client, base, token, path string, body map[string]any, headers map[string]string, opts ...RequestOption) map[string]any {
+	statusCode, respBody, result := doPostQuietWithStatus(client, base, token, path, body, headers, opts...)
 	exitOnAPIError(request{method: "POST", url: base + path, body: body, headers: headers}, statusCode, respBody)
 	return result
 }
 
-func doPostQuietWithStatus(client *http.Client, base, token, path string, body map[string]any, headers map[string]string) (int, []byte, map[string]any) {
-	status, respBody := mustRequest(client, token, request{method: "POST", url: base + path, body: body, headers: headers})
+func doPostQuietWithStatus(client *http.Client, base, token, path string, body map[string]any, headers map[string]string, opts ...RequestOption) (int, []byte, map[string]any) {
+	status, respBody := mustRequest(client, token, newRequest("POST", base, base+path, body, headers, opts))
 
 	var result map[string]any
 	if status < 400 {
@@ -280,8 +268,8 @@ func doPostQuietWithStatus(client *http.Client, base, token, path string, body m
 	return status, respBody, result
 }
 
-func DoPostWithHeaders(client *http.Client, base, token, path string, body map[string]any, headers map[string]string) map[string]any {
-	return doAndRender(client, token, request{method: "POST", url: base + path, body: body, headers: headers})
+func DoPostWithHeaders(client *http.Client, base, token, path string, body map[string]any, headers map[string]string, opts ...RequestOption) map[string]any {
+	return doAndRender(client, token, newRequest("POST", base, base+path, body, headers, opts))
 }
 
 // DoDelete sends a DELETE request with an optional JSON body (e.g. for ?name= query params, pass nil body and handle params in path).

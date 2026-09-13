@@ -237,7 +237,7 @@ func (h *Handlers) HandleSnapshot(w http.ResponseWriter, r *http.Request) {
 
 	cache := bridge.EpochRefs(prev, flat)
 	h.Bridge.SetRefCache(resolvedTabID, cache)
-	w.Header().Set(vocabHeader, cache.DomEpoch)
+	publishVocab(w, resolvedTabID, cache.DomEpoch)
 
 	h.recordResolvedURL(r, url)
 

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
+	"github.com/pinchtab/pinchtab/internal/activity"
 	"github.com/pinchtab/pinchtab/internal/bridge"
 	"github.com/pinchtab/pinchtab/internal/config"
 	"github.com/pinchtab/pinchtab/internal/selector"
@@ -443,6 +445,33 @@ func (h *Handlers) refreshRefCache(ctx context.Context, tabID string) {
 	flat, _ := bridge.BuildSnapshot(nodes, bridge.FilterInteractive, -1)
 	_ = bridge.EnrichA11yNodesWithDOMMetadata(ctx, flat)
 	h.Bridge.SetRefCache(tabID, bridge.EpochRefs(h.Bridge.GetRefCache(tabID), flat))
+}
+
+func publishVocab(w http.ResponseWriter, tabID, vocab string) {
+	if vocab == "" {
+		return
+	}
+	if tabID != "" {
+		w.Header().Set(activity.HeaderPTTabID, tabID)
+	}
+	w.Header().Set(vocabHeader, vocab)
+}
+
+func (h *Handlers) tabVocab(tabID string) string {
+	if cache := h.Bridge.GetRefCache(tabID); cache != nil {
+		return cache.DomEpoch
+	}
+	return ""
+}
+
+func (h *Handlers) publishTabVocab(w http.ResponseWriter, tabID string) {
+	publishVocab(w, tabID, h.tabVocab(tabID))
+}
+
+func (h *Handlers) publishVocabIfReepoched(w http.ResponseWriter, tabID, before string) {
+	if vocab := h.tabVocab(tabID); vocab != before {
+		publishVocab(w, tabID, vocab)
+	}
 }
 
 func isTimeoutWithPendingDialog(err error, tabID string, b bridge.BridgeAPI) bool {

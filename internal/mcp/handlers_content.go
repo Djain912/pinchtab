@@ -53,10 +53,11 @@ func handleFind(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.Call
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 		payload := map[string]any{"query": query}
-		if tabID := optString(r, "tabId"); tabID != "" {
+		tabID := optString(r, "tabId")
+		if tabID != "" {
 			payload["tabId"] = tabID
 		}
-		body, code, err := c.Post(ctx, "/find", payload)
+		body, code, err := c.PostCapturingVocab(ctx, "/find", payload, tabID)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

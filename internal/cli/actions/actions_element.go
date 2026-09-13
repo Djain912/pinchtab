@@ -128,13 +128,14 @@ func postActionWithHeaders(client *http.Client, base, token string, cmd *cobra.C
 		}
 	}
 
+	capture := apiclient.CaptureVocab(tabID == "")
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 	if jsonOutput {
-		apiclient.DoPostWithHeaders(client, base, token, path, body, headers)
+		apiclient.DoPostWithHeaders(client, base, token, path, body, headers, capture)
 		return
 	}
 
-	result := apiclient.DoPostQuietWithHeaders(client, base, token, path, body, headers)
+	result := apiclient.DoPostQuietWithHeaders(client, base, token, path, body, headers, capture)
 	kind, _ := body["kind"].(string)
 	printActionResult(kind, result)
 

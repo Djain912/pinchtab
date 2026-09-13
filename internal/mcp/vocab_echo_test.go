@@ -112,6 +112,43 @@ func TestTheEchoedTokenIsScopedToItsTab(t *testing.T) {
 	}
 }
 
+func TestFindStoresTheVocabularyItsResponseCarriesSoTheNextClickEchoesIt(t *testing.T) {
+	for _, tabID := range []string{"t1", ""} {
+		t.Run("tab="+tabID, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/find" {
+					w.Header().Set(vocabHeader, "vocab-find")
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(`{"best_ref":"e11","matches":[]}`))
+					return
+				}
+				body, _ := io.ReadAll(r.Body)
+				var parsed map[string]any
+				_ = json.Unmarshal(body, &parsed)
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{"path": r.URL.Path, "body": parsed})
+			}))
+			defer srv.Close()
+			c := NewClient(srv.URL, "")
+
+			args := map[string]any{"query": "Go page 2"}
+			clickArgs := map[string]any{"ref": "e11"}
+			if tabID != "" {
+				args["tabId"] = tabID
+				clickArgs["tabId"] = tabID
+			}
+			callSharedTool(t, c, "pinchtab_find", args)
+			if got := c.VocabToken(tabID); got != "vocab-find" {
+				t.Fatalf("store holds %q for tab %q after find, want the token find returned", got, tabID)
+			}
+			got, ok := actionVocabSent(t, callSharedTool(t, c, "pinchtab_click", clickArgs))
+			if !ok || got != "vocab-find" {
+				t.Errorf("click after find echoed vocab %q (sent=%v), want vocab-find", got, ok)
+			}
+		})
+	}
+}
+
 // rotatingVocabServer hands out a fresh token on each /snapshot and records the
 // query every snapshot request carried, so a test can see both which token the
 // client kept and which instance it asked.

@@ -44,7 +44,7 @@ func (h *Handlers) runAxeAudit(w http.ResponseWriter, r *http.Request, tCtx cont
 
 	report := audit.BuildAxeReport(raw, assets.AxeVersion, includeIncomplete)
 	vocab := h.fillAxeRefs(tCtx, resolvedTabID, &report)
-	w.Header().Set(vocabHeader, vocab)
+	publishVocab(w, resolvedTabID, vocab)
 
 	httpx.JSON(w, 200, struct {
 		TabID           string `json:"tabId"`

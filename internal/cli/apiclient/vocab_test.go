@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -63,6 +64,17 @@ func (s *vocabServer) handle(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-PinchTab-Tab-Id", resolved)
 		w.Header().Set("X-PinchTab-Vocab", s.tokenFor(resolved))
 		_, _ = w.Write([]byte("{}\n"))
+		return
+	}
+
+	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/find") {
+		resolved := s.current
+		if tab := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/tabs/"), "/find"); tab != "" {
+			resolved = tab
+		}
+		w.Header().Set("X-PinchTab-Tab-Id", resolved)
+		w.Header().Set("X-PinchTab-Vocab", s.tokenFor(resolved))
+		_, _ = w.Write([]byte(`{"best_ref":"e11","matches":[]}`))
 		return
 	}
 
@@ -141,6 +153,51 @@ func TestImplicitClickSendsTheCurrentTabsTaggedToken(t *testing.T) {
 	}
 	if srv.lastVocab != "X-e1" || srv.lastVocabTab != "X" {
 		t.Fatalf("implicit click sent vocab %q tagged %q, want X-e1 tagged X", srv.lastVocab, srv.lastVocabTab)
+	}
+}
+
+func findCmd(tab string, flag string) *cobra.Command {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("tab", "", "")
+	cmd.Flags().String("threshold", "", "")
+	cmd.Flags().Bool("explain", false, "")
+	cmd.Flags().Bool("ref-only", false, "")
+	cmd.Flags().Bool("json", false, "")
+	if tab != "" {
+		_ = cmd.Flags().Set("tab", tab)
+	}
+	if flag != "" {
+		_ = cmd.Flags().Set(flag, "true")
+	}
+	return cmd
+}
+
+func TestFindCapturesTheVocabularyItMintedSoTheNextClickEchoesIt(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		tab  string
+		flag string
+	}{
+		{"ref-only", "", "ref-only"},
+		{"json", "", "json"},
+		{"terse", "", ""},
+		{"explicit tab", "X", "ref-only"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			srv := newVocabServer("X")
+			defer srv.httpServer.Close()
+			base, client := srv.httpServer.URL, srv.httpServer.Client()
+
+			actions.Snapshot(client, base, "", snapCmd(tc.tab), "")
+			srv.bumpEpoch("X")
+			actions.Find(client, base, "", "Go page 2", findCmd(tc.tab, tc.flag))
+			actions.Action(client, base, "", "click", "e11", clickCmd(tc.tab))
+
+			if srv.lastVocab != "X-e2" || srv.lastVocabTab != "X" {
+				t.Fatalf("click after find sent vocab %q tagged %q, want the token find published (X-e2) tagged X", srv.lastVocab, srv.lastVocabTab)
+			}
+		})
 	}
 }
 

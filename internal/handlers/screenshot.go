@@ -169,6 +169,7 @@ func (h *Handlers) serveAnnotatedScreenshot(w http.ResponseWriter, ctx context.C
 		httpx.Error(w, 500, fmt.Errorf("annotate: %w", err))
 		return
 	}
+	h.publishTabVocab(w, tabID)
 	if req.raw {
 		writeRawImage(w, img, imageContentType(outFormat), "annotated screenshot write")
 		return

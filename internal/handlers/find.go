@@ -85,6 +85,7 @@ func (h *Handlers) HandleFind(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, serr.status, serr.err)
 		return
 	}
+	h.publishTabVocab(w, resolvedTabID)
 
 	descs := semanticDescriptorsFromNodes(nodes)
 

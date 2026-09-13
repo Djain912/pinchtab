@@ -95,7 +95,7 @@ func (h *Handlers) acquireExtractNodes(w http.ResponseWriter, ctx context.Contex
 	}
 	cache := bridge.EpochRefs(h.Bridge.GetRefCache(tabID), result.Nodes)
 	h.Bridge.SetRefCache(tabID, cache)
-	w.Header().Set(vocabHeader, cache.DomEpoch)
+	publishVocab(w, tabID, cache.DomEpoch)
 	return result.Nodes, nil
 }
 

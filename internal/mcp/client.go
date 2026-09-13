@@ -203,20 +203,40 @@ func (c *Client) Delete(ctx context.Context, path string, query url.Values) ([]b
 
 // Post performs a POST request with a JSON body.
 func (c *Client) Post(ctx context.Context, path string, payload any) ([]byte, int, error) {
+	req, err := c.newPostRequest(ctx, path, payload)
+	if err != nil {
+		return nil, 0, err
+	}
+	return c.do(req)
+}
+
+func (c *Client) PostCapturingVocab(ctx context.Context, path string, payload any, tabKey string) ([]byte, int, error) {
+	req, err := c.newPostRequest(ctx, path, payload)
+	if err != nil {
+		return nil, 0, err
+	}
+	body, code, hdr, err := c.doWithHeaders(req)
+	if err == nil && code < 400 {
+		c.vocab.set(tabKey, hdr.Get(vocabHeader))
+	}
+	return body, code, err
+}
+
+func (c *Client) newPostRequest(ctx context.Context, path string, payload any) (*http.Request, error) {
 	var body io.Reader
 	if payload != nil {
 		b, err := json.Marshal(payload)
 		if err != nil {
-			return nil, 0, fmt.Errorf("marshal payload: %w", err)
+			return nil, fmt.Errorf("marshal payload: %w", err)
 		}
 		body = bytes.NewReader(b)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url(path), body)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	return c.do(req)
+	return req, nil
 }

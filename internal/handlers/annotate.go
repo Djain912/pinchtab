@@ -59,6 +59,7 @@ func (h *Handlers) HandleAnnotate(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 500, fmt.Errorf("annotate: %w", err))
 		return
 	}
+	h.publishTabVocab(w, resolvedTabID)
 	if err := cdptk.InjectInteractiveOverlay(tCtx, items); err != nil {
 		httpx.Error(w, 500, fmt.Errorf("annotate inject: %w", err))
 		return
