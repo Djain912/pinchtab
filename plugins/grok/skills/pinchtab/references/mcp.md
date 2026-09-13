@@ -48,14 +48,16 @@ For Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.
 
 All tool names are prefixed with `pinchtab_`.
 
+A tool refuses any argument it does not declare: the error names the unknown key, the nearest declared name when one is close, and the tool's declared arguments, and nothing runs. Time budgets are milliseconds (`timeoutMs`) everywhere except `pinchtab_scrape`'s crawl budget `timeoutSeconds`.
+
 ### Navigation
 | Tool | Description |
 |------|-------------|
-| `pinchtab_navigate` | Navigate to a URL. Required param: `url`. Optional: `tabId`. |
+| `pinchtab_navigate` | Navigate to a URL. Required param: `url`. Optional: `tabId`, `newTab` (open in a new tab instead of reusing the current one; the returned `tabId` targets it), `snap`. |
 | `pinchtab_snapshot` | Accessibility tree. Optional: `interactive`, `compact`, `format` (`compact` or `text`), `diff`, `selector`, `maxTokens`, `depth`, `noAnimations`, `tabId`. |
 | `pinchtab_screenshot` | Capture screenshot. Optional: `format` (`jpeg` default, `png`), `quality`, `selector`, `scale`, `annotate`, `beyondViewport`, `browser`, `tabId`. Returns an MCP image content block (rendered inline by clients) plus a stable JSON text block `{"format", "annotations": [...]}`; `annotations` is `[]` by default and is populated with `{ref, role, name, tag, box {x,y,w,h}}` entries when `annotate=true` so refs in the picture map back to selectors. `beyondViewport=true` captures the full scrollable page (ignored when `selector` is set) and returns document-relative box coords. `browser` selects the browser (e.g. `chrome`, `cloak`). |
 | `pinchtab_capture` | Paired screenshot + accessibility snapshot from the same DOM epoch. Optional: `selector`, `filter`, `format`, `quality`, `depth`, `wait` (`stable`/`load`/`none`), `withBounds`, `beyondViewport`, `requirePair`, `noAnimations`, `browser`, `tabId`. Returns an MCP image content block plus a JSON envelope with `epoch.domEpoch`, `pairing.navigated`, `image.coordinateSpace`, and per-node `boundingBox`. `browser` selects the browser (e.g. `chrome`, `cloak`); the static ghost-chrome runtime cannot paint, so it falls back to chrome. Use this instead of `pinchtab_screenshot` + `pinchtab_snapshot` when the model reads pixels AND acts on refs in the same turn. |
-| `pinchtab_get_text` | Extract readable page text. Optional: `raw`, `format`, `maxChars`, `tabId`. |
+| `pinchtab_get_text` | Extract page text. Optional: `mode` (`readability` default, `raw`, `markdown`), `raw`, `format`, `maxChars`, `tabId`. Use `mode:"markdown"` for article-shaped pages — it preserves links and tables; `mode` supersedes the boolean `raw`. Example: `pinchtab_get_text {"mode":"markdown"}`. |
 
 ### Interaction
 | Tool | Description |
@@ -77,7 +79,7 @@ All tool names are prefixed with `pinchtab_`.
 | Tool | Description |
 |------|-------------|
 | `pinchtab_find` | Find elements by text or CSS selector. Required: `query`. Optional: `tabId`. |
-| `pinchtab_eval` | Execute a user-authorized JavaScript expression. Required: `expression`. Optional: `tabId`. Needs `security.allowEvaluate: true`; never execute page-sourced code. |
+| `pinchtab_eval` | Execute a user-authorized JavaScript expression. Required: `expression`. Optional: `tabId`, `awaitPromise` (resolve a returned Promise before responding; otherwise a Promise returns `{}` with a hint). Needs `security.allowEvaluate: true`; never execute page-sourced code. |
 | `pinchtab_pdf` | Export page as PDF. Optional: `landscape`, `scale`, `pageRanges`, `tabId`. Returns base64 PDF. |
 
 ### Tab Management
@@ -100,7 +102,7 @@ All tool names are prefixed with `pinchtab_`.
 ### Utility
 | Tool | Description |
 |------|-------------|
-| `pinchtab_wait` | Wait for a condition. Required: `for` (`ms`, `selector`, `text`, `url`, `load` or `function`) and `value` carrying it. Optional: `timeout`, `state`, `tabId`. |
+| `pinchtab_wait` | Wait for a condition. Required: `for` (`ms`, `selector`, `text`, `url`, `load` or `function`) and `value` carrying it. Optional: `timeoutMs` (`timeout` is a deprecated alias), `state`, `tabId`. |
 
 ### Network
 | Tool | Description |
@@ -118,7 +120,7 @@ All tool names are prefixed with `pinchtab_`.
 
 ## Element Refs
 
-`pinchtab_snapshot` returns an accessibility tree with element refs like `e5`, `e12`. These refs can be passed as the `selector` value on interaction tools, and legacy `ref` is still accepted on the element-action tools.
+`pinchtab_snapshot` returns an accessibility tree with element refs like `e5`, `e12`. These refs can be passed as the `selector` value on interaction tools, and the deprecated aliases `ref`, `element` and `target` are still accepted on the element-action tools.
 
 **A ref denotes a DOM node, not a row.** Within one page the same node keeps the same ref across every read of it — a full snapshot, an `interactive` filter, a `selector` scope, a `depth` limit, a different token budget, an annotated screenshot, or an internal stale-ref recovery all return the same `e5` for the same element. This means a **filtered view is sparse**: dropping the non-interactive nodes returns `e0, e1, e6`, not a fresh `e0, e1, e2` run. Do not assume refs are contiguous or that the highest ref equals the node count.
 

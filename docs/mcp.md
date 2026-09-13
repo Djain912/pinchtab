@@ -168,7 +168,7 @@ PinchTab currently exposes 43 tools:
 
 ### Site
 
-- `pinchtab_scrape` — crawl a site to markdown (HTTP-first, browser-enrich thin/JS pages). Use `preview=true` for a cheap outline, then expand chosen URLs with `only`.
+- `pinchtab_scrape` — crawl a site to markdown (HTTP-first, browser-enrich thin/JS pages). Use `preview=true` for a cheap outline, then expand chosen URLs with `only`. Its `timeoutSeconds` is a crawl budget and the one seconds-unit argument; every wait elsewhere is `timeoutMs`.
 
 ### Tab Management
 
@@ -187,7 +187,7 @@ PinchTab currently exposes 43 tools:
 
 ### Wait Utilities
 
-- `pinchtab_wait` — `for` is `ms`, `selector`, `text`, `url`, `load` or `function`, and `value` carries the condition
+- `pinchtab_wait` — `for` is `ms`, `selector`, `text`, `url`, `load` or `function`, and `value` carries the condition; `timeoutMs` bounds a browser-backed wait (`timeout` is its deprecated alias)
 
 ### Network
 
@@ -210,7 +210,11 @@ PinchTab currently exposes 43 tools:
 
 ## Selector Model
 
-For selector-based interaction tools, prefer `selector`. `ref` is still accepted as a deprecated fallback on the element-action tools.
+For selector-based interaction tools, prefer `selector`. `ref`, `element` and `target` are still accepted as deprecated aliases on the element-action tools.
+
+## Argument Names
+
+Every tool refuses an argument its schema does not declare. The call returns an error naming the unknown key, the nearest declared name when one is close (`filter: "interactive"` on `pinchtab_snapshot` points at `interactive: true`), and the tool's declared arguments; nothing runs. Deprecated spellings stay declared, with a description naming the canonical one: `ref`/`element`/`target` for `selector`, `timeout` for `timeoutMs` on `pinchtab_wait`, `onDialog`/`promptText` for `dialogAction`/`dialogText` on `pinchtab_click`, `value` for `text` on `pinchtab_type`, `option` for `value` on `pinchtab_select`, and `text` for `value` on `pinchtab_fill`.
 
 Common selector forms:
 

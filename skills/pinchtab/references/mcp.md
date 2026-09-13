@@ -48,6 +48,8 @@ For Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.
 
 All tool names are prefixed with `pinchtab_`.
 
+A tool refuses any argument it does not declare: the error names the unknown key, the nearest declared name when one is close, and the tool's declared arguments, and nothing runs. Time budgets are milliseconds (`timeoutMs`) everywhere except `pinchtab_scrape`'s crawl budget `timeoutSeconds`.
+
 ### Navigation
 | Tool | Description |
 |------|-------------|
@@ -100,7 +102,7 @@ All tool names are prefixed with `pinchtab_`.
 ### Utility
 | Tool | Description |
 |------|-------------|
-| `pinchtab_wait` | Wait for a condition. Required: `for` (`ms`, `selector`, `text`, `url`, `load` or `function`) and `value` carrying it. Optional: `timeout`, `state`, `tabId`. |
+| `pinchtab_wait` | Wait for a condition. Required: `for` (`ms`, `selector`, `text`, `url`, `load` or `function`) and `value` carrying it. Optional: `timeoutMs` (`timeout` is a deprecated alias), `state`, `tabId`. |
 
 ### Network
 | Tool | Description |
@@ -118,7 +120,7 @@ All tool names are prefixed with `pinchtab_`.
 
 ## Element Refs
 
-`pinchtab_snapshot` returns an accessibility tree with element refs like `e5`, `e12`. These refs can be passed as the `selector` value on interaction tools, and legacy `ref` is still accepted on the element-action tools.
+`pinchtab_snapshot` returns an accessibility tree with element refs like `e5`, `e12`. These refs can be passed as the `selector` value on interaction tools, and the deprecated aliases `ref`, `element` and `target` are still accepted on the element-action tools.
 
 **A ref denotes a DOM node, not a row.** Within one page the same node keeps the same ref across every read of it — a full snapshot, an `interactive` filter, a `selector` scope, a `depth` limit, a different token budget, an annotated screenshot, or an internal stale-ref recovery all return the same `e5` for the same element. This means a **filtered view is sparse**: dropping the non-interactive nodes returns `e0, e1, e6`, not a fresh `e0, e1, e2` run. Do not assume refs are contiguous or that the highest ref equals the node count.
 

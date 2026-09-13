@@ -34,6 +34,15 @@ func optFloat(r mcp.CallToolRequest, key string) (float64, bool) {
 	return 0, false
 }
 
+func firstFloat(r mcp.CallToolRequest, keys ...string) (float64, bool) {
+	for _, key := range keys {
+		if v, ok := optFloat(r, key); ok {
+			return v, true
+		}
+	}
+	return 0, false
+}
+
 func optInt(r mcp.CallToolRequest, key string) (int, bool) {
 	v, ok := optFloat(r, key)
 	return int(v), ok
@@ -187,7 +196,7 @@ func firstSelectorString(r mcp.CallToolRequest, keys ...string) (value, wrongKey
 
 // A wrong-typed selector alias refuses rather than falling through to a different argument.
 func actionSelectorArg(r mcp.CallToolRequest) (sel, wrongKey, wrongType string) {
-	sel, wrongKey, wrongType = firstSelectorString(r, "selector", "ref", "element", "target")
+	sel, wrongKey, wrongType = firstSelectorString(r, selectorArgKeys...)
 	if sel != "" || wrongType != "" {
 		return sel, wrongKey, wrongType
 	}

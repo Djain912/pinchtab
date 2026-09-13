@@ -2,7 +2,9 @@
 
 PinchTab currently exposes 36 MCP tools. All tool names are prefixed with `pinchtab_` and are served over stdio JSON-RPC.
 
-For selector-based interaction tools, prefer `selector`. `ref` and `query` are still accepted as deprecated/alias fallbacks on the element-action tools (`query` is shorthand for `find:<text>`).
+For selector-based interaction tools, prefer `selector`. `ref`, `element` and `target` are still accepted as deprecated aliases, and `query` as a fallback, on the element-action tools (`query` is shorthand for `find:<text>`).
+
+Every tool refuses an argument its schema does not declare, naming the unknown key, the nearest declared name when one is close, and the declared arguments; nothing runs. Deprecated spellings stay declared with a description naming the canonical one.
 
 If you allow MCP browsing on non-local or non-trusted domains, treat `pinchtab_snapshot` and `pinchtab_get_text` output as untrusted page data. Those tools can surface hostile prompt text from visited pages; operators should keep IDPI/domain restrictions narrow unless wider access is intentional.
 
@@ -34,7 +36,7 @@ Structured semantic locators are matched by the semantic engine; CSS, XPath, ref
 
 ## Interaction
 
-All element-action tools accept the unified `selector` and the legacy aliases `ref` (deprecated) and `query` (semantic shorthand). Every one of them also accepts `nodeId` (a backend node ID from a snapshot) as an alternative target. Coordinates (`x`/`y`) are accepted only by `pinchtab_click`, `pinchtab_hover` and `pinchtab_scroll` — the other kinds have no coordinate behaviour.
+All element-action tools accept the unified `selector`, its deprecated aliases `ref`, `element` and `target`, and `query` (semantic shorthand). Deprecated value aliases: `onDialog`/`promptText` for `dialogAction`/`dialogText` on click, `value` for `text` on type, `option` for `value` on select, `text` for `value` on fill. Every one of them also accepts `nodeId` (a backend node ID from a snapshot) as an alternative target. Coordinates (`x`/`y`) are accepted only by `pinchtab_click`, `pinchtab_hover` and `pinchtab_scroll` — the other kinds have no coordinate behaviour.
 
 | Tool | Key Parameters | Notes |
 | --- | --- | --- |
@@ -65,7 +67,7 @@ All element-action tools accept the unified `selector` and the legacy aliases `r
 
 | Tool | Key Parameters | Notes |
 | --- | --- | --- |
-| `pinchtab_scrape` | `url` required, `preview`, `only`, `maxPages`, `maxPerPattern`, `include`, `exclude`, `concurrency`, `enrichAll`, `noBrowser`, `timeoutSeconds`, `browser` | Crawl a whole site to a page tree of markdown via `/scrape`. HTTP-first extraction; only thin/blocked/failed pages are browser-rendered. `preview=true` returns a cheap outline (sizes + snippets, no bodies, no browser); `only` (comma-separated URLs) expands chosen pages at full fidelity. `include`/`exclude` are comma-separated regexes. Full reports can be large — prefer preview then expand. Runs with an extended timeout (multi-page crawls take minutes) |
+| `pinchtab_scrape` | `url` required, `preview`, `only`, `maxPages`, `maxPerPattern`, `include`, `exclude`, `concurrency`, `enrichAll`, `noBrowser`, `timeoutSeconds`, `browser` | Crawl a whole site to a page tree of markdown via `/scrape`. HTTP-first extraction; only thin/blocked/failed pages are browser-rendered. `preview=true` returns a cheap outline (sizes + snippets, no bodies, no browser); `only` (comma-separated URLs) expands chosen pages at full fidelity. `include`/`exclude` are comma-separated regexes. Full reports can be large — prefer preview then expand. Runs with an extended timeout (multi-page crawls take minutes). `timeoutSeconds` is a crawl budget and the one seconds-unit argument; waits elsewhere use `timeoutMs` |
 
 ## Tab Management
 
@@ -90,7 +92,7 @@ All element-action tools accept the unified `selector` and the legacy aliases `r
 
 | Tool | Key Parameters | Notes |
 | --- | --- | --- |
-| `pinchtab_wait` | `for` required, `value` required, `timeout`, `state`, `tabId` | One wait tool: `for` names the condition and `value` carries it. `for=ms` is a fixed-duration wait capped at 30000 ms; `selector` waits for an element (`state` is `visible` (default) or `hidden`); `text` waits for body text; `url` is a URL glob match; `load` is `ready-state` (`readyState=complete`), `content-loaded` (`readyState` in `{interactive, complete}`), or `network-idle` (0 in-flight requests for 500 ms); `function` waits for a JS expression to become truthy |
+| `pinchtab_wait` | `for` required, `value` required, `timeoutMs`, `state`, `tabId` | One wait tool: `for` names the condition and `value` carries it. `timeoutMs` bounds a browser-backed condition (default 10000, max 30000); `timeout` is its deprecated alias. `for=ms` is a fixed-duration wait capped at 30000 ms; `selector` waits for an element (`state` is `visible` (default) or `hidden`); `text` waits for body text; `url` is a URL glob match; `load` is `ready-state` (`readyState=complete`), `content-loaded` (`readyState` in `{interactive, complete}`), or `network-idle` (0 in-flight requests for 500 ms); `function` waits for a JS expression to become truthy |
 
 ## Network
 
