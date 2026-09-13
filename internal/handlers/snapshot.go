@@ -218,9 +218,9 @@ func (h *Handlers) HandleSnapshot(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if elemInfo != "" {
-			scopedEmptyHint = fmt.Sprintf("Element exists in DOM (%s) but has no accessible nodes. Use `text --selector %s` or `eval` to extract content.", elemInfo, selector)
+			scopedEmptyHint = fmt.Sprintf("Element exists in DOM (%s) but has no accessible nodes. Use `text` with the same selector, or `eval`, to extract content.", elemInfo)
 		} else if descErr == nil {
-			scopedEmptyHint = fmt.Sprintf("Element exists in DOM but has no accessible nodes. Use `text --selector %s` or `eval` to extract content.", selector)
+			scopedEmptyHint = "Element exists in DOM but has no accessible nodes. Use `text` with the same selector, or `eval`, to extract content."
 		}
 	}
 

@@ -177,7 +177,11 @@ var stateExtensions = []string{".json.enc", ".json"}
 // statePathWithin joins a state file path and reports whether it stayed inside
 // dir, so every caller applies the same containment rule.
 func statePathWithin(dir, base, ext string) (string, bool) {
-	path := filepath.Clean(filepath.Join(dir, base+ext))
+	name := base + ext
+	if !filepath.IsLocal(name) {
+		return "", false
+	}
+	path := filepath.Clean(filepath.Join(dir, name))
 	return path, strings.HasPrefix(path, filepath.Clean(dir)+string(os.PathSeparator))
 }
 
