@@ -362,7 +362,7 @@ pinchtab instance start --port <n>
 pinchtab instance start --extension /path/to/ext
 pinchtab instance stop <id>             # Stop an instance
 pinchtab instance logs <id>             # Show instance logs
-pinchtab instance navigate <id> <url>   # Open a tab in an instance and navigate it
+pinchtab instance navigate <id> <url>   # Open a tab in an instance already on <url> (one step)
 pinchtab profiles                       # List profiles
 pinchtab profiles prune                 # List reclaimable quarantined profiles (removes nothing)
 pinchtab profiles prune --confirm       # Remove them and report the disk freed

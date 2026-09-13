@@ -60,7 +60,7 @@ CLI subcommands are available — use these instead of `curl` when possible:
 pinchtab profiles                                   # list profiles
 pinchtab profiles create <name>                     # human setup: create before authentication
 pinchtab instance start --profile <name>            # start (auto-allocates port)
-pinchtab instance navigate <id> <url>
+pinchtab instance navigate <id> <url>               # open a tab already on <url> (one step)
 pinchtab instance stop <id>
 pinchtab instance restart <id>
 pinchtab instance logs <id>

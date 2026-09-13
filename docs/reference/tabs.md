@@ -54,7 +54,7 @@ There is still no dedicated instance-scoped tab-open CLI command. The CLI shortc
 pinchtab instance navigate inst_ea2e747f https://pinchtab.com
 ```
 
-That command opens a tab for the instance and then navigates it.
+That command opens a tab for the instance already on the URL, in one `tabs/open` call.
 
 ## List Tabs
 
