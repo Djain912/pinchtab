@@ -517,6 +517,44 @@ func TestRootStorageRefusesADialogBlockedTabForEveryMethod(t *testing.T) {
 	}
 }
 
+func TestFixedDurationWaitRefusesADialogBlockedTab(t *testing.T) {
+	for _, target := range []string{"/wait", "/tabs/tab1/wait"} {
+		t.Run(target, func(t *testing.T) {
+			b := &guardProbeBridge{currentURL: "https://allowed.example/", dialogs: pendingDialogManager()}
+			h := New(b, allCapabilities(t, t.TempDir()), nil, nil, nil)
+			mux := http.NewServeMux()
+			h.RegisterRoutes(mux, nil)
+
+			req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(`{"tabId":"tab1","ms":50}`))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			var resp struct {
+				Code string `json:"code"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if resp.Code != dialogBlockedCode {
+				t.Fatalf("POST %s {ms} on a dialog-blocked tab answered %d %s, want %s", target, w.Code, w.Body.String(), dialogBlockedCode)
+			}
+		})
+	}
+}
+
+func TestFixedDurationWaitStillSleepsWithoutAPendingDialog(t *testing.T) {
+	b := &guardProbeBridge{currentURL: "https://allowed.example/"}
+	h := New(b, allCapabilities(t, t.TempDir()), nil, nil, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/wait", strings.NewReader(`{"tabId":"tab1","ms":1}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.HandleWait(w, req)
+
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"waited":true`) {
+		t.Fatalf("POST /wait {ms} without a dialog answered %d %s, want 200 waited", w.Code, w.Body.String())
+	}
+}
+
 var mustDeclareDialogGuard = []string{
 	"POST /navigate", "POST /back", "POST /forward", "POST /reload",
 	"GET /snapshot", "GET /screenshot", "GET /annotate", "GET /capture", "GET /text", "GET /title", "GET /url", "GET /html", "GET /styles",
