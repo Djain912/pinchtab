@@ -32,6 +32,40 @@ assert_ok "click on the name ref proves the ref is live"
 end_test
 
 # ─────────────────────────────────────────────────────────────────
+start_test "extract: vocabulary token and tab id match between headers and body"
+
+pt_post /navigate -d "{\"url\":\"${FIXTURES_URL}/extract-product.html\"}"
+assert_ok "navigate to extract-product.html"
+TAB_ID=$(echo "$RESULT" | jq -r '.tabId')
+
+EXTRACT_HEADERS=$(mktemp)
+RESULT=$(e2e_curl -s -D "$EXTRACT_HEADERS" -X POST "${E2E_SERVER}/extract" -H "Content-Type: application/json" -d "{\"schema\":${PRODUCT_SCHEMA}}")
+HEADER_VOCAB=$(grep -i '^X-PinchTab-Vocab:' "$EXTRACT_HEADERS" | cut -d' ' -f2 | tr -d '\r')
+HEADER_TAB=$(grep -i '^X-PinchTab-Tab-Id:' "$EXTRACT_HEADERS" | cut -d' ' -f2 | tr -d '\r')
+rm -f "$EXTRACT_HEADERS"
+BODY_VOCAB=$(echo "$RESULT" | jq -r '.vocabularyToken')
+
+if [ -n "$BODY_VOCAB" ] && [ "$BODY_VOCAB" != "null" ] && [ "$BODY_VOCAB" = "$HEADER_VOCAB" ]; then
+  pass_assert "body vocabularyToken $BODY_VOCAB matches X-PinchTab-Vocab"
+else
+  fail_assert "body vocabularyToken '$BODY_VOCAB' vs X-PinchTab-Vocab '$HEADER_VOCAB'"
+fi
+if [ "$HEADER_TAB" = "$TAB_ID" ]; then
+  pass_assert "X-PinchTab-Tab-Id names the navigated tab"
+else
+  fail_assert "X-PinchTab-Tab-Id '$HEADER_TAB', want '$TAB_ID'"
+fi
+
+NAME_REF=$(echo "$RESULT" | jq -r '.fields.name.ref')
+pt_post /action -d "{\"kind\":\"click\",\"ref\":\"${NAME_REF}\",\"vocab\":\"${BODY_VOCAB}\"}"
+assert_ok "an action echoing the extract's own token is accepted"
+
+pt_post /action -d "{\"kind\":\"click\",\"ref\":\"${NAME_REF}\",\"vocab\":\"stale-pre-extract-token\"}"
+assert_http_status 409 "a pre-extract token is refused vocab_superseded"
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
 start_test "extract: array schema, scoped table, and maxItems on extract-list.html"
 
 pt_post /navigate -d "{\"url\":\"${FIXTURES_URL}/extract-list.html\"}"
@@ -69,9 +103,10 @@ assert_http_status 404 "bogus tabId"
 
 pt_post /navigate -d "{\"url\":\"${FIXTURES_URL}/extract-list.html\"}"
 assert_ok "navigate to extract-list.html for the tab route"
+LIST_TAB=$(echo "$RESULT" | jq -r '.tabId')
 pt_get /tabs
 assert_ok "list tabs"
-LIST_TAB=$(echo "$RESULT" | jq -r '.tabs[0].id // .tabs[0].tabId')
+assert_json_eq "$RESULT" "[.tabs[] | (.id // .tabId)] | index(\"${LIST_TAB}\") != null" 'true' "/tabs lists the navigated tab"
 pt_post "/tabs/${LIST_TAB}/extract" -d "{\"schema\":${PRODUCTS_SCHEMA}}"
 assert_ok "tab-scoped extract"
 assert_json_eq "$RESULT" '.data.products | length' '6' "tab-scoped route resolves the same page"
