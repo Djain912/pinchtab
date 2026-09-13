@@ -604,6 +604,14 @@
         "memory",
         "pr"
       ]
+    },
+    "cli/instance-navigate-extended.sh": {
+      "tags": [
+        "instance",
+        "tabs",
+        "multiinstance",
+        "navigate"
+      ]
     }
   }
 }
