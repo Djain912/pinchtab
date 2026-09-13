@@ -52,11 +52,6 @@ func TestNegativeArgumentsAreMovedBehindTheFlags(t *testing.T) {
 			want: []string{"set", "geo", "--json", "--", "-33.8", "151.2"},
 		},
 		{
-			// PIN-419: a value-taking PERSISTENT flag (--server) before the subcommand.
-			// It is classified on the root, whose persistent flags are not yet merged
-			// into Flags() at rewrite time, so on HEAD --server does not consume the URL:
-			// the URL becomes a positional, the set-geo path is lost, and cobra reports
-			// the URL as an "unknown command".
 			name: "a persistent --server before the subcommand keeps its value and the path",
 			args: []string{"--server", "http://127.0.0.1:19227", "set", "geo", "51.5", "-0.12"},
 			want: []string{"set", "geo", "--server", "http://127.0.0.1:19227", "--", "51.5", "-0.12"},
@@ -74,6 +69,51 @@ func TestNegativeArgumentsAreMovedBehindTheFlags(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPersistentFlagValuesStayWithTheirFlagOnAnUnmergedTree(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "a persistent --server before the subcommand",
+			args: []string{"--server", "http://127.0.0.1:19227", "move", "-5", "-5"},
+			want: []string{"move", "--server", "http://127.0.0.1:19227", "--", "-5", "-5"},
+		},
+		{
+			name: "a persistent --agent-id before the subcommand",
+			args: []string{"--agent-id", "agent-7", "move", "-5", "-5"},
+			want: []string{"move", "--agent-id", "agent-7", "--", "-5", "-5"},
+		},
+		{
+			name: "a persistent shorthand before the subcommand",
+			args: []string{"-p", "work", "move", "-5"},
+			want: []string{"move", "-p", "work", "--", "-5"},
+		},
+		{
+			name: "a persistent flag after the subcommand resolves through the ancestor",
+			args: []string{"move", "-5", "--server", "http://127.0.0.1:19227"},
+			want: []string{"move", "--server", "http://127.0.0.1:19227", "--", "-5"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := rewriteNegativeNumberArgs(unmergedPersistentFlagTree(), tc.args)
+			if strings.Join(got, " ") != strings.Join(tc.want, " ") {
+				t.Errorf("rewrite = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func unmergedPersistentFlagTree() *cobra.Command {
+	root := &cobra.Command{Use: "root"}
+	root.PersistentFlags().String("server", "", "")
+	root.PersistentFlags().String("agent-id", "", "")
+	root.PersistentFlags().StringP("profile", "p", "", "")
+	root.AddCommand(&cobra.Command{Use: "move", Run: func(*cobra.Command, []string) {}})
+	return root
 }
 
 // The safety property that makes a rewrite this broad acceptable: an invocation with no

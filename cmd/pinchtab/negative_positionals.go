@@ -112,12 +112,7 @@ func consumesNextToken(cmd *cobra.Command, arg string) bool {
 		if attached {
 			return false
 		}
-		// PersistentFlags too: a value-flag written BEFORE the subcommand (the remote
-		// form `pinchtab --server <url> set geo …`) is classified on the root, whose
-		// persistent flags (--server, --agent-id) are not yet merged into Flags() at
-		// this pre-Execute stage, so without this the URL reads as a positional and the
-		// subcommand path is lost.
-		return takesValue(cmd.Flags().Lookup(name), cmd.InheritedFlags().Lookup(name), cmd.PersistentFlags().Lookup(name))
+		return takesValue(findFlag(cmd, func(set *pflag.FlagSet) *pflag.Flag { return set.Lookup(name) }))
 	}
 
 	// A shorthand bundle: pflag walks the characters and gives the REST of the token to
@@ -131,7 +126,7 @@ func consumesNextToken(cmd *cobra.Command, arg string) bool {
 			// non-ASCII byte is not a flag this walk can reason about.
 			return false
 		}
-		if !takesValue(cmd.Flags().ShorthandLookup(c), cmd.InheritedFlags().ShorthandLookup(c), cmd.PersistentFlags().ShorthandLookup(c)) {
+		if !takesValue(findFlag(cmd, func(set *pflag.FlagSet) *pflag.Flag { return set.ShorthandLookup(c) })) {
 			continue
 		}
 		return i == len(shorthands)-1
@@ -139,11 +134,21 @@ func consumesNextToken(cmd *cobra.Command, arg string) bool {
 	return false
 }
 
-func takesValue(candidates ...*pflag.Flag) bool {
-	for _, flag := range candidates {
-		if flag != nil {
-			return flag.NoOptDefVal == ""
+func findFlag(cmd *cobra.Command, lookup func(*pflag.FlagSet) *pflag.Flag) *pflag.Flag {
+	if flag := lookup(cmd.Flags()); flag != nil {
+		return flag
+	}
+	for owner := cmd; owner != nil; owner = owner.Parent() {
+		if flag := lookup(owner.PersistentFlags()); flag != nil {
+			return flag
 		}
+	}
+	return nil
+}
+
+func takesValue(flag *pflag.Flag) bool {
+	if flag != nil {
+		return flag.NoOptDefVal == ""
 	}
 	// An unknown flag is about to be refused by cobra whatever we do here; assuming it
 	// takes no value keeps the following token a positional, so the refusal names the
