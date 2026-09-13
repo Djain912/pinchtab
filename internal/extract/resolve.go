@@ -115,7 +115,27 @@ func ResolveContext(ctx context.Context, schema Schema, nodes []observe.A11yNode
 	if opts.Matcher == nil {
 		opts.Matcher = sharedMatcher()
 	}
-	return resolveObject(schema, newView(canonicalOrder(nodes)), opts)
+	v := newView(canonicalOrder(nodes))
+	if schema.scope.kind != targetNone {
+		node, fr, ok := matchTarget(schema.scope, "", v, opts)
+		if !ok {
+			return unresolvedScope(schema, fr)
+		}
+		v = v.subtree(v.index[node.Ref])
+	}
+	return resolveObject(schema, v, opts)
+}
+
+func unresolvedScope(schema Schema, fr FieldResult) Result {
+	fr.Reason = reasonScopeNotFound
+	result := Result{Data: map[string]any{}, Fields: map[string]FieldResult{}}
+	for _, prop := range schema.Properties {
+		result.Fields[prop.Name] = fr
+		if prop.Required {
+			result.Missing = append(result.Missing, prop.Name)
+		}
+	}
+	return result
 }
 
 func resolveObject(schema Schema, v view, opts Options) Result {

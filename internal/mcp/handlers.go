@@ -51,6 +51,8 @@ func rawHandlerMap(c *Client) map[string]func(context.Context, mcp.CallToolReque
 		"pinchtab_pdf":  handlePDF(c),
 		"pinchtab_find": handleFind(c),
 
+		"pinchtab_extract": handleExtract(c),
+
 		"pinchtab_list_tabs":       handleListTabs(c),
 		"pinchtab_close_tab":       handleCloseTab(c),
 		"pinchtab_health":          handleHealth(c),

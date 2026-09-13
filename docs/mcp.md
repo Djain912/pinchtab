@@ -114,12 +114,12 @@ PINCHTAB_TOKEN=<that-host-token> pinchtab --server http://remote:9867 mcp
 
 ## Available Tools
 
-PinchTab currently exposes 45 tools:
+PinchTab currently exposes 46 tools:
 
 - Navigation: 9
 - Interaction: 8
 - Keyboard: 1
-- Content: 3
+- Content: 4
 - Recording: 1
 - Site: 1
 - Tab management: 5
@@ -161,6 +161,7 @@ PinchTab currently exposes 45 tools:
 - `pinchtab_eval`
 - `pinchtab_pdf`
 - `pinchtab_find`
+- `pinchtab_extract` — typed values against a JSON `schema` (`tabId`, `scope`, `maxItems` optional); every field carries a ref for the action tools and a confidence. Prefer it over snapshot-then-parse for structured values, and pin a `low` field with `x-pinchtab-hint`. See [Extract](reference/extract.md)
 
 ### Recording
 

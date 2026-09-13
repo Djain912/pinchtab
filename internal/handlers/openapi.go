@@ -104,6 +104,7 @@ func (h *Handlers) openAPIDocument(description string) map[string]any {
 					"properties": map[string]any{
 						"tabId":     map[string]any{"type": "string", "description": "Optional tab ID for top-level /extract requests"},
 						"schema":    map[string]any{"type": "object", "description": "JSON schema: an object with string/number/integer/boolean properties or arrays of such objects; x-pinchtab-hint pins a field, x-pinchtab-scope pins an array's container"},
+						"scope":     map[string]any{"type": "string", "description": "Confine every field to the subtree of one element: a ref, role:, text: or plain query; CSS and XPath are refused"},
 						"threshold": map[string]any{"type": "number", "description": "Minimum match score per field (default 0.3)"},
 						"maxItems":  map[string]any{"type": "integer", "description": "Cap on array items (default 100)"},
 					},

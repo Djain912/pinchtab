@@ -24,7 +24,7 @@ func browserRootCommands() []*cobra.Command {
 		dblclickCmd, dragCmd, typeCmd, screenshotCmd, annotateCmd, captureCmd, tabsCmd, pressCmd, fillCmd,
 		hoverCmd, mouseCmd, focusCmd, scrollCmd, evalCmd, pdfCmd, textCmd, titleCmd, urlCmd,
 		htmlCmd, stylesCmd, valueCmd, attrCmd, countCmd, boxCmd, visibleCmd, enabledCmd, checkedCmd,
-		downloadCmd, uploadCmd, findCmd, selectCmd, checkCmd, uncheckCmd, networkCmd, waitCmd,
+		downloadCmd, uploadCmd, findCmd, extractCmd, selectCmd, checkCmd, uncheckCmd, networkCmd, waitCmd,
 		keyboardCmd, keydownCmd, keyupCmd, scrollintoviewCmd, dialogCmd, consoleCmd, errorsCmd,
 		clipboardCmd, cacheCmd, cookiesCmd, setCmd, storageCmd, stateCmd, closeCmd, handoffCmd,
 		resumeCmd, handoffStatusCmd, recordCmd, auditCmd, compareCmd, scrapeCmd, a11yCmd, memoryCmd,
@@ -176,6 +176,13 @@ func configureBrowserFlags() {
 	findCmd.Flags().Bool("explain", false, "Show score breakdown")
 	findCmd.Flags().Bool("ref-only", false, "Output just the element ref")
 
+	extractCmd.Flags().String("schema", "", "JSON schema file to extract against, or - to read it from stdin")
+	_ = extractCmd.MarkFlagRequired("schema")
+	extractCmd.Flags().String("scope", "", "Confine every field to one element's subtree (ref, role:, text: or a plain query)")
+	extractCmd.Flags().Int("max-items", 0, "Cap on items per array (server default 100)")
+	extractCmd.Flags().Bool("fields", false, "After the data, print a field<TAB>ref<TAB>confidence table so a value can be acted on")
+	extractCmd.Flags().Bool("explain", false, "Print the field table with score, source and reason columns")
+
 	textCmd.Flags().Bool("raw", false, "Raw extraction mode (alias of --full)")
 	textCmd.Flags().Bool("full", false, "Return the full page text (document.body.innerText, the API's mode=full/mode=raw) instead of the default Readability-filtered content")
 	textCmd.Flags().Bool("markdown", false, "Return the page as Markdown (preserves headings, links and tables); mutually exclusive with --full/--raw")
@@ -242,6 +249,7 @@ func configureBrowserFlags() {
 		annotateCmd,
 		pdfCmd,
 		findCmd,
+		extractCmd,
 		textCmd,
 		titleCmd,
 		urlCmd,
@@ -326,6 +334,7 @@ func configureBrowserFlags() {
 		reloadCmd,
 		navCmd,
 		findCmd,
+		extractCmd,
 		evalCmd,
 		tabsCmd,
 		closeCmd,

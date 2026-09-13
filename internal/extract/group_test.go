@@ -310,3 +310,56 @@ func TestResolveArray_CapReachedExactlyWithTrailingEmptyItemIsNotTruncated(t *te
 		t.Errorf("len=%d truncated=%v, want 4 items and no truncation when only an empty item follows", n, got.Fields["results"].Truncated)
 	}
 }
+
+func TestResolve_RequestScopeConfinesTheWholeSchemaToOneSubtree(t *testing.T) {
+	nodes := loadSnapshot(t, "extract-list.json")
+	schema := mustSchema(t, `{"type":"object","properties":{
+		"entries":{"type":"array","items":{"type":"object","properties":{
+			"amount":{"type":"number","description":"price"}}}}}}`)
+
+	unscoped := Resolve(schema, nodes, Options{})
+	if n := len(items(t, unscoped, "entries")); n != 6 {
+		t.Fatalf("unscoped entries = %d, want the 6-product grid so the scope below is what changes the answer", n)
+	}
+
+	scoped, err := schema.WithScope("role:table")
+	if err != nil {
+		t.Fatalf("WithScope: %v", err)
+	}
+	got := Resolve(scoped, nodes, Options{})
+	if n := len(items(t, got, "entries")); n != 5 {
+		t.Fatalf("scoped entries = %d, want the 5 table rows (%+v)", n, got.Fields["entries"])
+	}
+	if ref := got.Fields["entries"].Ref; ref != "e63" && ref != "e64" {
+		t.Errorf("scoped container ref = %q, want the table or its body rowgroup", ref)
+	}
+}
+
+func TestResolve_RequestScopeThatMatchesNothingLeavesEveryFieldUnresolved(t *testing.T) {
+	schema, err := mustSchema(t, `{"type":"object","required":["name"],"properties":{
+		"name":{"type":"string","description":"product name"},
+		"price":{"type":"number","description":"product price"}}}`).WithScope("ref:e999")
+	if err != nil {
+		t.Fatalf("WithScope: %v", err)
+	}
+	got := Resolve(schema, productNodes(), Options{})
+	if len(got.Data) != 0 {
+		t.Errorf("data = %v, want nothing outside a scope that does not exist", got.Data)
+	}
+	for _, name := range []string{"name", "price"} {
+		if got.Fields[name].Reason != reasonScopeNotFound {
+			t.Errorf("field %q reason = %q, want %q", name, got.Fields[name].Reason, reasonScopeNotFound)
+		}
+	}
+	if !reflect.DeepEqual(got.Missing, []string{"name"}) {
+		t.Errorf("missing = %v, want the required field", got.Missing)
+	}
+}
+
+func TestSchemaWithScopeRefusesABrowserSelectorNamingTheScope(t *testing.T) {
+	_, err := mustSchema(t, productListSchema).WithScope("css:table")
+	ue, ok := err.(*UnsupportedError)
+	if !ok || ue.Path != "scope" {
+		t.Fatalf("err = %v (%T), want an UnsupportedError at path scope", err, err)
+	}
+}

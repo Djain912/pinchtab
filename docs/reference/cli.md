@@ -165,6 +165,7 @@ Common commands:
 | `pinchtab fill <selector> <text>` | Fill directly |
 | `pinchtab text` | Extract page text (`--full`, `--raw`, `--frame <frameId>`) |
 | `pinchtab find <query>` | Semantic element search |
+| `pinchtab extract --schema <file\|->` | Schema-typed JSON from the page (`--scope`, `--max-items`, `--fields`, `--explain`) |
 | `pinchtab screenshot` | Save a screenshot (`-s/--selector` captures a specific element, `--scale <f>` rescales the bitmap, `--beyond-viewport` captures the full scrollable document) |
 | `pinchtab capture` | Paired screenshot + accessibility snapshot from the same DOM epoch (`--scale`, `--beyond-viewport`, `--require-pair`, `--with-bounds`) |
 | `pinchtab pdf` | Export the page as PDF |

@@ -234,6 +234,13 @@ func allTools() []mcp.Tool {
 			mcp.WithString("query", mcp.Required(), mcp.Description("Text or CSS selector to search for")),
 			tabIDParam(),
 		),
+		mcp.NewTool("pinchtab_extract",
+			mcp.WithDescription("Extract typed values from the page against a JSON schema. Prefer it over snapshot-then-parse for structured values; each field returns a ref for action tools. If a field comes back low confidence, pin it with x-pinchtab-hint."),
+			mcp.WithObject("schema", mcp.Required(), mcp.Description("JSON schema: string/number/integer/boolean properties or arrays of such objects; x-pinchtab-scope pins an array's container")),
+			tabIDParam(),
+			mcp.WithString("scope", mcp.Description("Confine all fields to one element's subtree (ref, role:, text: or query)")),
+			mcp.WithNumber("maxItems", mcp.Description("Cap on items per array (default 100)")),
+		),
 
 		mcp.NewTool("pinchtab_list_tabs",
 			mcp.WithDescription("List all open browser tabs"),

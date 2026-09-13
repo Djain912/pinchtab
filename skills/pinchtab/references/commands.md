@@ -237,6 +237,39 @@ pinchtab find "Submit"
 pinchtab find ".btn-primary"
 ```
 
+### `pinchtab extract --schema <file|->`
+Extract structured data: typed JSON shaped by a JSON schema, read from the current page.
+
+```bash
+# one product: prints {"inStock": true, "name": "...", "price": 1299}
+echo '{"type":"object","properties":{
+  "name":{"type":"string","x-pinchtab-hint":"role:heading"},
+  "price":{"type":"number","description":"product price"},
+  "inStock":{"type":"boolean","description":"in stock availability"}}}' > product.json
+pinchtab extract --schema product.json
+
+# a list: one object per repeated card or table row
+echo '{"type":"object","properties":{"products":{"type":"array","items":{"type":"object","properties":{
+  "name":{"type":"string","x-pinchtab-hint":"role:heading"},
+  "price":{"type":"number","description":"product price"}}}}}}' | pinchtab extract --schema - --max-items 10
+
+pinchtab extract --schema product.json --fields   # + field<TAB>ref<TAB>confidence table
+pinchtab click e12                                 # a field's ref works straight away
+```
+
+| Flag | Description |
+|------|-------------|
+| `--schema <file\|->` | JSON schema file, or `-` for stdin (required) |
+| `--scope <sel>` | Confine every field to one element's subtree (ref, `role:`, `text:` or a plain query) |
+| `--max-items <n>` | Cap on items per array |
+| `--fields` / `--explain` | Append the ref table; `--explain` adds score, source and reason |
+| `--json` | Full envelope (`data`, `fields`, `missing`, `truncated`) |
+
+Pick the read by what you need back: `extract` for typed values (prices, flags, rows)
+you would otherwise parse out of a snapshot; `find` for one element to act on;
+`text --markdown` for prose to read. A field reported `low`, or listed as missing on
+stderr, needs an `x-pinchtab-hint` (a ref or `role:`/`text:` selector) in the schema.
+
 ### `pinchtab eval <expression>`
 Run JavaScript in the browser context.
 

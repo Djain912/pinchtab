@@ -204,6 +204,10 @@ pinchtab find <query>                   # Semantic element search
 pinchtab find --threshold <0-1>         # Minimum similarity score
 pinchtab find --explain                 # Include score breakdown
 pinchtab find --ref-only                # Print only the best ref
+pinchtab extract --schema <file>        # Schema-typed data as JSON (see reference/extract.md)
+pinchtab extract --schema -             # Read the schema from stdin
+pinchtab extract --schema <file> --fields   # + field<TAB>ref<TAB>confidence table
+pinchtab extract --schema <file> --scope role:table --max-items 5  # Confine and cap
 pinchtab eval <expression>              # Evaluate JavaScript
 pinchtab a11y audit                     # Accessibility score + findings (native engine)
 pinchtab a11y audit --axe               # Run axe-core in the page (industry rule ids)
@@ -493,6 +497,7 @@ Commands with `--tab` currently include:
 - `capture`
 - `pdf`
 - `find`
+- `extract`
 - `text`
 - `click`
 - `dblclick`
@@ -537,4 +542,4 @@ pinchtab network --json                 # JSON: {"entries":[...],"count":5}
 
 **For scripts and automation**: Always use `--json` when piping output or parsing programmatically. Human-readable formats may change between versions and are not guaranteed to be stable. The JSON schema is the stable contract.
 
-Commands with `--json` include: `tab`, `frame`, `network`, `click`, `type`, `scroll`, `nav`, `back`, `forward`, `reload`, `wait`, `find`, `eval`, and most action commands.
+Commands with `--json` include: `tab`, `frame`, `network`, `click`, `type`, `scroll`, `nav`, `back`, `forward`, `reload`, `wait`, `find`, `extract`, `eval`, and most action commands.

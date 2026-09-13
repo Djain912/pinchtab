@@ -62,6 +62,7 @@ All element-action tools accept the unified `selector`, its deprecated aliases `
 | `pinchtab_eval` | `expression` required, `tabId` | Requires `security.allowEvaluate` (documented non-default JS-execution opt-in). Not frame-scoped — current `pinchtab_frame` state does not change evaluation context |
 | `pinchtab_pdf` | `tabId`, `landscape`, `scale`, `pageRanges` | Returns base64-encoded PDF content |
 | `pinchtab_find` | `query` required, `tabId` | Semantic element search; returns `best_ref` and selector hints to reuse in action tools |
+| `pinchtab_extract` | `schema` (object) required, `tabId`, `scope`, `maxItems` | Schema-typed data via `/extract`: `data` plus a per-field `ref`, `score` and `confidence`; the refs are usable in action tools straight away. Prefer it over snapshot-then-parse for structured values; pin a `low` field with `x-pinchtab-hint`. See [Extract](./extract.md) |
 
 ## Site
 

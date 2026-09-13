@@ -83,3 +83,24 @@ func handleFind(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.Call
 		return jsonResult(resp)
 	}
 }
+
+func handleExtract(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		schema, ok := r.GetArguments()["schema"]
+		if !ok || schema == nil {
+			return mcp.NewToolResultError("required argument \"schema\" not found"), nil
+		}
+		payload := map[string]any{"schema": schema}
+		tabID := optString(r, "tabId")
+		if tabID != "" {
+			payload["tabId"] = tabID
+		}
+		if scope := optTrimmedString(r, "scope"); scope != "" {
+			payload["scope"] = scope
+		}
+		if maxItems, ok := optInt(r, "maxItems"); ok && maxItems > 0 {
+			payload["maxItems"] = maxItems
+		}
+		return toolResult(c.PostCapturingVocab(ctx, "/extract", payload, tabID))
+	}
+}

@@ -126,6 +126,7 @@ func TestHandleExtract_BadRequests(t *testing.T) {
 		{name: "missing schema", body: `{}`, want: "schema", status: 400},
 		{name: "nested object names the path", body: `{"schema":{"type":"object","properties":{"price":{"type":"object"}}}}`, want: "properties.price.type", status: 400},
 		{name: "unknown tab", body: `{"schema":` + productSchema + `}`, failTab: true, status: 404},
+		{name: "browser selector scope names the scope", body: `{"schema":` + productSchema + `,"scope":"css:.product"}`, want: "scope", status: 400},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newExtractTestHandler(productCache(), tc.failTab)
@@ -134,6 +135,21 @@ func TestHandleExtract_BadRequests(t *testing.T) {
 				t.Fatalf("status %d body %s, want %d containing %q", w.Code, w.Body.String(), tc.status, tc.want)
 			}
 		})
+	}
+}
+
+func TestHandleExtract_ScopeReachesTheResolver(t *testing.T) {
+	w, resp := postExtract(t, newExtractTestHandler(productCache(), false), "/extract", `{"schema":`+productSchema+`,"scope":"ref:e1"}`)
+	if w.Code != http.StatusOK || resp.Data["price"] != 1299.0 || resp.Fields["price"].Ref != "e3" {
+		t.Fatalf("scope around the product: status %d data %#v fields %+v", w.Code, resp.Data, resp.Fields)
+	}
+
+	w, resp = postExtract(t, newExtractTestHandler(productCache(), false), "/extract", `{"schema":`+productSchema+`,"scope":"ref:e404"}`)
+	if w.Code != http.StatusOK || len(resp.Data) != 0 || resp.Fields["price"].Reason != "scope_not_found" {
+		t.Fatalf("absent scope: status %d data %#v fields %+v", w.Code, resp.Data, resp.Fields)
+	}
+	if strings.Join(resp.Missing, ",") != "inStock,name,price" {
+		t.Errorf("missing = %v, want every required field when the scope is absent", resp.Missing)
 	}
 }
 

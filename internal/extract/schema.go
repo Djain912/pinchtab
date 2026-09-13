@@ -49,6 +49,17 @@ type Property struct {
 
 type Schema struct {
 	Properties []Property
+
+	scope target
+}
+
+func (s Schema) WithScope(raw string) (Schema, error) {
+	scope, err := parseTarget(strings.TrimSpace(raw), "scope")
+	if err != nil {
+		return Schema{}, err
+	}
+	s.scope = scope
+	return s, nil
 }
 
 type UnsupportedError struct {

@@ -17,6 +17,7 @@ import (
 type extractRequest struct {
 	TabID     string          `json:"tabId,omitempty"`
 	Schema    json.RawMessage `json:"schema"`
+	Scope     string          `json:"scope,omitempty"`
 	Threshold float64         `json:"threshold,omitempty"`
 	MaxItems  int             `json:"maxItems,omitempty"`
 }
@@ -37,6 +38,7 @@ type extractResponse struct {
 //
 // @Param schema object body JSON schema (object with properties; array-of-object properties allowed) (required)
 // @Param tabId string body Tab ID (optional, defaults to active tab)
+// @Param scope string body Confine every field to the subtree of one element: a ref, role:, text: or plain query; CSS and XPath are refused (optional)
 // @Param threshold float body Minimum match score per field (optional, default: 0.3)
 // @Param maxItems int body Cap on array items (optional, default: 100)
 //
@@ -153,6 +155,9 @@ func parseExtractRequest(w http.ResponseWriter, r *http.Request) (extractRequest
 			return extractRequest{}, extract.Schema{}, fmt.Errorf("schema %s", err)
 		}
 		return extractRequest{}, extract.Schema{}, fmt.Errorf("schema: %w", err)
+	}
+	if schema, err = schema.WithScope(req.Scope); err != nil {
+		return extractRequest{}, extract.Schema{}, err
 	}
 	return req, schema, nil
 }
