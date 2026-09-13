@@ -351,6 +351,33 @@ pinchtab record stop                    # Stop recording and save
 pinchtab record status                  # Check recording status
 ```
 
+## Storage And State
+
+The key or state name is the first argument. `--key` / `--name` are accepted as the same
+value for existing scripts; passing both the argument and the flag is refused.
+
+```bash
+pinchtab storage get                    # Both localStorage and sessionStorage for the tab's origin
+pinchtab storage get --type local       # One store
+pinchtab storage get <key>              # A single item (same as --key <key>)
+pinchtab storage set <key> <value>      # Write an item (localStorage unless --type session)
+pinchtab storage delete <key>           # Remove one key (same as --key <key>); a key is required
+pinchtab storage clear                  # Wipe localStorage (--type session for sessionStorage)
+pinchtab storage clear --all            # Wipe both stores
+pinchtab state                          # Current browser state for the tab
+pinchtab state list                     # List saved state files
+pinchtab state save [name]              # Save cookies and storage (name auto-generated if omitted)
+pinchtab state save <name> --encrypt    # Save encrypted (needs security.stateEncryptionKey)
+pinchtab state load <name>              # Restore a saved state; <name> may be a prefix (newest match)
+pinchtab state show <name>              # Print a saved state file
+pinchtab state delete <name>            # Delete a saved state file
+pinchtab state clean --older-than <h>   # Remove state files older than <h> hours (default 24)
+```
+
+`storage delete` never wipes a store: a bare `pinchtab storage delete` is refused and names
+`storage clear`, the one wipe verb. Every storage verb takes `--tab <id>`, as do `state`,
+`state save` and `state load`. The `state` family requires `security.allowStateExport`.
+
 ## Instances, Profiles, And Activity
 
 ```bash

@@ -319,22 +319,22 @@ Read and write `localStorage` and `sessionStorage` for the active tab's origin.
 ```bash
 pinchtab storage get                      # both stores
 pinchtab storage get --type local         # one store
-pinchtab storage get --key token          # a single item
+pinchtab storage get token                # a single item
 pinchtab storage set token abc123         # writes to localStorage by default
 pinchtab storage set token abc123 --type session
-pinchtab storage delete --key token       # remove one key
-pinchtab storage delete                   # no --key: clears the whole store
+pinchtab storage delete token             # remove one key
+pinchtab storage clear                    # wipe localStorage (--type session for the other store)
 pinchtab storage clear --all              # both stores in one call
 ```
 
 | Flag | Command | Description |
 |------|---------|-------------|
 | `--type <local\|session>` | `get`, `set`, `delete`, `clear` | Which store. `get` defaults to both; the write verbs default to `local` |
-| `--key <key>` | `get`, `delete` | `get`: return only this item. `delete`: the key to remove — omit it and the whole store is cleared |
+| `--key <key>` | `get`, `delete` | Same as the `<key>` argument; give one or the other, never both |
 | `--all` | `clear` | Clear both stores in one call |
 | `--tab <id>` | all | Target a specific tab |
 
-`storage delete` with no `--key` clears the whole store `--type` selects — localStorage unless you pass `--type session` — for the tab's origin. It is the same call `storage clear` makes. `--all` is registered on `clear` only: `clear --all` empties both stores, while `delete --all` is refused as an unknown flag. `storage clear` without `--all` clears localStorage alone.
+`storage delete` needs a key: a bare `storage delete` is refused and names `storage clear`, which is the only verb that wipes a store. `storage clear` clears the store `--type` selects — localStorage unless you pass `--type session` — for the tab's origin, and `clear --all` empties both. `--all` is registered on `clear` only; `delete --all` is refused as an unknown flag.
 
 ---
 
