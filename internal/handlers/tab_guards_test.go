@@ -485,6 +485,37 @@ func TestRootStorageMethodDispatchSplitsTheGuard(t *testing.T) {
 	}
 }
 
+func TestRootStorageRefusesADialogBlockedTabForEveryMethod(t *testing.T) {
+	cases := []struct {
+		method string
+		body   string
+	}{
+		{http.MethodGet, ""},
+		{http.MethodPost, `{"type":"local","key":"probe","value":"1"}`},
+		{http.MethodDelete, `{"type":"local","key":"probe"}`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.method, func(t *testing.T) {
+			b := &guardProbeBridge{currentURL: "https://allowed.example/", dialogs: pendingDialogManager()}
+			h := New(b, allCapabilities(t, t.TempDir()), nil, nil, nil)
+
+			req := httptest.NewRequest(tc.method, "/storage?tabId=tab1&type=local&key=probe", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			h.HandleStorage(w, req)
+
+			var resp struct {
+				Code string `json:"code"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if resp.Code != dialogBlockedCode {
+				t.Fatalf("%s /storage on a dialog-blocked tab answered %d %s, want %s", tc.method, w.Code, w.Body.String(), dialogBlockedCode)
+			}
+		})
+	}
+}
+
 var mustDeclareDialogGuard = []string{
 	"POST /navigate", "POST /back", "POST /forward", "POST /reload",
 	"GET /snapshot", "GET /screenshot", "GET /annotate", "GET /capture", "GET /text", "GET /title", "GET /url", "GET /html", "GET /styles",
@@ -494,6 +525,21 @@ var mustDeclareDialogGuard = []string{
 	"POST /upload", "POST /solve", "POST /solve/{name}", "GET /download",
 	"POST /emulation/viewport", "POST /emulation/geolocation", "POST /emulation/offline",
 	"POST /emulation/headers", "POST /emulation/credentials", "POST /emulation/media",
+	"POST /fingerprint/rotate",
+	"GET /storage", "POST /storage", "DELETE /storage",
+	"GET /state", "POST /state/save", "POST /state/load",
+}
+
+var dialogGuardAllowReasons = map[string]bool{
+	"dialog":       true,
+	"frame":        true,
+	"tabs":         true,
+	"handoff":      true,
+	"own-tab":      true,
+	"browser-side": true,
+	"buffer":       true,
+	"server-side":  true,
+	"screencast":   true,
 }
 
 var dialogGuardAllowList = map[string]string{
@@ -538,20 +584,13 @@ var dialogGuardAllowList = map[string]string{
 	"POST /console/clear":        "buffer",
 	"GET /errors":                "buffer",
 	"POST /errors/clear":         "buffer",
-	"GET /clipboard/read":        "unprobed",
-	"POST /clipboard/write":      "unprobed",
-	"POST /clipboard/copy":       "unprobed",
-	"GET /clipboard/paste":       "unprobed",
-	"POST /fingerprint/rotate":   "unprobed",
-	"GET /storage":               "unprobed",
-	"POST /storage":              "unprobed",
-	"DELETE /storage":            "unprobed",
-	"GET /state":                 "unprobed",
-	"POST /state/save":           "unprobed",
-	"POST /state/load":           "unprobed",
-	"GET /screencast":            "unprobed",
-	"POST /record/start":         "unprobed",
-	"POST /record/stop":          "unprobed",
+	"GET /clipboard/read":        "server-side",
+	"POST /clipboard/write":      "server-side",
+	"POST /clipboard/copy":       "server-side",
+	"GET /clipboard/paste":       "server-side",
+	"GET /screencast":            "screencast",
+	"POST /record/start":         "screencast",
+	"POST /record/stop":          "screencast",
 }
 
 func TestEveryBindingIsPlacedForTheDialogGuard(t *testing.T) {
@@ -572,8 +611,8 @@ func TestEveryBindingIsPlacedForTheDialogGuard(t *testing.T) {
 			t.Errorf("%s drives the page through CDP but does not declare guardDialogBlocked", b.pattern)
 		case allowed && declared:
 			t.Errorf("%s declares guardDialogBlocked but is allow-listed (%s); move it to the must-declare set", b.pattern, reason)
-		case allowed && reason == "":
-			t.Errorf("%s is allow-listed without a reason", b.pattern)
+		case allowed && !dialogGuardAllowReasons[reason]:
+			t.Errorf("%s is allow-listed with %q, which places nothing; give it one of the reasons in dialogGuardAllowReasons or move it to the must-declare set", b.pattern, reason)
 		case !must[b.pattern] && !allowed:
 			t.Errorf("%s is in neither the must-declare set nor the allow-list; place it with a one-word reason", b.pattern)
 		}

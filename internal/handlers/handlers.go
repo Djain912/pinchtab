@@ -398,7 +398,7 @@ func (h *Handlers) bridgeBindings() []routeBinding {
 		{pattern: "POST /clipboard/copy", root: h.HandleClipboardCopy, guards: guardNone},
 		{pattern: "GET /clipboard/paste", root: h.HandleClipboardPaste, guards: guardNone},
 		{pattern: "GET /stealth/status", root: h.HandleStealthStatus, guards: guardNone},
-		{pattern: "POST /fingerprint/rotate", root: h.HandleFingerprintRotate, guards: guardDomainPolicy | guardHandoffPause},
+		{pattern: "POST /fingerprint/rotate", root: h.HandleFingerprintRotate, guards: guardDialogBlocked | guardDomainPolicy | guardHandoffPause},
 		{pattern: "GET /solvers", root: h.HandleListSolvers, guards: guardNone},
 		{pattern: "GET /config/autosolver", root: h.HandleAutoSolverConfig, guards: guardNone},
 		{pattern: "POST /solve", root: h.HandleSolve, tab: h.HandleTabSolve, guards: guardDialogBlocked | guardDomainPolicy | guardHandoffPause},
@@ -411,14 +411,14 @@ func (h *Handlers) bridgeBindings() []routeBinding {
 		{pattern: "POST /emulation/media", root: h.HandleSetMedia, tab: h.HandleTabSetMedia, guards: guardDialogBlocked | guardDomainPolicy | guardHandoffPause},
 		{pattern: "POST /cache/clear", root: h.HandleCacheClear, guards: guardNone},
 		{pattern: "GET /cache/status", root: h.HandleCacheStatus, guards: guardNone},
-		{pattern: "POST /storage", root: h.HandleStorage, tab: h.HandleTabStorageSet, guards: guardDomainPolicy | guardHandoffPause},
-		{pattern: "DELETE /storage", root: h.HandleStorage, tab: h.HandleTabStorageDelete, guards: guardDomainPolicy | guardHandoffPause},
-		{pattern: "GET /storage", root: h.HandleStorage, tab: h.HandleTabStorageGet, guards: guardDomainPolicy}, // no handoff-pause: read probe; the POST/DELETE siblings carry it
-		{pattern: "GET /state", root: h.HandleStateCurrent, guards: guardDomainPolicy},                          // no handoff-pause: captures a snapshot, writes nothing to the tab
+		{pattern: "POST /storage", root: h.HandleStorage, tab: h.HandleTabStorageSet, guards: guardDialogBlocked | guardDomainPolicy | guardHandoffPause},
+		{pattern: "DELETE /storage", root: h.HandleStorage, tab: h.HandleTabStorageDelete, guards: guardDialogBlocked | guardDomainPolicy | guardHandoffPause},
+		{pattern: "GET /storage", root: h.HandleStorage, tab: h.HandleTabStorageGet, guards: guardDialogBlocked | guardDomainPolicy}, // no handoff-pause: read probe; the POST/DELETE siblings carry it
+		{pattern: "GET /state", root: h.HandleStateCurrent, guards: guardDialogBlocked | guardDomainPolicy},                          // no handoff-pause: captures a snapshot, writes nothing to the tab
 		{pattern: "GET /state/list", root: h.HandleStateList, guards: guardNone},
 		{pattern: "GET /state/show", root: h.HandleStateShow, guards: guardNone},
-		{pattern: "POST /state/save", root: h.HandleStateSave, guards: guardDomainPolicy}, // no handoff-pause: POST writes a file, not the tab; /state/load is the write and carries it
-		{pattern: "POST /state/load", root: h.HandleStateLoad, guards: guardDomainPolicy | guardHandoffPause},
+		{pattern: "POST /state/save", root: h.HandleStateSave, guards: guardDialogBlocked | guardDomainPolicy}, // no handoff-pause: POST writes a file, not the tab; /state/load is the write and carries it
+		{pattern: "POST /state/load", root: h.HandleStateLoad, guards: guardDialogBlocked | guardDomainPolicy | guardHandoffPause},
 		{pattern: "DELETE /state", root: h.HandleStateDelete, guards: guardNone},
 		{pattern: "POST /state/clean", root: h.HandleStateClean, guards: guardNone},
 		{pattern: "POST /evaluate", root: h.HandleEvaluate, tab: h.HandleTabEvaluate, guards: guardDialogBlocked | guardDomainPolicy | guardHandoffPause},
