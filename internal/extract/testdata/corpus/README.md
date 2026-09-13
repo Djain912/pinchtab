@@ -92,6 +92,26 @@ floors in step with this directory, and the
 page through the live pipeline, reporting every field and failing an entry
 whose hits fall below its floor.
 
-The toscrape pages are Zyte's public scraping sandbox. The Wikinews article is
-CC BY 2.5 and the Wikipedia pages CC BY-SA 4.0, both credited to their
-contributors at the URLs above.
+## Attribution and licences
+
+The snapshots here and the HTML copies under `tests/e2e/fixtures/corpus/` carry
+third-party page content, captured on 2026-09-13 from the URLs in the table
+above:
+
+- `article`: "Grateful Dead rhythm guitarist Bob Weir dies, aged 78", Wikinews
+  contributors, licensed CC BY 4.0
+  (https://creativecommons.org/licenses/by/4.0/; the page's own footer puts
+  text created after 2024-12-16 under 4.0). Attributed to Wikinews.
+- `infobox`: "Mount Twynam", Wikipedia contributors, and `search`: the
+  Wikipedia search results page for "headless browser", whose snippets are
+  excerpts of Wikipedia articles by Wikipedia contributors; both licensed
+  CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). The copies
+  are adaptations and are shared under the same licence.
+- `product`, `listing`, `login`: Zyte's public scraping sandboxes
+  (books.toscrape.com, quotes.toscrape.com), published for scraping practice.
+- `pricing`, `stories`: snapshot only, no HTML copy; see the e2e manifest.
+
+Changes from the originals: the snapshots are reformatted to one node per line;
+the HTML copies have scripts, iframes and external resources removed,
+stylesheets reduced and inlined, and images replaced by a 1x1 pixel. No text
+was edited.
