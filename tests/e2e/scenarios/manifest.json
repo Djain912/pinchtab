@@ -596,6 +596,7 @@
     "api/memory-basic.sh": {
       "tags": [
         "memory",
+        "compare",
         "pr"
       ]
     },
@@ -613,6 +614,7 @@
       ],
       "tags": [
         "memory",
+        "compare",
         "secure",
         "medium"
       ]
@@ -620,6 +622,7 @@
     "cli/memory-basic.sh": {
       "tags": [
         "memory",
+        "compare",
         "pr"
       ]
     },

@@ -10,7 +10,7 @@ source "${GROUP_DIR}/../../helpers/api.sh"
 
 memory_disabled_tests() {
   # ─────────────────────────────────────────────────────────────────
-  start_test "memory: allowMemory off refuses snapshot and summary, usage still answers"
+  start_test "memory: allowMemory off refuses snapshot, summary and compare, usage still answers"
 
   pt_get /health
   assert_ok "health"
@@ -38,6 +38,10 @@ memory_disabled_tests() {
   pt_get "/memory/snapshot/heap_any/summary"
   assert_http_status 403 "summary refused"
   assert_json_eq "$RESULT" '.code' 'memory_disabled' "summary answers memory_disabled"
+
+  pt_get "/memory/compare?base=heap_a&head=heap_b"
+  assert_http_status 403 "compare refused"
+  assert_json_eq "$RESULT" '.code' 'memory_disabled' "compare answers memory_disabled"
 
   end_test
 }

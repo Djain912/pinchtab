@@ -387,5 +387,6 @@ func allTools() []mcp.Tool {
 		a11yAuditTool(),
 		memoryTool(),
 		memorySnapshotTool(),
+		memoryCompareTool(),
 	}
 }

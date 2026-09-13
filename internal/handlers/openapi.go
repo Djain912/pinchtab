@@ -166,6 +166,14 @@ func (h *Handlers) openAPIDocument(description string) map[string]any {
 			{"name": "top", "in": "query", "description": "Rows per table (default 20, max 200)", "schema": map[string]string{"type": "integer"}},
 		}
 	}
+	if op, ok := paths["/memory/compare"]["get"].(map[string]any); ok {
+		op["parameters"] = []map[string]any{
+			{"name": "base", "in": "query", "required": true, "description": "Id of the earlier heap snapshot", "schema": map[string]string{"type": "string"}},
+			{"name": "head", "in": "query", "required": true, "description": "Id of the later heap snapshot", "schema": map[string]string{"type": "string"}},
+			{"name": "top", "in": "query", "description": "Constructor and duplicate-string rows (default 20, max 200)", "schema": map[string]string{"type": "integer"}},
+			{"name": "retained", "in": "query", "description": "Add retained sizes from a dominator tree of the head snapshot; costs memory and time proportional to its edges", "schema": map[string]string{"type": "boolean"}},
+		}
+	}
 
 	info := map[string]any{
 		"title":   "Pinchtab API",

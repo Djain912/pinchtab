@@ -19,8 +19,8 @@ func TestNewServer(t *testing.T) {
 func TestNewServerRegistersAllTools(t *testing.T) {
 	_ = NewServer("http://localhost:9867", "")
 	tools := allTools()
-	if len(tools) != 46 {
-		t.Errorf("expected 46 tools, got %d — if a tool was added or removed, update this count and the totals in docs/mcp.md", len(tools))
+	if len(tools) != 47 {
+		t.Errorf("expected 47 tools, got %d — if a tool was added or removed, update this count and the totals in docs/mcp.md", len(tools))
 	}
 }
 

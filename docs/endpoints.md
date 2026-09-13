@@ -183,10 +183,11 @@ POST /tabs/{id}/evaluate
 GET  /memory
 POST /memory/snapshot
 GET  /memory/snapshot/{snapshotId}/summary
+GET  /memory/compare?base=<id>&head=<id>
 ```
 
-`/memory` reads the tab's JavaScript heap and DOM counters; the snapshot and summary
-routes need `security.allowMemory` — see [reference/memory.md](reference/memory.md).
+`/memory` reads the tab's JavaScript heap and DOM counters; the snapshot, summary and
+compare routes need `security.allowMemory` — see [reference/memory.md](reference/memory.md).
 
 `POST /actions` and `POST /macro` answer **200 whatever their steps did**: the envelope
 reports the run, and each step's outcome is its own entry — `{"index", "success", "code",

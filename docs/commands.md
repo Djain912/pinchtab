@@ -219,9 +219,11 @@ pinchtab memory --gc --json             # Collect garbage first, raw JSON
 pinchtab memory snapshot                # V8 heap snapshot to a server-side file (security.allowMemory)
 pinchtab memory snapshot --out app.heapsnapshot  # Also copy it to a local path
 pinchtab memory summary <id> --top 5    # Top constructors and duplicate strings of a snapshot
+pinchtab memory compare <a> <b> --top 5 # Constructor growth from snapshot a to snapshot b
+pinchtab memory compare <a> <b> --retained  # Also retained sizes from b's dominator tree
 ```
 
-`pinchtab memory snapshot` and `pinchtab memory summary` need
+`pinchtab memory snapshot`, `summary` and `compare` need
 `security.allowMemory`, because a heap snapshot holds every string on the page.
 See [reference/memory.md](reference/memory.md).
 

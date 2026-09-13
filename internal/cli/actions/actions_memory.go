@@ -156,3 +156,71 @@ func constructorTable(rows []heapsnap.Constructor) string {
 	}
 	return out
 }
+
+type memoryComparison struct {
+	Top      int  `json:"top"`
+	Retained bool `json:"retained"`
+	heapsnap.Comparison
+}
+
+func MemoryCompare(client *http.Client, base, token string, cmd *cobra.Command, baseID, headID string) {
+	params := url.Values{}
+	params.Set("base", baseID)
+	params.Set("head", headID)
+	if top, _ := cmd.Flags().GetInt("top"); top > 0 {
+		params.Set("top", strconv.Itoa(top))
+	}
+	if retained, _ := cmd.Flags().GetBool("retained"); retained {
+		params.Set("retained", "true")
+	}
+	if jsonOutput, _ := cmd.Flags().GetBool("json"); jsonOutput {
+		apiclient.DoGet(client, base, token, "/memory/compare", params)
+		return
+	}
+	body := apiclient.DoGetRaw(client, base, token, "/memory/compare", params)
+	var cmp memoryComparison
+	if err := json.Unmarshal(body, &cmp); err != nil {
+		fmt.Println(string(body))
+		return
+	}
+	fmt.Print(formatMemoryComparison(cmp))
+}
+
+func formatMemoryComparison(c memoryComparison) string {
+	out := fmt.Sprintf("%s → %s: self size %s → %s (%s), nodes %+d, %d constructors changed\n",
+		c.Base.ID, c.Head.ID, formatBytes(c.Base.TotalSelfSize), formatBytes(c.Head.TotalSelfSize),
+		formatSignedBytes(c.SizeDelta), c.NodeDelta, c.Changed)
+	out += "\nConstructors by size delta\n"
+	if len(c.Constructors) == 0 {
+		out += "  (no change)\n"
+	} else {
+		header := fmt.Sprintf("  %-32s  %8s  %12s  %10s  %10s", "CONSTRUCTOR", "COUNT Δ", "SIZE Δ", "BASE", "HEAD")
+		if c.Retained {
+			header += fmt.Sprintf("  %10s", "RETAINED")
+		}
+		out += header + "\n"
+		for _, r := range c.Constructors {
+			line := fmt.Sprintf("  %-32s  %+8d  %12s  %10s  %10s", r.Name, r.CountDelta, formatSignedBytes(r.SizeDelta), formatBytes(r.BaseSelfSize), formatBytes(r.HeadSelfSize))
+			if r.RetainedSize != nil {
+				line += fmt.Sprintf("  %10s", formatBytes(*r.RetainedSize))
+			}
+			out += line + "\n"
+		}
+	}
+	out += "\nNew duplicate strings\n"
+	if len(c.NewDuplicateStrings) == 0 {
+		return out + "  (none)\n"
+	}
+	out += fmt.Sprintf("  %8s  %10s  %s\n", "COUNT", "SELF SIZE", "VALUE")
+	for _, d := range c.NewDuplicateStrings {
+		out += fmt.Sprintf("  %8d  %10s  %q\n", d.Count, formatBytes(d.SelfSize), d.Value)
+	}
+	return out
+}
+
+func formatSignedBytes(n int64) string {
+	if n < 0 {
+		return "-" + formatBytes(-n)
+	}
+	return "+" + formatBytes(n)
+}

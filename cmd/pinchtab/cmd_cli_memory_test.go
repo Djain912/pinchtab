@@ -6,6 +6,7 @@ func TestMemoryCommandsAreRegisteredWithTheirFlags(t *testing.T) {
 	want := map[string][]string{
 		"snapshot": {"tab", "out", "json"},
 		"summary":  {"top", "json"},
+		"compare":  {"top", "retained", "json"},
 	}
 	for _, sub := range memoryCmd.Commands() {
 		flags, ok := want[sub.Name()]

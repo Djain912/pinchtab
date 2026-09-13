@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pinchtab/pinchtab/internal/heapsnap"
 	"github.com/spf13/cobra"
 )
 
@@ -101,5 +102,58 @@ func TestMemorySummaryPrintsTheConstructorTable(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestMemoryComparePrintsTheDeltaTable(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.RequestURI()
+		_, _ = io.WriteString(w, `{"top":5,"retained":true,
+			"base":{"id":"heap_a","nodeCount":20,"edgeCount":6,"totalSelfSize":3536},
+			"head":{"id":"heap_b","nodeCount":15,"edgeCount":17,"totalSelfSize":10820},
+			"nodeDelta":-5,"sizeDelta":7284,"changed":7,
+			"constructors":[{"name":"(array)","baseCount":1,"headCount":2,"countDelta":1,"baseSelfSize":800,"headSelfSize":10000,"sizeDelta":9200,"retainedSize":10000},
+				{"name":"Array","baseCount":3,"headCount":2,"countDelta":-1,"baseSelfSize":1664,"headSelfSize":64,"sizeDelta":-1600,"retainedSize":10064}],
+			"newDuplicateStrings":[{"value":"new-dup-string","length":14,"count":2,"selfSize":80}]}`)
+	}))
+	defer srv.Close()
+
+	cmd := memoryCommand(t, "--top", "5")
+	cmd.Flags().Bool("retained", false, "")
+	if err := cmd.Flags().Set("retained", "true"); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() {
+		MemoryCompare(srv.Client(), srv.URL, "", cmd, "heap_a", "heap_b")
+	})
+	if got != "/memory/compare?base=heap_a&head=heap_b&retained=true&top=5" {
+		t.Fatalf("request = %q", got)
+	}
+	lines := strings.Split(out, "\n")
+	firstRow := ""
+	for i, line := range lines {
+		if strings.Contains(line, "CONSTRUCTOR") && i+1 < len(lines) {
+			firstRow = lines[i+1]
+		}
+	}
+	if !strings.Contains(firstRow, "(array)") || !strings.Contains(firstRow, "+9.0 KB") {
+		t.Fatalf("first row = %q\n%s", firstRow, out)
+	}
+	for _, want := range []string{"heap_a → heap_b", "+7.1 KB", "7 constructors changed", "RETAINED", "-1.6 KB", "9.8 KB", `"new-dup-string"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestMemoryCompareWithoutRetainedPrintsNoRetainedColumn(t *testing.T) {
+	out := formatMemoryComparison(memoryComparison{Comparison: heapsnap.Comparison{
+		Base:         heapsnap.Totals{ID: "heap_a"},
+		Head:         heapsnap.Totals{ID: "heap_b"},
+		Constructors: []heapsnap.ConstructorDelta{{Name: "Array", CountDelta: 1, SizeDelta: 32}},
+	}})
+	if strings.Contains(out, "RETAINED") || !strings.Contains(out, "(none)") {
+		t.Fatalf("output:\n%s", out)
 	}
 }

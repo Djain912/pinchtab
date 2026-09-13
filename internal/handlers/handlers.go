@@ -14,6 +14,7 @@ import (
 	"github.com/pinchtab/pinchtab/internal/config"
 	"github.com/pinchtab/pinchtab/internal/contentguard"
 	"github.com/pinchtab/pinchtab/internal/dashboard"
+	"github.com/pinchtab/pinchtab/internal/heapsnap"
 	"github.com/pinchtab/pinchtab/internal/httpx"
 	"github.com/pinchtab/pinchtab/internal/idpi"
 	"github.com/pinchtab/pinchtab/internal/ids"
@@ -44,6 +45,8 @@ type Handlers struct {
 	emptyPointerPolicy EmptyPointerPolicy
 
 	recorder *recorder
+
+	heapSnapshots heapsnap.Cache
 
 	// Optional dependency injection (for unit testing)
 	evalJS           func(ctx context.Context, expression string, out *string) error
@@ -379,6 +382,7 @@ func (h *Handlers) bridgeBindings() []routeBinding {
 		{pattern: "GET /memory", root: h.HandleMemory, tab: h.HandleTabMemory, guards: guardDialogBlocked | guardDomainPolicy},
 		{pattern: "POST /memory/snapshot", root: h.HandleMemorySnapshot, tab: h.HandleTabMemorySnapshot, guards: guardDialogBlocked | guardDomainPolicy},
 		{pattern: "GET /memory/snapshot/{snapshotId}/summary", root: h.HandleMemorySnapshotSummary, guards: guardNone},
+		{pattern: "GET /memory/compare", root: h.HandleMemoryCompare, guards: guardNone},
 		{pattern: "GET /a11y/audit", root: h.HandleA11yAudit, tab: h.HandleTabA11yAudit, guards: guardDialogBlocked | guardDomainPolicy},
 		{pattern: "POST /audit/page", root: h.HandleAuditPage, guards: guardNone},
 		{pattern: "POST /audit", root: h.HandleAudit, guards: guardNone},

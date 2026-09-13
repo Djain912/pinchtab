@@ -29,6 +29,11 @@ func memoryMockServer(t *testing.T, seen *[]string, snapshotStatus int) *httptes
 				"nodeCount": 20, "edgeCount": 6,
 				"topBySize": []map[string]any{{"name": "Array", "count": 3, "selfSize": 1664}},
 			})
+		case "/memory/compare":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"base": map[string]any{"id": r.URL.Query().Get("base")}, "head": map[string]any{"id": r.URL.Query().Get("head")},
+				"constructors": []map[string]any{{"name": "(array)", "sizeDelta": 15728640}},
+			})
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -85,5 +90,26 @@ func TestMemorySnapshotToolSurfacesTheCapabilityRefusal(t *testing.T) {
 	}
 	if text := resultText(t, result); !strings.Contains(text, "memory_disabled") {
 		t.Fatalf("refusal text = %q, want the capability code", text)
+	}
+}
+
+func TestMemoryCompareToolForwardsTheIdsTopAndRetained(t *testing.T) {
+	var seen []string
+	srv := memoryMockServer(t, &seen, http.StatusOK)
+	defer srv.Close()
+
+	body := resultJSON(t, callSharedTool(t, NewClient(srv.URL, ""), "pinchtab_memory_compare", map[string]any{"base": "heap_a", "head": "heap_b", "top": float64(5), "retained": true}))
+	if len(seen) != 1 || seen[0] != "GET /memory/compare?base=heap_a&head=heap_b&retained=true&top=5" {
+		t.Fatalf("requests = %v", seen)
+	}
+	rows, _ := body["constructors"].([]any)
+	if len(rows) != 1 {
+		t.Fatalf("result = %v", body)
+	}
+
+	seen = nil
+	result := callSharedTool(t, NewClient(srv.URL, ""), "pinchtab_memory_compare", map[string]any{"base": "heap_a"})
+	if !result.IsError || len(seen) != 0 {
+		t.Fatalf("a compare without head = error %v after requests %v, want a local refusal", result.IsError, seen)
 	}
 }

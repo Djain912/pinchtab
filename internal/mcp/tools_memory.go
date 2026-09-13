@@ -31,6 +31,36 @@ func memorySnapshotTool() mcp.Tool {
 	)
 }
 
+func memoryCompareTool() mcp.Tool {
+	return mcp.NewTool("pinchtab_memory_compare",
+		mcp.WithDescription("Compare two pinchtab_memory_snapshot ids: per-constructor count and self-size deltas, largest first, and new duplicate strings. Snapshot, act, snapshot, compare to find a leak. Needs security.allowMemory."),
+		mcp.WithString("base", mcp.Required(), mcp.Description("Earlier snapshot id")),
+		mcp.WithString("head", mcp.Required(), mcp.Description("Later snapshot id")),
+		mcp.WithNumber("top", mcp.Description("Rows (default 20)")),
+		mcp.WithBoolean("retained", mcp.Description("Add retained sizes (slower)")),
+		browserParam(),
+	)
+}
+
+func handleMemoryCompare(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		base, head := optString(r, "base"), optString(r, "head")
+		if base == "" || head == "" {
+			return mcp.NewToolResultError("base and head are required: pass two ids pinchtab_memory_snapshot returned"), nil
+		}
+		q := url.Values{}
+		q.Set("base", base)
+		q.Set("head", head)
+		if top, ok := optInt(r, "top"); ok && top > 0 {
+			q.Set("top", strconv.Itoa(top))
+		}
+		if retained, ok := optBool(r, "retained"); ok && retained {
+			q.Set("retained", "true")
+		}
+		return toolResult(c.withTimeout(memorySnapshotMCPTimeout).Get(ctx, "/memory/compare", routedQuery(r, q)))
+	}
+}
+
 func handleMemory(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		q := url.Values{}

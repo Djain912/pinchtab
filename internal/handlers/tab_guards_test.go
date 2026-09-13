@@ -562,6 +562,7 @@ var dialogGuardAllowList = map[string]string{
 	"DELETE /cookies":  "browser-side",
 	"GET /metrics":     "browser-side",
 	"GET /memory/snapshot/{snapshotId}/summary": "server-side",
+	"GET /memory/compare":                       "server-side",
 	"GET /network/route":                        "browser-side",
 	"POST /network/route":                       "browser-side",
 	"DELETE /network/route":                     "browser-side",

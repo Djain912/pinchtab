@@ -154,6 +154,7 @@ var coreEndpoints = []Endpoint{
 	{"GET", "/memory", "JavaScript heap usage and DOM counters", CapNone, true},
 	{"POST", "/memory/snapshot", "Take a V8 heap snapshot to a server-side file", CapMemory, true},
 	{"GET", "/memory/snapshot/{snapshotId}/summary", "Summarize a saved heap snapshot", CapMemory, false},
+	{"GET", "/memory/compare", "Compare two saved heap snapshots by constructor growth", CapMemory, false},
 	{"GET", "/a11y/audit", "Accessibility findings and score", CapNone, true},
 	{"POST", "/audit/page", "Audit a single page with browser enrichment", CapNone, false},
 	{"POST", "/audit", "Run a multi-page site audit", CapNone, false},

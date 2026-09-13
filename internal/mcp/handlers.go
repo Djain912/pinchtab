@@ -35,6 +35,7 @@ func rawHandlerMap(c *Client) map[string]func(context.Context, mcp.CallToolReque
 		"pinchtab_a11y_audit":      handleA11yAudit(c),
 		"pinchtab_memory":          handleMemory(c),
 		"pinchtab_memory_snapshot": handleMemorySnapshot(c),
+		"pinchtab_memory_compare":  handleMemoryCompare(c),
 
 		"pinchtab_click":            handleAction(c, "click"),
 		"pinchtab_type":             handleAction(c, "type"),

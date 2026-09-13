@@ -195,40 +195,113 @@ func (h *Handlers) HandleMemorySnapshotSummary(w http.ResponseWriter, r *http.Re
 	}
 
 	id := strings.TrimSpace(r.PathValue("snapshotId"))
+	path, ok := h.snapshotPathOrRespond(w, id)
+	if !ok {
+		return
+	}
+	top, ok := memoryTopOrRespond(w, r)
+	if !ok {
+		return
+	}
+	agg, ok := h.loadSnapshotOrRespond(w, id, path, false)
+	if !ok {
+		return
+	}
+	httpx.JSON(w, 200, memorySummaryResponse{ID: id, Path: path, Top: top, Summary: agg.Summary(top)})
+}
+
+type memoryCompareResponse struct {
+	Top      int  `json:"top"`
+	Retained bool `json:"retained"`
+	heapsnap.Comparison
+}
+
+func (h *Handlers) HandleMemoryCompare(w http.ResponseWriter, r *http.Request) {
+	if !h.memoryEnabled() {
+		h.writeCapabilityDisabled(w, routes.CapMemory)
+		return
+	}
+
+	q := r.URL.Query()
+	baseID, headID := strings.TrimSpace(q.Get("base")), strings.TrimSpace(q.Get("head"))
+	if baseID == "" || headID == "" {
+		httpx.ErrorCode(w, 400, "bad_snapshot_id", "base and head are both required: pass the ids two POST /memory/snapshot calls returned", false, nil)
+		return
+	}
+	basePath, ok := h.snapshotPathOrRespond(w, baseID)
+	if !ok {
+		return
+	}
+	headPath, ok := h.snapshotPathOrRespond(w, headID)
+	if !ok {
+		return
+	}
+	top, ok := memoryTopOrRespond(w, r)
+	if !ok {
+		return
+	}
+	retained := false
+	if raw := strings.TrimSpace(q.Get("retained")); raw != "" {
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			httpx.ErrorCode(w, 400, "bad_retained", fmt.Sprintf("retained must be true or false, got %q", raw), false, nil)
+			return
+		}
+		retained = parsed
+	}
+
+	base, ok := h.loadSnapshotOrRespond(w, baseID, basePath, false)
+	if !ok {
+		return
+	}
+	head, ok := h.loadSnapshotOrRespond(w, headID, headPath, retained)
+	if !ok {
+		return
+	}
+	cmp, err := heapsnap.Compare(base, head, heapsnap.Options{Top: top, Retained: retained})
+	if err != nil {
+		httpx.Error(w, 500, fmt.Errorf("compare heap snapshots: %w", err))
+		return
+	}
+	cmp.Base.ID, cmp.Head.ID = baseID, headID
+	httpx.JSON(w, 200, memoryCompareResponse{Top: top, Retained: retained, Comparison: cmp})
+}
+
+func (h *Handlers) snapshotPathOrRespond(w http.ResponseWriter, id string) (string, bool) {
 	path, err := heapsnap.PathForID(h.memorySnapshotDir(), id)
 	if err != nil {
 		httpx.ErrorCode(w, 400, "bad_snapshot_id", err.Error(), false, nil)
-		return
+		return "", false
 	}
+	return path, true
+}
 
-	top := heapsnap.DefaultTop
-	if raw := strings.TrimSpace(r.URL.Query().Get("top")); raw != "" {
-		n, err := strconv.Atoi(raw)
-		if err != nil || n <= 0 {
-			httpx.ErrorCode(w, 400, "bad_top", fmt.Sprintf("top must be a positive integer, got %q", raw), false, nil)
-			return
-		}
-		top = heapsnap.ClampTop(n)
+func memoryTopOrRespond(w http.ResponseWriter, r *http.Request) (int, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get("top"))
+	if raw == "" {
+		return heapsnap.DefaultTop, true
 	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		httpx.ErrorCode(w, 400, "bad_top", fmt.Sprintf("top must be a positive integer, got %q", raw), false, nil)
+		return 0, false
+	}
+	return heapsnap.ClampTop(n), true
+}
 
-	if _, err := os.Stat(path); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			httpx.ErrorCode(w, 404, memorySnapshotNotFoundCode, fmt.Sprintf("no heap snapshot with id %q", id), false, nil)
-			return
-		}
-		httpx.Error(w, 500, fmt.Errorf("stat heap snapshot: %w", err))
-		return
+func (h *Handlers) loadSnapshotOrRespond(w http.ResponseWriter, id, path string, retained bool) (*heapsnap.Aggregate, bool) {
+	agg, err := h.heapSnapshots.Load(path, retained)
+	if err == nil {
+		return agg, true
 	}
-
-	summary, err := heapsnap.SummarizeFile(path, top)
-	if err != nil {
-		var parseErr *heapsnap.ParseError
-		if errors.As(err, &parseErr) {
-			httpx.ErrorCode(w, 422, memorySnapshotInvalidCode, err.Error(), false, map[string]any{"section": parseErr.Section})
-			return
-		}
-		httpx.Error(w, 500, fmt.Errorf("summarize heap snapshot: %w", err))
-		return
+	var parseErr *heapsnap.ParseError
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		httpx.ErrorCode(w, 404, memorySnapshotNotFoundCode, fmt.Sprintf("no heap snapshot with id %q", id), false, map[string]any{"id": id})
+	case errors.As(err, &parseErr):
+		httpx.ErrorCode(w, 422, memorySnapshotInvalidCode, err.Error(), false, map[string]any{"id": id, "section": parseErr.Section})
+	default:
+		httpx.Error(w, 500, fmt.Errorf("read heap snapshot %s: %w", id, err))
 	}
-	httpx.JSON(w, 200, memorySummaryResponse{ID: id, Path: path, Top: top, Summary: summary})
+	return nil, false
 }

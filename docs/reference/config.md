@@ -609,7 +609,7 @@ same key and accepts the same flag.
 
 | Setting | Default | Effect |
 | --- | --- | --- |
-| `security.allowMemory` | `false` | Enables `POST /memory/snapshot` and `GET /memory/snapshot/{snapshotId}/summary` (code `memory_disabled` when off). `GET /memory` needs no capability. |
+| `security.allowMemory` | `false` | Enables `POST /memory/snapshot`, `GET /memory/snapshot/{snapshotId}/summary` and `GET /memory/compare` (code `memory_disabled` when off). `GET /memory` needs no capability. |
 | `security.memorySnapshotMaxBytes` | `536870912` (512 MB) | Size cap for one heap snapshot, max 4 GB; a larger snapshot is aborted with `memory_snapshot_too_large` and no file is left behind |
 
 A heap snapshot contains every string on the page, tokens included, which is why

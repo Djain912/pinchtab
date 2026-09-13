@@ -99,3 +99,61 @@ assert_json_eq "$RESULT" '.code' 'memory_snapshot_not_found' "unknown id is memo
 pt_post /action -d "{\"tabId\":\"${TAB_ID}\",\"kind\":\"click\",\"selector\":\"#release\"}"
 
 end_test
+
+# ─────────────────────────────────────────────────────────────────
+start_test "memory: compare puts (array) growth of three leaks at the top, and a negative delta after release"
+
+pt_post /memory/snapshot -d "{\"tabId\":\"${TAB_ID}\"}"
+assert_ok "baseline snapshot"
+BASE_ID=$(echo "$RESULT" | jq -r '.id')
+
+for i in 1 2 3; do
+  pt_post /action -d "{\"tabId\":\"${TAB_ID}\",\"kind\":\"click\",\"selector\":\"#leak\"}"
+  assert_ok "leak click ${i}"
+done
+
+pt_post /memory/snapshot -d "{\"tabId\":\"${TAB_ID}\"}"
+assert_ok "snapshot after three leaks"
+LEAK_ID=$(echo "$RESULT" | jq -r '.id')
+
+pt_get "/memory/compare?base=${BASE_ID}&head=${LEAK_ID}&top=20"
+assert_ok "compare baseline to leaked"
+assert_json_eq "$RESULT" '.base.id' "$BASE_ID" "compare names the base snapshot"
+assert_json_eq "$RESULT" '.head.id' "$LEAK_ID" "compare names the head snapshot"
+assert_json_eq "$RESULT" '.constructors[0].name' '(array)' "the leaked double arrays' backing stores top the table"
+assert_json_jq "$RESULT" ".constructors[0].sizeDelta >= $((10 * MB))" \
+  "top row grew by at least 10 MB" "top row grew by less than 10 MB"
+assert_json_jq "$RESULT" '.sizeDelta > 0 and .changed >= 1' "totals report growth" "totals report no growth"
+assert_json_jq "$RESULT" '[.constructors[] | has("retainedSize")] | any | not' \
+  "no retainedSize without retained=true" "retainedSize present without retained=true"
+assert_json_exists "$RESULT" '.newDuplicateStrings' "compare lists new duplicate strings"
+
+pt_get "/memory/compare?base=${BASE_ID}&head=${LEAK_ID}&top=5&retained=true"
+assert_ok "compare with retained sizes"
+assert_json_eq "$RESULT" '.retained' 'true' "response says retained"
+assert_json_jq "$RESULT" "[.constructors[] | has(\"retainedSize\")] | all" \
+  "every row carries retainedSize" "a row lacks retainedSize"
+assert_json_jq "$RESULT" ".constructors[0].retainedSize >= $((10 * MB))" \
+  "(array) retains at least 10 MB" "(array) retains under 10 MB"
+
+pt_post /action -d "{\"tabId\":\"${TAB_ID}\",\"kind\":\"click\",\"selector\":\"#release\"}"
+assert_ok "release click"
+pt_get "/memory?tabId=${TAB_ID}&gc=true"
+assert_ok "collect garbage after release"
+
+pt_post /memory/snapshot -d "{\"tabId\":\"${TAB_ID}\"}"
+assert_ok "snapshot after release"
+RELEASED_ID=$(echo "$RESULT" | jq -r '.id')
+
+pt_get "/memory/compare?base=${LEAK_ID}&head=${RELEASED_ID}&top=20"
+assert_ok "compare leaked to released"
+assert_json_eq "$RESULT" '.constructors[0].name' '(array)' "the released backing stores top the table"
+assert_json_jq "$RESULT" ".constructors[0].sizeDelta <= -$((10 * MB))" \
+  "top row shrank by at least 10 MB" "top row did not shrink by 10 MB"
+
+pt_get "/memory/compare?base=${BASE_ID}&head=heap_does_not_exist"
+assert_http_status 404 "unknown head id"
+assert_json_eq "$RESULT" '.code' 'memory_snapshot_not_found' "unknown id is memory_snapshot_not_found"
+assert_json_eq "$RESULT" '.details.id' 'heap_does_not_exist' "refusal names the missing id"
+
+end_test

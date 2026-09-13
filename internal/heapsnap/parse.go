@@ -54,15 +54,16 @@ type Header struct {
 }
 
 type nodeLayout struct {
-	fields   int
-	typeAt   int
-	nameAt   int
-	sizeAt   int
-	typeName []string
+	fields      int
+	typeAt      int
+	nameAt      int
+	sizeAt      int
+	edgeCountAt int
+	typeName    []string
 }
 
 func (h *Header) layout() (nodeLayout, error) {
-	l := nodeLayout{fields: len(h.Meta.NodeFields), typeAt: -1, nameAt: -1, sizeAt: -1}
+	l := nodeLayout{fields: len(h.Meta.NodeFields), typeAt: -1, nameAt: -1, sizeAt: -1, edgeCountAt: -1}
 	for i, f := range h.Meta.NodeFields {
 		switch f {
 		case "type":
@@ -71,6 +72,8 @@ func (h *Header) layout() (nodeLayout, error) {
 			l.nameAt = i
 		case "self_size":
 			l.sizeAt = i
+		case "edge_count":
+			l.edgeCountAt = i
 		}
 	}
 	if l.typeAt < 0 || l.nameAt < 0 || l.sizeAt < 0 {
@@ -167,6 +170,11 @@ type Aggregate struct {
 	TotalSelfSize    int64
 	Constructors     []Constructor
 	DuplicateStrings []DuplicateString
+	Retained         map[string]int64
+}
+
+type ParseOptions struct {
+	Retained bool
 }
 
 type bucket struct {
@@ -186,9 +194,14 @@ type parser struct {
 	byString   map[int64]*bucket
 	strings    map[int64]string
 	seen       map[string]bool
+	graph      *graph
 }
 
 func Parse(r io.Reader) (*Aggregate, error) {
+	return ParseWith(r, ParseOptions{})
+}
+
+func ParseWith(r io.Reader, opts ParseOptions) (*Aggregate, error) {
 	p := &parser{
 		s:        newScanner(r),
 		byName:   map[int64]*bucket{},
@@ -197,6 +210,9 @@ func Parse(r io.Reader) (*Aggregate, error) {
 		strings:  map[int64]string{},
 		seen:     map[string]bool{},
 	}
+	if opts.Retained {
+		p.graph = &graph{}
+	}
 	if err := p.document(); err != nil {
 		return nil, err
 	}
@@ -204,12 +220,16 @@ func Parse(r io.Reader) (*Aggregate, error) {
 }
 
 func ParseFile(path string) (*Aggregate, error) {
+	return ParseFileWith(path, ParseOptions{})
+}
+
+func ParseFileWith(path string, opts ParseOptions) (*Aggregate, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open heap snapshot: %w", err)
 	}
 	defer func() { _ = f.Close() }()
-	return Parse(f)
+	return ParseWith(f, opts)
 }
 
 func (p *parser) document() error {
@@ -276,7 +296,10 @@ func (p *parser) nodes() error {
 		return &ParseError{Section: SectionNodes, Err: errors.New("appears before snapshot.meta")}
 	}
 	l := p.layout
-	var typ, name, size int64
+	if p.graph != nil && l.edgeCountAt < 0 {
+		return &ParseError{Section: SectionMeta, Err: fmt.Errorf("node_fields %v lack edge_count, which retained sizes need", p.header.Meta.NodeFields)}
+	}
+	var typ, name, size, edges int64
 	field := 0
 	count, err := p.s.intArray(func(v int64) error {
 		switch field {
@@ -286,13 +309,15 @@ func (p *parser) nodes() error {
 			name = v
 		case l.sizeAt:
 			size = v
+		case l.edgeCountAt:
+			edges = v
 		}
 		field++
 		if field < l.fields {
 			return nil
 		}
 		field = 0
-		return p.node(typ, name, size)
+		return p.node(typ, name, size, edges)
 	})
 	if err != nil {
 		return sectionError(SectionNodes, err)
@@ -307,12 +332,17 @@ func (p *parser) nodes() error {
 	return nil
 }
 
-func (p *parser) node(typ, name, size int64) error {
+func (p *parser) node(typ, name, size, edges int64) error {
 	if typ < 0 || int(typ) >= len(p.layout.typeName) {
 		return &ParseError{Section: SectionNodes, Err: fmt.Errorf("node type %d outside node_types", typ)}
 	}
 	p.totalSize += size
 	kind := p.layout.typeName[typ]
+	if p.graph != nil {
+		if err := p.graph.addNode(classKeyFor(kind, typ, name), size, edges); err != nil {
+			return err
+		}
+	}
 	switch kind {
 	case "object", "native":
 		add(p.byName, name, size)
@@ -345,7 +375,20 @@ func (p *parser) edges() error {
 	if p.header == nil {
 		return &ParseError{Section: SectionEdges, Err: errors.New("appears before snapshot.meta")}
 	}
-	count, err := p.s.intArray(func(int64) error { return nil })
+	visit := func(int64) error { return nil }
+	var reader *edgeReader
+	if p.graph != nil {
+		if !p.seen[SectionNodes] {
+			return &ParseError{Section: SectionEdges, Err: errors.New("appears before nodes, which retained sizes need")}
+		}
+		layout, err := p.header.edgeLayout()
+		if err != nil {
+			return err
+		}
+		reader = p.graph.edgeReader(layout, p.layout.fields)
+		visit = reader.value
+	}
+	count, err := p.s.intArray(visit)
 	if err != nil {
 		return sectionError(SectionEdges, err)
 	}
@@ -356,6 +399,9 @@ func (p *parser) edges() error {
 	p.edgeValues = count
 	if edges := count / fields; edges != p.header.EdgeCount {
 		return &ParseError{Section: SectionEdges, Err: fmt.Errorf("holds %d edges, snapshot.edge_count says %d", edges, p.header.EdgeCount)}
+	}
+	if reader != nil {
+		return reader.finish()
 	}
 	return nil
 }
@@ -451,7 +497,50 @@ func (p *parser) aggregate() (*Aggregate, error) {
 	sort.Slice(agg.DuplicateStrings, func(i, j int) bool {
 		return lessDuplicate(agg.DuplicateStrings[i], agg.DuplicateStrings[j])
 	})
+	if p.graph != nil {
+		retained, err := p.retained()
+		if err != nil {
+			return nil, err
+		}
+		agg.Retained = retained
+	}
 	return agg, nil
+}
+
+func (p *parser) classNameFor(key int64) (string, error) {
+	if key >= 0 {
+		return p.lookup(key)
+	}
+	return className(p.layout.typeName[-key-1]), nil
+}
+
+func (p *parser) retained() (map[string]int64, error) {
+	ids := map[int64]int32{}
+	byName := map[string]int32{}
+	var names []string
+	classOf := make([]int32, len(p.graph.classKey))
+	for node, key := range p.graph.classKey {
+		id, ok := ids[key]
+		if !ok {
+			name, err := p.classNameFor(key)
+			if err != nil {
+				return nil, err
+			}
+			if id, ok = byName[name]; !ok {
+				id = int32(len(names))
+				names = append(names, name)
+				byName[name] = id
+			}
+			ids[key] = id
+		}
+		classOf[node] = id
+	}
+	sizes := p.graph.classRetained(classOf, len(names))
+	out := make(map[string]int64, len(names))
+	for id, name := range names {
+		out[name] = sizes[id]
+	}
+	return out, nil
 }
 
 const MaxValueRunes = 120

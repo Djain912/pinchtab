@@ -47,7 +47,7 @@ func registerBrowserCommands() {
 	networkCmd.AddCommand(networkRouteCmd, networkUnrouteCmd, networkRulesCmd)
 	recordCmd.AddCommand(recordStartCmd, recordStopCmd, recordStatusCmd)
 	a11yCmd.AddCommand(a11yAuditCmd)
-	memoryCmd.AddCommand(memorySnapshotCmd, memorySummaryCmd)
+	memoryCmd.AddCommand(memorySnapshotCmd, memorySummaryCmd, memoryCompareCmd)
 
 	configureBrowserFlags()
 	configureA11yFlags()
