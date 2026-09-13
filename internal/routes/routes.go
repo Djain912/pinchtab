@@ -21,6 +21,7 @@ const (
 	CapUpload           Capability = "upload"
 	CapStateExport      Capability = "stateExport"
 	CapNetworkIntercept Capability = "networkIntercept"
+	CapMemory           Capability = "memory"
 )
 
 // CapabilityMeta is the single source of truth for a capability gate's
@@ -45,6 +46,7 @@ var capabilityMeta = map[Capability]CapabilityMeta{
 	CapUpload:           {CapUpload, "upload", "security.allowUpload", "upload_disabled"},
 	CapStateExport:      {CapStateExport, "stateExport", "security.allowStateExport", "state_export_disabled"},
 	CapNetworkIntercept: {CapNetworkIntercept, "networkIntercept", "security.allowNetworkIntercept", "network_intercept_disabled"},
+	CapMemory:           {CapMemory, "memory", "security.allowMemory", "memory_disabled"},
 }
 
 // Capabilities lists every gated capability, ordered by label so a reporter
@@ -149,6 +151,9 @@ var coreEndpoints = []Endpoint{
 
 	{"GET", "/metrics", "Runtime metrics", CapNone, true},
 	{"GET", "/timing", "Page timing and Core Web Vitals", CapNone, true},
+	{"GET", "/memory", "JavaScript heap usage and DOM counters", CapNone, true},
+	{"POST", "/memory/snapshot", "Take a V8 heap snapshot to a server-side file", CapMemory, true},
+	{"GET", "/memory/snapshot/{snapshotId}/summary", "Summarize a saved heap snapshot", CapMemory, false},
 	{"GET", "/a11y/audit", "Accessibility findings and score", CapNone, true},
 	{"POST", "/audit/page", "Audit a single page with browser enrichment", CapNone, false},
 	{"POST", "/audit", "Run a multi-page site audit", CapNone, false},

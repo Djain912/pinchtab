@@ -88,10 +88,12 @@ type securityConfigJSON struct {
 	AllowDownload          *bool          `json:"allowDownload"`
 	AllowCookies           *bool          `json:"allowCookies"`
 	AllowNetworkIntercept  *bool          `json:"allowNetworkIntercept"`
+	AllowMemory            *bool          `json:"allowMemory"`
 	AllowFileScheme        *bool          `json:"allowFileScheme"`
 	AllowedDomains         []string       `json:"allowedDomains"`
 	DownloadAllowedDomains []string       `json:"downloadAllowedDomains"`
 	DownloadMaxBytes       *int           `json:"downloadMaxBytes"`
+	MemorySnapshotMaxBytes *int           `json:"memorySnapshotMaxBytes"`
 	AllowUpload            *bool          `json:"allowUpload"`
 	AllowClipboard         *bool          `json:"allowClipboard"`
 	AllowStateExport       *bool          `json:"allowStateExport"`

@@ -193,12 +193,14 @@ func LoadConfig() (*RuntimeConfig, []LoadDiagnostic, error) {
 		AllowDownload:             false,
 		AllowCookies:              false,
 		AllowNetworkIntercept:     false,
+		AllowMemory:               false,
 		AllowFileScheme:           false,
 		RetainNetworkBodies:       false,
 		RetainNetworkBodyMaxBytes: 256 * 1024,
 		AllowedDomains:            nil,
 		DownloadAllowedDomains:    nil,
 		DownloadMaxBytes:          DefaultDownloadMaxBytes,
+		MemorySnapshotMaxBytes:    DefaultMemorySnapshotMaxBytes,
 		AllowUpload:               false,
 		AllowClipboard:            false,
 		AllowStateExport:          false,
@@ -457,12 +459,18 @@ func applySecurityConfig(cfg *RuntimeConfig, s SecurityConfig) {
 	if s.AllowNetworkIntercept != nil {
 		cfg.AllowNetworkIntercept = *s.AllowNetworkIntercept
 	}
+	if s.AllowMemory != nil {
+		cfg.AllowMemory = *s.AllowMemory
+	}
 	if s.AllowFileScheme != nil {
 		cfg.AllowFileScheme = *s.AllowFileScheme
 	}
 	cfg.DownloadAllowedDomains = append([]string(nil), s.DownloadAllowedDomains...)
 	if s.DownloadMaxBytes != nil {
 		cfg.DownloadMaxBytes = clampPositiveLimit(*s.DownloadMaxBytes, DefaultDownloadMaxBytes, MaxDownloadMaxBytes)
+	}
+	if s.MemorySnapshotMaxBytes != nil {
+		cfg.MemorySnapshotMaxBytes = clampPositiveLimit(*s.MemorySnapshotMaxBytes, DefaultMemorySnapshotMaxBytes, MaxMemorySnapshotMaxBytes)
 	}
 	if s.AllowUpload != nil {
 		cfg.AllowUpload = *s.AllowUpload

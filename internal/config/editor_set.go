@@ -503,6 +503,7 @@ var securityBoolFields = map[string]func(*SecurityConfig) **bool{
 	"allowStateExport":      func(s *SecurityConfig) **bool { return &s.AllowStateExport },
 	"allowUpload":           func(s *SecurityConfig) **bool { return &s.AllowUpload },
 	"allowNetworkIntercept": func(s *SecurityConfig) **bool { return &s.AllowNetworkIntercept },
+	"allowMemory":           func(s *SecurityConfig) **bool { return &s.AllowMemory },
 	"allowFileScheme":       func(s *SecurityConfig) **bool { return &s.AllowFileScheme },
 	"trustLoopbackProxy":    func(s *SecurityConfig) **bool { return &s.TrustLoopbackProxy },
 }
@@ -541,6 +542,13 @@ func setSecurityField(s *SecurityConfig, field, value string) error {
 			return fmt.Errorf("security.downloadMaxBytes must be a number: %w", err)
 		}
 		s.DownloadMaxBytes = &n
+		return nil
+	case "memorySnapshotMaxBytes":
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("security.memorySnapshotMaxBytes must be a number: %w", err)
+		}
+		s.MemorySnapshotMaxBytes = &n
 		return nil
 	case "uploadMaxRequestBytes":
 		n, err := strconv.Atoi(value)

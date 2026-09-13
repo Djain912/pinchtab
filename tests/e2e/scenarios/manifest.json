@@ -566,6 +566,33 @@
         "extract",
         "corpus"
       ]
+    },
+    "api/memory-basic.sh": {
+      "tags": [
+        "memory",
+        "pr"
+      ]
+    },
+    "api/memory-extended.sh": {
+      "services": [
+        "pinchtab",
+        "pinchtab-secure",
+        "fixtures"
+      ],
+      "ready": [
+        "E2E_SERVER",
+        "E2E_SECURE_SERVER"
+      ],
+      "tags": [
+        "memory",
+        "secure"
+      ]
+    },
+    "cli/memory-basic.sh": {
+      "tags": [
+        "memory",
+        "pr"
+      ]
     }
   }
 }

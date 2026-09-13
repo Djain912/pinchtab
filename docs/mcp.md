@@ -114,7 +114,7 @@ PINCHTAB_TOKEN=<that-host-token> pinchtab --server http://remote:9867 mcp
 
 ## Available Tools
 
-PinchTab currently exposes 43 tools:
+PinchTab currently exposes 45 tools:
 
 - Navigation: 9
 - Interaction: 8
@@ -126,7 +126,7 @@ PinchTab currently exposes 43 tools:
 - Human handoff: 3
 - Wait utilities: 1
 - Network: 5
-- Diagnostics: 3
+- Diagnostics: 5
 - Dialog: 1
 
 ### Navigation
@@ -203,6 +203,8 @@ PinchTab currently exposes 43 tools:
 - `pinchtab_console` — read (or `clear`) the tab's browser console logs
 - `pinchtab_errors` — read (or `clear`) the tab's uncaught JavaScript exceptions; check this when a snapshot looks healthy but actions do nothing
 - `pinchtab_a11y_audit` — accessibility audit; `engine=axe` runs vendored axe-core in the isolated world and returns ref-mapped violations with WCAG tags and help URLs
+- `pinchtab_memory` — JavaScript heap usage and DOM counters for the tab; `gc=true` collects garbage first so two reads compare retained memory
+- `pinchtab_memory_snapshot` — take a V8 heap snapshot to a server-side file and return only its path and a summary (top constructors, duplicate strings); needs `security.allowMemory`. See [Memory](reference/memory.md)
 
 ### Dialog
 

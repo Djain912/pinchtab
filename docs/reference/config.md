@@ -240,10 +240,12 @@ Current nested file-config shape:
     "allowScreencast": false,
     "allowDownload": false,
     "allowCookies": false,
+    "allowMemory": false,
     "allowFileScheme": false,
     "allowedDomains": ["127.0.0.1", "localhost", "::1"],
     "downloadAllowedDomains": [],
     "downloadMaxBytes": 20971520,
+    "memorySnapshotMaxBytes": 536870912,
     "allowUpload": false,
     "allowClipboard": false,
     "uploadMaxRequestBytes": 10485760,
@@ -602,6 +604,20 @@ either way, but it only raises the level when neither `--log-level` nor
 `server.logLevel` is set — so a persisted `warn` survives `pinchtab server -v`, and
 `--log-level debug` is how you override it for one run. `pinchtab bridge` reads the
 same key and accepts the same flag.
+
+### Memory Diagnostics
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `security.allowMemory` | `false` | Enables `POST /memory/snapshot` and `GET /memory/snapshot/{snapshotId}/summary` (code `memory_disabled` when off). `GET /memory` needs no capability. |
+| `security.memorySnapshotMaxBytes` | `536870912` (512 MB) | Size cap for one heap snapshot, max 4 GB; a larger snapshot is aborted with `memory_snapshot_too_large` and no file is left behind |
+
+A heap snapshot contains every string on the page, tokens included, which is why
+it sits behind its own capability. See [memory.md](memory.md).
+
+```bash
+pinchtab config set security.allowMemory true
+```
 
 ### Network Bind With Token
 

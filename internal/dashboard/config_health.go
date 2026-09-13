@@ -181,6 +181,7 @@ func isGuardsDownPosture(cfg *config.RuntimeConfig) bool {
 		cfg.AllowCookies &&
 		cfg.AllowUpload &&
 		cfg.AllowNetworkIntercept &&
+		cfg.AllowMemory &&
 		cfg.AttachEnabled &&
 		!cfg.IDPI.Enabled
 }

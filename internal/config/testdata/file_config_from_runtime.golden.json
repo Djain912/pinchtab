@@ -78,12 +78,14 @@
     "allowDownload": true,
     "allowCookies": true,
     "allowNetworkIntercept": true,
+    "allowMemory": true,
     "allowFileScheme": true,
     "allowedDomains": null,
     "downloadAllowedDomains": [
       "dl.example"
     ],
     "downloadMaxBytes": 123456,
+    "memorySnapshotMaxBytes": 654321,
     "allowUpload": true,
     "allowClipboard": true,
     "allowStateExport": true,

@@ -95,6 +95,8 @@ POST /tab
 POST /close
 POST /tabs/{id}/close
 GET  /tabs/{id}/metrics
+GET  /tabs/{id}/memory
+POST /tabs/{id}/memory/snapshot
 POST /tabs/{id}/handoff
 GET  /tabs/{id}/handoff
 POST /tabs/{id}/resume
@@ -178,7 +180,13 @@ POST /extract
 POST /tabs/{id}/extract
 POST /evaluate
 POST /tabs/{id}/evaluate
+GET  /memory
+POST /memory/snapshot
+GET  /memory/snapshot/{snapshotId}/summary
 ```
+
+`/memory` reads the tab's JavaScript heap and DOM counters; the snapshot and summary
+routes need `security.allowMemory` — see [reference/memory.md](reference/memory.md).
 
 `POST /actions` and `POST /macro` answer **200 whatever their steps did**: the envelope
 reports the run, and each step's outcome is its own entry — `{"index", "success", "code",

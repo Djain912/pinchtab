@@ -23,16 +23,18 @@ func handlerMap(c *Client) map[string]func(context.Context, mcp.CallToolRequest)
 
 func rawHandlerMap(c *Client) map[string]func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return map[string]func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error){
-		"pinchtab_navigate":   handleNavigate(c),
-		"pinchtab_back":       handleHistoryNav(c, "back"),
-		"pinchtab_forward":    handleHistoryNav(c, "forward"),
-		"pinchtab_reload":     handleHistoryNav(c, "reload"),
-		"pinchtab_snapshot":   handleSnapshot(c),
-		"pinchtab_frame":      handleFrame(c),
-		"pinchtab_screenshot": handleScreenshot(c),
-		"pinchtab_capture":    handleCapture(c),
-		"pinchtab_get_text":   handleGetText(c),
-		"pinchtab_a11y_audit": handleA11yAudit(c),
+		"pinchtab_navigate":        handleNavigate(c),
+		"pinchtab_back":            handleHistoryNav(c, "back"),
+		"pinchtab_forward":         handleHistoryNav(c, "forward"),
+		"pinchtab_reload":          handleHistoryNav(c, "reload"),
+		"pinchtab_snapshot":        handleSnapshot(c),
+		"pinchtab_frame":           handleFrame(c),
+		"pinchtab_screenshot":      handleScreenshot(c),
+		"pinchtab_capture":         handleCapture(c),
+		"pinchtab_get_text":        handleGetText(c),
+		"pinchtab_a11y_audit":      handleA11yAudit(c),
+		"pinchtab_memory":          handleMemory(c),
+		"pinchtab_memory_snapshot": handleMemorySnapshot(c),
 
 		"pinchtab_click":            handleAction(c, "click"),
 		"pinchtab_type":             handleAction(c, "type"),

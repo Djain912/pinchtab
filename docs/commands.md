@@ -210,7 +210,16 @@ pinchtab a11y audit --axe               # Run axe-core in the page (industry rul
 pinchtab a11y audit --axe --tags wcag2a,wcag2aa   # axe: filter by WCAG tags
 pinchtab a11y audit --axe --rules image-alt,label # axe: run only these rule ids
 pinchtab a11y audit --axe --json        # Full JSON envelope with per-node refs
+pinchtab memory                         # JS heap usage and DOM counters for the tab
+pinchtab memory --gc --json             # Collect garbage first, raw JSON
+pinchtab memory snapshot                # V8 heap snapshot to a server-side file (security.allowMemory)
+pinchtab memory snapshot --out app.heapsnapshot  # Also copy it to a local path
+pinchtab memory summary <id> --top 5    # Top constructors and duplicate strings of a snapshot
 ```
+
+`pinchtab memory snapshot` and `pinchtab memory summary` need
+`security.allowMemory`, because a heap snapshot holds every string on the page.
+See [reference/memory.md](reference/memory.md).
 
 `pinchtab a11y audit --axe` runs the vendored axe-core engine (see
 [reference/a11y.md](reference/a11y.md)) in the page's isolated world, so page

@@ -378,5 +378,7 @@ func allTools() []mcp.Tool {
 			browserParam(),
 		),
 		a11yAuditTool(),
+		memoryTool(),
+		memorySnapshotTool(),
 	}
 }

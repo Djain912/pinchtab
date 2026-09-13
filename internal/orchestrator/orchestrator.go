@@ -413,6 +413,11 @@ func (o *Orchestrator) AllowsNetworkIntercept() bool {
 	return cfg != nil && cfg.AllowNetworkIntercept
 }
 
+func (o *Orchestrator) AllowsMemory() bool {
+	cfg := o.cfg()
+	return cfg != nil && cfg.AllowMemory
+}
+
 func (o *Orchestrator) SetPortRange(start, end int) {
 	allocator := NewPortAllocator(start, end)
 	o.mu.Lock()

@@ -357,6 +357,8 @@ func getSecurityField(s *SecurityConfig, field string) (string, error) {
 		return formatStringPtr(s.StateEncryptionKey), nil
 	case "allowNetworkIntercept":
 		return formatBoolPtr(s.AllowNetworkIntercept), nil
+	case "allowMemory":
+		return formatBoolPtr(s.AllowMemory), nil
 	case "allowFileScheme":
 		return formatBoolPtr(s.AllowFileScheme), nil
 	case "allowedDomains":
@@ -365,6 +367,8 @@ func getSecurityField(s *SecurityConfig, field string) (string, error) {
 		return strings.Join(s.DownloadAllowedDomains, ","), nil
 	case "downloadMaxBytes":
 		return formatIntPtr(s.DownloadMaxBytes), nil
+	case "memorySnapshotMaxBytes":
+		return formatIntPtr(s.MemorySnapshotMaxBytes), nil
 	case "allowUpload":
 		return formatBoolPtr(s.AllowUpload), nil
 	case "uploadMaxRequestBytes":

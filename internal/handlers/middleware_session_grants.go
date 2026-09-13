@@ -188,6 +188,7 @@ func sessionBrowseGrantAllows(method, path string) bool {
 			path == "/snapshot",
 			path == "/screenshot",
 			path == "/text",
+			path == "/memory",
 			path == "/openapi.json",
 			path == "/help",
 			path == "/health",
@@ -196,7 +197,8 @@ func sessionBrowseGrantAllows(method, path string) bool {
 		case tabRouteHasSuffix(path, "/snapshot"),
 			tabRouteHasSuffix(path, "/screenshot"),
 			tabRouteHasSuffix(path, "/text"),
-			tabRouteHasSuffix(path, "/metrics"):
+			tabRouteHasSuffix(path, "/metrics"),
+			tabRouteHasSuffix(path, "/memory"):
 			return true
 		}
 	case http.MethodPost:

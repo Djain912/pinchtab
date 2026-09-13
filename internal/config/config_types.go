@@ -30,12 +30,14 @@ type RuntimeConfig struct {
 	AllowDownload         bool
 	AllowCookies          bool
 	AllowNetworkIntercept bool
+	AllowMemory           bool
 	AllowFileScheme       bool
 	// AllowedDomains is the unified per-instance allowlist sourced from
 	// security.allowedDomains in the file config.
 	AllowedDomains         []string
 	DownloadAllowedDomains []string
 	DownloadMaxBytes       int
+	MemorySnapshotMaxBytes int
 	AllowUpload            bool
 	AllowClipboard         bool
 	AllowStateExport       bool
@@ -458,10 +460,12 @@ type SecurityConfig struct {
 	AllowDownload          *bool        `json:"allowDownload,omitempty"`
 	AllowCookies           *bool        `json:"allowCookies,omitempty"`
 	AllowNetworkIntercept  *bool        `json:"allowNetworkIntercept,omitempty"`
+	AllowMemory            *bool        `json:"allowMemory,omitempty"`
 	AllowFileScheme        *bool        `json:"allowFileScheme,omitempty"`
 	AllowedDomains         []string     `json:"allowedDomains,omitempty"`
 	DownloadAllowedDomains []string     `json:"downloadAllowedDomains,omitempty"`
 	DownloadMaxBytes       *int         `json:"downloadMaxBytes,omitempty"`
+	MemorySnapshotMaxBytes *int         `json:"memorySnapshotMaxBytes,omitempty"`
 	AllowUpload            *bool        `json:"allowUpload,omitempty"`
 	AllowClipboard         *bool        `json:"allowClipboard,omitempty"`
 	AllowStateExport       *bool        `json:"allowStateExport,omitempty"`

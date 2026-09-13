@@ -152,6 +152,19 @@ func (h *Handlers) openAPIDocument(description string) map[string]any {
 			{"name": "frameId", "in": "query", "schema": map[string]string{"type": "string"}},
 		}
 	}
+	for _, p := range []string{"/memory", "/tabs/{id}/memory"} {
+		if op, ok := paths[p]["get"].(map[string]any); ok {
+			op["parameters"] = []map[string]any{
+				{"name": "gc", "in": "query", "description": "Run HeapProfiler.collectGarbage before reading", "schema": map[string]string{"type": "boolean"}},
+			}
+		}
+	}
+	if op, ok := paths["/memory/snapshot/{snapshotId}/summary"]["get"].(map[string]any); ok {
+		op["parameters"] = []map[string]any{
+			{"name": "snapshotId", "in": "path", "required": true, "description": "The id POST /memory/snapshot returned", "schema": map[string]string{"type": "string"}},
+			{"name": "top", "in": "query", "description": "Rows per table (default 20, max 200)", "schema": map[string]string{"type": "integer"}},
+		}
+	}
 
 	info := map[string]any{
 		"title":   "Pinchtab API",

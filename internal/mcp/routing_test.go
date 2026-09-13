@@ -24,6 +24,8 @@ var browserToolArgs = map[string]map[string]any{
 	"pinchtab_capture":          {},
 	"pinchtab_get_text":         {},
 	"pinchtab_a11y_audit":       {},
+	"pinchtab_memory":           {},
+	"pinchtab_memory_snapshot":  {},
 	"pinchtab_click":            {"selector": "#go"},
 	"pinchtab_type":             {"selector": "#q", "text": "hello"},
 	"pinchtab_hover":            {"selector": "#go"},
