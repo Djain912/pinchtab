@@ -89,7 +89,9 @@ func (h *Handlers) HandleScreenshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	vocabBefore := h.tabVocab(resolvedTabID)
 	clip, clipErr := h.resolveScreenshotClip(tCtx, resolvedTabID, req.selector)
+	h.publishVocabIfReepoched(w, resolvedTabID, vocabBefore)
 	if clipErr != nil {
 		// A selector that matched nothing answers like every other read verb,
 		// named code included; a clip failure is still a server fault and keeps

@@ -2,8 +2,9 @@
 # vocab-reepoch-basic.sh — every response that re-epochs a tab's ref cache
 # publishes the new vocabulary token (X-PinchTab-Vocab) and the tab it belongs
 # to (X-PinchTab-Tab-Id): /find, /tabs/{id}/find, /annotate,
-# /screenshot?annotate and an action whose semantic selector refreshed the
-# cache. The published token is the one the tab's next /snapshot reports, an
+# /screenshot?annotate, an action, batch or macro whose semantic selector
+# refreshed the cache, and a semantic element read. A response that did not
+# re-epoch publishes nothing. The published token is the one the tab's next /snapshot reports, an
 # action echoing it is accepted, and a stale one is refused 409.
 
 GROUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -129,5 +130,73 @@ else
   fail_assert "find published '$HDR_VOCAB' after the hover published '$TOKEN'"
 fi
 assert_token_is_live "$TOKEN" "$REF" "semantic hover"
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
+start_test "vocab: POST /actions whose semantic step refreshed the cache publishes the token"
+
+fresh_page
+vocab_request POST /actions -d '{"actions":[{"kind":"hover","selector":"semantic:Increment"}]}'
+assert_ok "batch hover semantic:Increment"
+assert_json_eq "$RESULT" '.successful' '1' "the semantic batch step succeeded"
+assert_published "semantic batch"
+TOKEN="$HDR_VOCAB"
+vocab_request POST /find -d '{"query":"Increment"}'
+assert_token_is_live "$TOKEN" "$(echo "$RESULT" | jq -r '.best_ref')" "semantic batch"
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
+start_test "vocab: POST /macro whose semantic step refreshed the cache publishes the token"
+
+fresh_page
+vocab_request POST /macro -d '{"steps":[{"kind":"hover","selector":"semantic:Increment"}]}'
+assert_ok "macro hover semantic:Increment"
+assert_json_eq "$RESULT" '.successful' '1' "the semantic macro step succeeded"
+assert_published "semantic macro"
+TOKEN="$HDR_VOCAB"
+vocab_request POST /find -d '{"query":"Increment"}'
+assert_token_is_live "$TOKEN" "$(echo "$RESULT" | jq -r '.best_ref')" "semantic macro"
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
+start_test "vocab: a semantic element read publishes only the token its resolution minted"
+
+fresh_page
+vocab_request GET "/count?selector=semantic:Increment"
+assert_ok "count semantic:Increment"
+assert_published "semantic /count"
+TOKEN="$HDR_VOCAB"
+
+vocab_request GET "/attr?selector=semantic:Increment&name=id"
+assert_ok "attr semantic:Increment on the now-current vocabulary"
+assert_json_eq "$RESULT" '.value' 'increment' "attr resolved the Increment button"
+if [ -z "$HDR_VOCAB" ]; then
+  pass_assert "a semantic /attr that did not re-epoch publishes no token"
+else
+  fail_assert "a semantic /attr that did not re-epoch published '$HDR_VOCAB'"
+fi
+
+vocab_request POST /find -d '{"query":"Increment"}'
+assert_token_is_live "$TOKEN" "$(echo "$RESULT" | jq -r '.best_ref')" "semantic count"
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
+start_test "vocab: a batch that did not re-epoch publishes no token"
+
+fresh_page
+vocab_request GET "/snapshot?filter=interactive"
+assert_ok "snapshot"
+TOKEN="$HDR_VOCAB"
+vocab_request POST /actions -d '{"actions":[{"kind":"hover","selector":"semantic:Increment"}]}'
+assert_ok "batch hover on the snapshotted vocabulary"
+if [ -z "$HDR_VOCAB" ]; then
+  pass_assert "a batch on an unchanged vocabulary publishes no token"
+else
+  fail_assert "a batch on an unchanged vocabulary published '$HDR_VOCAB' (snapshot token '$TOKEN')"
+fi
 
 end_test

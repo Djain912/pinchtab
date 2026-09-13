@@ -90,7 +90,9 @@ func (h *Handlers) handleInspect(w http.ResponseWriter, r *http.Request, kind in
 
 	targetFrameID := h.resolveTargetFrameID(r, resolvedTabID)
 
+	vocabBefore := h.tabVocab(resolvedTabID)
 	payload, err := h.inspectPayload(tCtx, resolvedTabID, targetFrameID, r.URL.Query().Get("selector"), r.URL.Query().Get("ref"), kind)
+	h.publishVocabIfReepoched(w, resolvedTabID, vocabBefore)
 	if err != nil {
 		respondSelectorFailure(w, err)
 		return

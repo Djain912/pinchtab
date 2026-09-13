@@ -882,6 +882,7 @@ func (h *Handlers) handleActionsBatch(w http.ResponseWriter, r *http.Request, re
 				continue
 			}
 		}
+		run.enterTab(resolvedTabID, h.tabVocab(resolvedTabID))
 		if _, ok := h.applyTabGuards(w, r, ctx, resolvedTabID, guardDomainPolicy); !ok {
 			return
 		}
@@ -902,6 +903,7 @@ func (h *Handlers) handleActionsBatch(w http.ResponseWriter, r *http.Request, re
 	}
 
 	batchRoute := routeMetadataFor(routing)
+	h.publishMultiStepVocab(w, run, resolvedTabID)
 	h.writeMultiStepActionResult(w, r, ctx, resolvedTabID, run.results, len(req.Actions), batchRoute, nil)
 }
 
@@ -927,10 +929,23 @@ type multiStepRun struct {
 	results     []actionResult
 	stopOnError bool
 	stopped     bool
+	vocabBefore map[string]string
 }
 
 func newMultiStepRun(steps int, stopOnError bool) *multiStepRun {
-	return &multiStepRun{results: make([]actionResult, 0, steps), stopOnError: stopOnError}
+	return &multiStepRun{results: make([]actionResult, 0, steps), stopOnError: stopOnError, vocabBefore: map[string]string{}}
+}
+
+func (m *multiStepRun) enterTab(tabID, vocab string) {
+	if _, seen := m.vocabBefore[tabID]; !seen {
+		m.vocabBefore[tabID] = vocab
+	}
+}
+
+func (h *Handlers) publishMultiStepVocab(w http.ResponseWriter, run *multiStepRun, tabID string) {
+	if before, seen := run.vocabBefore[tabID]; seen {
+		h.publishVocabIfReepoched(w, tabID, before)
+	}
 }
 
 func (m *multiStepRun) record(result actionResult) {
@@ -1140,6 +1155,7 @@ func (h *Handlers) HandleMacro(w http.ResponseWriter, r *http.Request) {
 		if step.TabID == "" {
 			step.TabID = resolvedTabID
 		}
+		run.enterTab(resolvedTabID, h.tabVocab(resolvedTabID))
 		if _, ok := h.applyTabGuards(w, r, ctx, resolvedTabID, guardDomainPolicy); !ok {
 			return
 		}
@@ -1175,5 +1191,6 @@ func (h *Handlers) HandleMacro(w http.ResponseWriter, r *http.Request) {
 		EffectiveCfg:   macroEffectiveCfg,
 		Decision:       macroHandleDecision,
 	})
+	h.publishMultiStepVocab(w, run, resolvedTabID)
 	h.writeMultiStepActionResult(w, r, ctx, resolvedTabID, run.results, len(req.Steps), macroRoute, map[string]any{"kind": "macro"})
 }

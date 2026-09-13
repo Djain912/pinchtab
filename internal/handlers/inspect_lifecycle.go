@@ -102,7 +102,9 @@ func (h *Handlers) inspectElement(w http.ResponseWriter, r *http.Request, tabID 
 	defer tCancel()
 	go httpx.CancelOnClientDone(r.Context(), tCancel)
 
+	vocabBefore := h.tabVocab(resolvedTabID)
 	result, err := fn(tCtx, resolvedTabID)
+	h.publishVocabIfReepoched(w, resolvedTabID, vocabBefore)
 	if err != nil {
 		respondSelectorFailure(w, err)
 		return

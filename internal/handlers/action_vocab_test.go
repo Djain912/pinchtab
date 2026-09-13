@@ -8,7 +8,9 @@ import (
 	"go/token"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -285,6 +287,107 @@ func TestEveryReEpochSitePublishesTheVocabularyOnItsResponse(t *testing.T) {
 			t.Errorf("%s sets the vocab header directly; publication goes through publishVocab so every publisher also names the tab the token belongs to", file)
 		}
 	}
+
+	graph := handlerCallGraph(t, files)
+	reEpochs := []string{"bridge.EpochRefs", "refreshRefCache"}
+	reachingHandlers := 0
+	for name := range graph.handlers {
+		if !graph.reaches(name, reEpochs...) {
+			continue
+		}
+		reachingHandlers++
+		if !graph.reaches(name, publishHelpers...) {
+			t.Errorf("%s can re-epoch a tab's refs (%s) but its response never reaches a vocab publish helper, so the client's next ref action is refused vocab_superseded", name, strings.Join(graph.pathTo(name, reEpochs...), " -> "))
+		}
+	}
+	if reachingHandlers < 20 {
+		t.Errorf("only %d handlers reach a re-epoch site; the call graph has lost the semantic-selector paths (count, attr, actions, macro …)", reachingHandlers)
+	}
+}
+
+type packageCallGraph struct {
+	refs     map[string]map[string]bool
+	handlers map[string]bool
+}
+
+func handlerCallGraph(t *testing.T, files []string) packageCallGraph {
+	t.Helper()
+	g := packageCallGraph{refs: map[string]map[string]bool{}, handlers: map[string]bool{}}
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		f := parseHandlerFile(t, file)
+		imported := map[string]bool{}
+		for _, spec := range f.Imports {
+			p, _ := strconv.Unquote(spec.Path.Value)
+			name := path.Base(p)
+			if spec.Name != nil {
+				name = spec.Name.Name
+			}
+			imported[name] = true
+		}
+		for _, decl := range f.Decls {
+			fd, ok := decl.(*ast.FuncDecl)
+			if !ok || fd.Body == nil {
+				continue
+			}
+			name := fd.Name.Name
+			if fd.Recv != nil && strings.HasPrefix(name, "Handle") {
+				g.handlers[name] = true
+			}
+			if g.refs[name] == nil {
+				g.refs[name] = map[string]bool{}
+			}
+			ast.Inspect(fd.Body, func(n ast.Node) bool {
+				switch x := n.(type) {
+				case *ast.SelectorExpr:
+					if id, ok := x.X.(*ast.Ident); ok && imported[id.Name] {
+						g.refs[name][id.Name+"."+x.Sel.Name] = true
+					} else {
+						g.refs[name][x.Sel.Name] = true
+					}
+				case *ast.CallExpr:
+					fun := x.Fun
+					if ix, ok := fun.(*ast.IndexExpr); ok {
+						fun = ix.X
+					}
+					if id, ok := fun.(*ast.Ident); ok {
+						g.refs[name][id.Name] = true
+					}
+				}
+				return true
+			})
+		}
+	}
+	return g
+}
+
+func (g packageCallGraph) reaches(from string, targets ...string) bool {
+	return g.pathTo(from, targets...) != nil
+}
+
+func (g packageCallGraph) pathTo(from string, targets ...string) []string {
+	seen := map[string]bool{from: true}
+	var walk func(string) []string
+	walk = func(name string) []string {
+		for _, target := range targets {
+			if name == target {
+				return []string{name}
+			}
+		}
+		for next := range g.refs[name] {
+			if seen[next] {
+				continue
+			}
+			seen[next] = true
+			if rest := walk(next); rest != nil {
+				return append([]string{name}, rest...)
+			}
+		}
+		return nil
+	}
+	return walk(from)
 }
 
 func fileCallsAnyIdent(t *testing.T, name string, idents ...string) bool {
@@ -440,5 +543,77 @@ func TestFindPublishesTheVocabularyItsAutoRefreshMinted(t *testing.T) {
 	}
 	if got := w.Header().Get(activity.HeaderPTTabID); got != "tab1" {
 		t.Errorf("tab header = %q, want tab1 so a client keys the token to the resolved tab", got)
+	}
+}
+
+func TestAMultiStepRunThatReEpochsTheTabPublishesTheNewVocabulary(t *testing.T) {
+	for _, surface := range []struct {
+		name  string
+		path  string
+		body  string
+		serve func(*Handlers) http.HandlerFunc
+	}{
+		{"batch", "/actions", `{"tabId":"tab1","actions":[{"kind":"click","x":10,"y":20}]}`, func(h *Handlers) http.HandlerFunc { return h.HandleActions }},
+		{"macro", "/macro", `{"tabId":"tab1","steps":[{"kind":"click","x":10,"y":20}]}`, func(h *Handlers) http.HandlerFunc { return h.HandleMacro }},
+	} {
+		for _, tc := range []struct {
+			name string
+			next *bridge.RefCache
+			want string
+		}{
+			{"re-epoched", &bridge.RefCache{DomEpoch: "fresh"}, "fresh"},
+			{"untouched", nil, ""},
+		} {
+			t.Run(surface.name+"/"+tc.name, func(t *testing.T) {
+				mb := &reepochingVocabBridge{
+					vocabMockBridge: vocabMockBridge{
+						mockBridge: mockBridge{availableActions: []string{bridge.ActionClick}},
+						refCache:   &bridge.RefCache{DomEpoch: "current"},
+					},
+					next: tc.next,
+				}
+				h := New(mb, &config.RuntimeConfig{ActionTimeout: time.Second, AllowMacro: true}, nil, nil, nil)
+				w := httptest.NewRecorder()
+				surface.serve(h)(w, httptest.NewRequest("POST", surface.path, strings.NewReader(surface.body)))
+				if !mb.executeCalled {
+					t.Fatalf("the step did not reach ExecuteAction (status %d): %s", w.Code, w.Body.String())
+				}
+				if got := w.Header().Get(vocabHeader); got != tc.want {
+					t.Errorf("vocab header = %q, want %q", got, tc.want)
+				}
+				if tc.want != "" && w.Header().Get(activity.HeaderPTTabID) != "tab1" {
+					t.Errorf("tab header = %q, want tab1 so a client keys the token to the tab", w.Header().Get(activity.HeaderPTTabID))
+				}
+			})
+		}
+	}
+}
+
+func TestASemanticElementReadPublishesOnlyTheVocabularyItsResolutionMinted(t *testing.T) {
+	fresh := &bridge.RefCache{
+		DomEpoch: "ep_fresh",
+		Nodes:    []bridge.A11yNode{{Ref: "e11", Role: "link", Name: "Go page 2"}},
+		Refs:     map[string]int64{"e11": 11},
+	}
+	for _, tc := range []struct {
+		name   string
+		bridge bridge.BridgeAPI
+		want   string
+	}{
+		{"auto-refreshed", &autoRefreshFindBridge{fresh: fresh}, "ep_fresh"},
+		{"cache already current", &findMockBridge{refCache: fresh}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := New(tc.bridge, &config.RuntimeConfig{ActionTimeout: 10 * time.Second}, nil, nil, nil)
+			h.Matcher = semantic.NewLexicalMatcher()
+			w := httptest.NewRecorder()
+			h.HandleCount(w, httptest.NewRequest("GET", "/count?selector=find:Go%20page%202", nil))
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d: %s", w.Code, w.Body.String())
+			}
+			if got := w.Header().Get(vocabHeader); got != tc.want {
+				t.Errorf("vocab header = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
