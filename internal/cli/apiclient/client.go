@@ -34,17 +34,6 @@ type vocabStore struct {
 	Entries []vocabEntry `json:"entries"`
 }
 
-// DoGetCapturingVocab performs a GET like DoGet and, on success, persists the
-// response's vocabulary token keyed by the tab the server resolved (the
-// X-PinchTab-Tab-Id header), not by how the caller spelled --tab. When the
-// snapshot was implicit (no --tab), the resolved tab also becomes the store's
-// current pointer, so a later implicit action echoes that tab's token. The token
-// is delivered as a response header so it survives every snapshot format,
-// including the compact text the CLI defaults to.
-func DoGetCapturingVocab(client *http.Client, base, token, path string, params url.Values, implicit bool) map[string]any {
-	return DoGet(client, base, token, path, params, CaptureVocab(implicit))
-}
-
 // VocabForAction returns the tab id to tag and the token to echo for an action.
 // An explicit --tab X uses X's own record; an implicit action uses the current
 // pointer's tab. The returned tab is sent as VocabTabHeader so the server can
@@ -147,153 +136,89 @@ func fileSlug(s string) string {
 	return s
 }
 
-// doAndRender runs the request with the standard fatal-on-transport-error +
-// exit-on-HTTP-error policy, then pretty-prints and decodes the body.
-func doAndRender(client *http.Client, token string, r request) map[string]any {
-	status, body := mustRequest(client, token, r)
-	exitOnAPIError(r, status, body)
-	return printAndDecode(body)
-}
-
-func DoGet(client *http.Client, base, token, path string, params url.Values, opts ...RequestOption) map[string]any {
-	return doAndRender(client, token, newRequest("GET", base, buildURL(base, path, params), nil, nil, opts))
-}
-
-func DoGetRaw(client *http.Client, base, token, path string, params url.Values, opts ...RequestOption) []byte {
-	r := newRequest("GET", base, buildURL(base, path, params), nil, nil, opts)
+// execute applies the standard fatal-on-transport-error + exit-on-HTTP-error
+// policy and returns the body.
+func execute(client *http.Client, token string, r request) []byte {
 	status, body := mustRequest(client, token, r)
 	exitOnAPIError(r, status, body)
 	return body
 }
 
-// DoGetRawCapturingVocab is DoGetRaw plus the vocabulary capture of
-// DoGetCapturingVocab: it returns the raw body unprinted (for a caller that
-// renders its own summary) and persists the response's vocabulary token so a
-// later action echoes it. The a11y axe audit needs this: it re-epochs the tab's
-// ref cache, so an action on a returned ref would be refused 409 against a stale
-// token if the CLI never captured the fresh one.
-func DoGetRawCapturingVocab(client *http.Client, base, token, path string, params url.Values, implicit bool) []byte {
-	return DoGetRaw(client, base, token, path, params, CaptureVocab(implicit))
+// executeE is execute's returning twin: long-running commands use it when they
+// need to release resources before reporting a request failure.
+func executeE(client *http.Client, token string, r request) ([]byte, error) {
+	status, body, err := doRequest(client, token, r)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	if status >= http.StatusBadRequest {
+		return nil, &StatusError{Status: status, Body: body, message: strings.TrimSpace(renderAPIError(r, status, body))}
+	}
+	return body, nil
 }
 
-// DoGetRawAndPrintCapturingVocab fetches and prints the raw snapshot body (for the
-// --snap / --snap-diff tail) and, on success, persists the response's vocabulary
-// token keyed by the resolved tab (implicit when the caller named no tab), so a ref
-// the snapshot printed can be acted on without a re-snapshot and without a false
-// 409. It stays best-effort — a transport or HTTP failure warns on stderr and
-// returns, never exits (unlike DoGetRawCapturingVocab, which calls exitOnAPIError):
-// this tail runs after an action that already succeeded, so a cosmetic snapshot
-// failure must not turn a successful action into a non-zero exit.
-func DoGetRawAndPrintCapturingVocab(client *http.Client, base, token, pathWithQuery string, implicit bool) {
-	status, body, err := doRequest(client, token, newRequest("GET", base, base+pathWithQuery, nil, nil, []RequestOption{CaptureVocab(implicit)}))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "snapshot failed: %v\n", err)
-		return
+func render(r request, body []byte) map[string]any {
+	if r.quiet {
+		return decodeObject(body)
 	}
-	if status >= 400 {
-		fmt.Fprintf(os.Stderr, "snapshot error %d: %s\n", status, string(body))
-		return
-	}
-	fmt.Println(string(body))
+	return printAndDecode(body)
+}
+
+// decodeObject populates a map from an object response; array/scalar responses
+// leave it nil, so callers that need a map should branch on result == nil.
+func decodeObject(body []byte) map[string]any {
+	var result map[string]any
+	_ = json.Unmarshal(body, &result)
+	return result
+}
+
+func prepend(first RequestOption, opts []RequestOption) []RequestOption {
+	return append([]RequestOption{first}, opts...)
+}
+
+func DoGet(client *http.Client, base, token, path string, params url.Values, opts ...RequestOption) map[string]any {
+	r := newRequest(http.MethodGet, base, path, prepend(WithQuery(params), opts)...)
+	return render(r, execute(client, token, r))
+}
+
+func DoGetRaw(client *http.Client, base, token, path string, params url.Values, opts ...RequestOption) []byte {
+	return execute(client, token, newRequest(http.MethodGet, base, path, prepend(WithQuery(params), opts)...))
 }
 
 func DoPost(client *http.Client, base, token, path string, body map[string]any, opts ...RequestOption) map[string]any {
-	return DoPostWithHeaders(client, base, token, path, body, nil, opts...)
+	r := newRequest(http.MethodPost, base, path, prepend(WithBody(body), opts)...)
+	return render(r, execute(client, token, r))
 }
 
 // DoPostQuiet is like DoPost but does not print the response body. Callers are
 // responsible for rendering whatever output is appropriate (e.g. a single
 // field for machine-friendly piping).
 func DoPostQuiet(client *http.Client, base, token, path string, body map[string]any, opts ...RequestOption) map[string]any {
-	return DoPostQuietWithHeaders(client, base, token, path, body, nil, opts...)
+	return DoPost(client, base, token, path, body, prepend(Quiet(), opts)...)
 }
 
 // DoPostRaw sends a POST and returns the raw response body without printing.
 // Exits on HTTP errors.
-func DoPostRaw(client *http.Client, base, token, path string, body map[string]any) []byte {
-	statusCode, respBody, _ := doPostQuietWithStatus(client, base, token, path, body, nil)
-	exitOnAPIError(request{method: "POST", url: base + path, body: body}, statusCode, respBody)
-	return respBody
+func DoPostRaw(client *http.Client, base, token, path string, body map[string]any, opts ...RequestOption) []byte {
+	return execute(client, token, newRequest(http.MethodPost, base, path, prepend(WithBody(body), opts)...))
 }
 
-// DoPostRawE sends a POST and returns an error instead of terminating the
-// process. Long-running commands use it when they need to release resources
-// before reporting a request failure.
-func DoPostRawE(client *http.Client, base, token, path string, body map[string]any) ([]byte, error) {
-	r := request{method: "POST", url: base + path, body: body}
-	statusCode, respBody, err := doRequest(client, token, r)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	if statusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("%s", strings.TrimSpace(renderAPIError(r, statusCode, respBody)))
-	}
-	return respBody, nil
-}
-
-// DoGetRawE sends a GET and returns an error instead of terminating the
-// process. See DoPostRawE.
-func DoGetRawE(client *http.Client, base, token, path string, params url.Values) ([]byte, error) {
-	r := request{method: "GET", url: buildURL(base, path, params)}
-	statusCode, respBody, err := doRequest(client, token, r)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	if statusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("%s", strings.TrimSpace(renderAPIError(r, statusCode, respBody)))
-	}
-	return respBody, nil
-}
-
-func DoPostQuietWithStatus(client *http.Client, base, token, path string, body map[string]any) (int, []byte, map[string]any) {
-	return doPostQuietWithStatus(client, base, token, path, body, nil)
-}
-
-// DoPostQuietWithHeaders is like DoPostQuiet but allows custom headers.
-func DoPostQuietWithHeaders(client *http.Client, base, token, path string, body map[string]any, headers map[string]string, opts ...RequestOption) map[string]any {
-	statusCode, respBody, result := doPostQuietWithStatus(client, base, token, path, body, headers, opts...)
-	exitOnAPIError(request{method: "POST", url: base + path, body: body, headers: headers}, statusCode, respBody)
-	return result
-}
-
-func doPostQuietWithStatus(client *http.Client, base, token, path string, body map[string]any, headers map[string]string, opts ...RequestOption) (int, []byte, map[string]any) {
-	status, respBody := mustRequest(client, token, newRequest("POST", base, base+path, body, headers, opts))
-
+func DoPostQuietWithStatus(client *http.Client, base, token, path string, body map[string]any, opts ...RequestOption) (int, []byte, map[string]any) {
+	status, respBody := mustRequest(client, token, newRequest(http.MethodPost, base, path, prepend(WithBody(body), opts)...))
 	var result map[string]any
-	if status < 400 {
-		// Object responses populate result; array/scalar responses leave it nil.
-		// Callers that need a map should branch on result == nil.
-		_ = json.Unmarshal(respBody, &result)
+	if status < http.StatusBadRequest {
+		result = decodeObject(respBody)
 	}
 	return status, respBody, result
 }
 
-func DoPostWithHeaders(client *http.Client, base, token, path string, body map[string]any, headers map[string]string, opts ...RequestOption) map[string]any {
-	return doAndRender(client, token, newRequest("POST", base, base+path, body, headers, opts))
+func DoDelete(client *http.Client, base, token, path string, params url.Values, opts ...RequestOption) map[string]any {
+	r := newRequest(http.MethodDelete, base, path, prepend(WithQuery(params), opts)...)
+	return render(r, execute(client, token, r))
 }
 
-// DoDelete sends a DELETE request with an optional JSON body (e.g. for ?name= query params, pass nil body and handle params in path).
-func DoDelete(client *http.Client, base, token, path string, params url.Values) map[string]any {
-	return doAndRender(client, token, request{method: "DELETE", url: buildURL(base, path, params)})
-}
-
-// DoDeleteJSON sends a DELETE request with a JSON body.
-func DoDeleteJSON(client *http.Client, base, token, path string, body map[string]any) map[string]any {
-	return doAndRender(client, token, request{method: "DELETE", url: base + path, body: body})
-}
-
-// DoDeleteQuiet is like DoDelete but does not print the response body, so a
-// self-rendering caller emits its own output exactly once. It keeps DoDelete's
-// fatal-on-transport-error + exit-on-HTTP-error policy; a non-object body
-// returns a nil map for the caller to branch on.
-func DoDeleteQuiet(client *http.Client, base, token, path string, params url.Values) map[string]any {
-	r := request{method: "DELETE", url: buildURL(base, path, params)}
-	status, body := mustRequest(client, token, r)
-	exitOnAPIError(r, status, body)
-
-	var result map[string]any
-	_ = json.Unmarshal(body, &result)
-	return result
+func DoRawE(client *http.Client, base, token, method, path string, opts ...RequestOption) ([]byte, error) {
+	return executeE(client, token, newRequest(method, base, path, opts...))
 }
 
 // ResolveInstanceBase fetches the named instance from the orchestrator and returns

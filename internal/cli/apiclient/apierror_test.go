@@ -181,8 +181,8 @@ func TestUnrelatedTabNotFoundGetsNoRemedy(t *testing.T) {
 	}
 }
 
-// DoGetRawE and DoPostRawE return instead of terminating — one caller polls them
-// ten times a second — so rendering their error must leave the cache alone.
+// DoRawE returns instead of terminating — one caller polls it
+// ten times a second — so rendering its error must leave the cache alone.
 func TestReturningRequestPathsLeaveTheCacheIntact(t *testing.T) {
 	path := cachedTabFile(t, "CACHED-TAB")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -195,9 +195,11 @@ func TestReturningRequestPathsLeaveTheCacheIntact(t *testing.T) {
 		name string
 		call func() ([]byte, error)
 	}{
-		{"DoGetRawE", func() ([]byte, error) { return DoGetRawE(srv.Client(), srv.URL, "", "/tabs/CACHED-TAB/text", nil) }},
-		{"DoPostRawE", func() ([]byte, error) {
-			return DoPostRawE(srv.Client(), srv.URL, "", "/action", map[string]any{"kind": "click"})
+		{"GET", func() ([]byte, error) {
+			return DoRawE(srv.Client(), srv.URL, "", http.MethodGet, "/tabs/CACHED-TAB/text")
+		}},
+		{"POST", func() ([]byte, error) {
+			return DoRawE(srv.Client(), srv.URL, "", http.MethodPost, "/action", WithBody(map[string]any{"kind": "click"}))
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

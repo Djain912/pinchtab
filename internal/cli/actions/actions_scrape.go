@@ -75,7 +75,7 @@ func Scrape(client *http.Client, base, token string, cmd *cobra.Command, target 
 	}
 
 	longClient := &http.Client{Transport: client.Transport, Timeout: scrapeTimeout}
-	raw, err := apiclient.DoPostRawE(longClient, base, token, "/scrape", body)
+	raw, err := apiclient.DoRawE(longClient, base, token, http.MethodPost, "/scrape", apiclient.WithBody(body))
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,11 @@ package actions
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 
@@ -128,21 +132,21 @@ func postActionWithHeaders(client *http.Client, base, token string, cmd *cobra.C
 		}
 	}
 
-	capture := apiclient.CaptureVocab(tabID == "")
+	opts := []apiclient.RequestOption{apiclient.WithHeaders(headers), apiclient.CaptureVocab(namedNoTab(cmd))}
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 	if jsonOutput {
-		apiclient.DoPostWithHeaders(client, base, token, path, body, headers, capture)
+		apiclient.DoPost(client, base, token, path, body, opts...)
 		return
 	}
 
-	result := apiclient.DoPostQuietWithHeaders(client, base, token, path, body, headers, capture)
+	result := apiclient.DoPostQuiet(client, base, token, path, body, opts...)
 	kind, _ := body["kind"].(string)
 	printActionResult(kind, result)
 
 	snap, _ := cmd.Flags().GetBool("snap")
 	snapDiff, _ := cmd.Flags().GetBool("snap-diff")
 	if snap || snapDiff {
-		fetchAndPrintSnapshot(client, base, token, tabID, snapDiff, tabID == "")
+		fetchAndPrintSnapshot(client, base, token, cmd, tabID, snapDiff)
 	}
 
 	text, _ := cmd.Flags().GetBool("text")
@@ -151,15 +155,33 @@ func postActionWithHeaders(client *http.Client, base, token string, cmd *cobra.C
 	}
 }
 
-func fetchAndPrintSnapshot(client *http.Client, base, token, tabID string, diff, implicit bool) {
-	params := "filter=interactive&format=compact"
+func namedNoTab(cmd *cobra.Command) bool {
+	tab, _ := cmd.Flags().GetString("tab")
+	return tab == ""
+}
+
+// fetchAndPrintSnapshot is the --snap / --snap-diff tail. It stays best-effort —
+// a transport or HTTP failure warns on stderr and returns, never exits: this tail
+// runs after an action that already succeeded, so a cosmetic snapshot failure
+// must not turn a successful action into a non-zero exit.
+func fetchAndPrintSnapshot(client *http.Client, base, token string, cmd *cobra.Command, tabID string, diff bool) {
+	params := url.Values{"filter": {"interactive"}, "format": {"compact"}}
 	if diff {
-		params += "&diff=true"
+		params.Set("diff", "true")
 	}
 	if tabID != "" {
-		params += "&tabId=" + tabID
+		params.Set("tabId", tabID)
 	}
-	apiclient.DoGetRawAndPrintCapturingVocab(client, base, token, "/snapshot?"+params, implicit)
+	body, err := apiclient.DoRawE(client, base, token, http.MethodGet, "/snapshot", apiclient.WithQuery(params), apiclient.CaptureVocab(namedNoTab(cmd)))
+	var statusErr *apiclient.StatusError
+	switch {
+	case errors.As(err, &statusErr):
+		fmt.Fprintf(os.Stderr, "snapshot error %d: %s\n", statusErr.Status, string(statusErr.Body))
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "snapshot failed: %v\n", errors.Unwrap(err))
+	default:
+		fmt.Println(string(body))
+	}
 }
 
 func fetchAndPrintText(client *http.Client, base, token, tabID string) {

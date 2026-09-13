@@ -2,6 +2,7 @@ package actions
 
 import (
 	"encoding/json"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -269,7 +270,7 @@ func TestPressWithSnapDiffFetchesSnapshot(t *testing.T) {
 	if m.requests[1].Path != "/snapshot" {
 		t.Fatalf("snapshot path = %q, want /snapshot", m.requests[1].Path)
 	}
-	if m.requests[1].Query != "filter=interactive&format=compact&diff=true" {
+	if m.requests[1].Query != (url.Values{"filter": {"interactive"}, "format": {"compact"}, "diff": {"true"}}).Encode() {
 		t.Fatalf("snapshot query = %q", m.requests[1].Query)
 	}
 }

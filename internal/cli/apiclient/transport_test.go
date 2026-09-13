@@ -76,11 +76,11 @@ func TestAnUnbuildableRequestFailsBeforeTheWire(t *testing.T) {
 
 	for name, call := range map[string]func() error{
 		"malformed base": func() error {
-			_, err := DoPostRawE(srv.Client(), "http://bad host:9867", "", "/action", map[string]any{"kind": "click"})
+			_, err := DoRawE(srv.Client(), "http://bad host:9867", "", http.MethodPost, "/action", WithBody(map[string]any{"kind": "click"}))
 			return err
 		},
 		"unencodable body": func() error {
-			_, err := DoPostRawE(srv.Client(), srv.URL, "", "/geolocation", map[string]any{"latitude": math.NaN(), "longitude": 0.0})
+			_, err := DoRawE(srv.Client(), srv.URL, "", http.MethodPost, "/geolocation", WithBody(map[string]any{"latitude": math.NaN(), "longitude": 0.0}))
 			return err
 		},
 	} {
@@ -113,7 +113,7 @@ func TestCaptureVocabStoresOnlyASuccessfulResponsesToken(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			r := newRequest(http.MethodPost, srv.URL, srv.URL+"/find", map[string]any{"query": "x"}, nil, []RequestOption{CaptureVocab(true)})
+			r := newRequest(http.MethodPost, srv.URL, "/find", WithBody(map[string]any{"query": "x"}), CaptureVocab(true))
 			if _, _, err := doRequest(srv.Client(), "", r); err != nil {
 				t.Fatal(err)
 			}

@@ -18,9 +18,11 @@ import (
 type request struct {
 	method  string
 	url     string
+	query   url.Values
 	body    map[string]any
 	headers map[string]string
 	base    string
+	quiet   bool
 	vocab   *vocabCapture
 }
 
@@ -30,15 +32,38 @@ type vocabCapture struct {
 
 type RequestOption func(*request)
 
+// CaptureVocab persists a successful response's vocabulary token keyed by the tab
+// the server resolved (the X-PinchTab-Tab-Id header), not by how the caller spelled
+// --tab. When implicit (no --tab), the resolved tab also becomes the store's
+// current pointer, so a later implicit action echoes that tab's token. The token
+// is delivered as a response header so it survives every snapshot format,
+// including the compact text the CLI defaults to.
 func CaptureVocab(implicit bool) RequestOption {
 	return func(r *request) { r.vocab = &vocabCapture{implicit: implicit} }
 }
 
-func newRequest(method, base, url string, body map[string]any, headers map[string]string, opts []RequestOption) request {
-	r := request{method: method, url: url, body: body, headers: headers, base: base}
+func WithQuery(params url.Values) RequestOption {
+	return func(r *request) { r.query = params }
+}
+
+func WithBody(body map[string]any) RequestOption {
+	return func(r *request) { r.body = body }
+}
+
+func WithHeaders(headers map[string]string) RequestOption {
+	return func(r *request) { r.headers = headers }
+}
+
+func Quiet() RequestOption {
+	return func(r *request) { r.quiet = true }
+}
+
+func newRequest(method, base, path string, opts ...RequestOption) request {
+	r := request{method: method, base: base}
 	for _, opt := range opts {
 		opt(&r)
 	}
+	r.url = buildURL(base, path, r.query)
 	return r
 }
 

@@ -67,7 +67,7 @@ func CookiesSet(client *http.Client, base, token string, cmd *cobra.Command, nam
 
 // CookiesClear clears all browser cookies.
 func CookiesClear(client *http.Client, base, token string, cmd *cobra.Command) {
-	result := apiclient.DoDeleteQuiet(client, base, token, "/cookies", nil)
+	result := apiclient.DoDelete(client, base, token, "/cookies", nil, apiclient.Quiet())
 	if result == nil {
 		fmt.Fprintln(os.Stderr, "ERROR: cookies: clear failed")
 		os.Exit(2)

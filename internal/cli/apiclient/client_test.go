@@ -186,7 +186,7 @@ func TestSnapTailDoesNotExitWhenSnapshotFails(t *testing.T) {
 	defer srv.httpServer.Close()
 	base, client := srv.httpServer.URL, srv.httpServer.Client()
 
-	apiclient.DoGetRawAndPrintCapturingVocab(client, base, "", "/snapshot?filter=interactive&format=compact", true)
+	actions.Action(client, base, "", "click", "e0", actionCmd("", true))
 
 	if tok := apiclient.VocabTokenFor(base, "X"); tok != "" {
 		t.Fatalf("a failed snapshot stored a token %q; nothing should be captured from a non-2xx", tok)

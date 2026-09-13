@@ -43,12 +43,12 @@ func A11yAudit(client *http.Client, base, token string, cmd *cobra.Command) {
 	// vocabulary token; capture it the way snapshot does (keyed by the resolved
 	// tab, implicit when no --tab) so a later action on a returned ref echoes the
 	// token the audit minted instead of a stale one the server would refuse 409.
-	implicit := params.Get("tabId") == ""
+	capture := apiclient.CaptureVocab(namedNoTab(cmd))
 	if jsonOutput, _ := cmd.Flags().GetBool("json"); jsonOutput {
-		apiclient.DoGetCapturingVocab(client, base, token, "/a11y/audit", params, implicit)
+		apiclient.DoGet(client, base, token, "/a11y/audit", params, capture)
 		return
 	}
-	printA11ySummary(apiclient.DoGetRawCapturingVocab(client, base, token, "/a11y/audit", params, implicit))
+	printA11ySummary(apiclient.DoGetRaw(client, base, token, "/a11y/audit", params, capture))
 }
 
 // printA11ySummary renders a compact human summary for either engine, falling

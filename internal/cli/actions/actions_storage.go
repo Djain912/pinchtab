@@ -81,5 +81,5 @@ func deleteStorage(client *http.Client, base, token string, cmd *cobra.Command, 
 		body["tabId"] = tabID
 	}
 
-	requireMap(apiclient.DoDeleteJSON(client, base, token, "/storage", body), 1, "Failed to delete storage")
+	requireMap(apiclient.DoDelete(client, base, token, "/storage", nil, apiclient.WithBody(body)), 1, "Failed to delete storage")
 }

@@ -69,8 +69,7 @@ func printPostActionOutput(client *http.Client, base, token, tabID string, cmd *
 	snap, _ := cmd.Flags().GetBool("snap")
 	snapDiff, _ := cmd.Flags().GetBool("snap-diff")
 	if snap || snapDiff {
-		userTab, _ := cmd.Flags().GetString("tab")
-		fetchAndPrintSnapshot(client, base, token, tabID, snapDiff, userTab == "")
+		fetchAndPrintSnapshot(client, base, token, cmd, tabID, snapDiff)
 	}
 	if text, _ := cmd.Flags().GetBool("text"); text {
 		fetchAndPrintText(client, base, token, tabID)
