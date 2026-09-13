@@ -1,5 +1,5 @@
 #!/bin/bash
-# extract-corpus-extended.sh — the live /extract pipeline on each mirrored corpus page scores at least the offline unit corpus.
+# extract-corpus-extended.sh — the live /extract pipeline on each mirrored corpus page extracts what the offline unit corpus does.
 
 GROUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${GROUP_DIR}/../../helpers/api.sh"
@@ -24,8 +24,15 @@ def outcomes($got; $want; $prefix):
 [outcomes($got; $want; "")]
 '
 
+CORPUS_DRIFT='
+def pathname: map(if type == "number" then "[\(.)]" else ".\(.)" end) | join("") | ltrimstr(".");
+[($live | paths(scalars)), ($offline | paths(scalars))] | unique |
+map(. as $p | {path: ($p | pathname), live: ($live | getpath($p)), offline: ($offline | getpath($p))}) |
+map(select(.live != .offline))
+'
+
 # ─────────────────────────────────────────────────────────────────
-start_test "extract-corpus: live render, snapshot and resolve score at least the offline corpus"
+start_test "extract-corpus: live render, snapshot and resolve match the offline corpus"
 
 for NAME in $(jq -r '.entries | keys[]' "$CORPUS_MANIFEST"); do
   OFFLINE_REASON=$(jq -r --arg n "$NAME" '.entries[$n].offline // empty' "$CORPUS_MANIFEST")
@@ -33,7 +40,8 @@ for NAME in $(jq -r '.entries | keys[]' "$CORPUS_MANIFEST"); do
     skip_assert "${NAME}: offline-only, skipped: ${OFFLINE_REASON}"
     continue
   fi
-  MIN_HITS=$(jq -r --arg n "$NAME" '.entries[$n].minHits' "$CORPUS_MANIFEST")
+  OFFLINE_HITS=$(jq -r --arg n "$NAME" '.entries[$n].hits' "$CORPUS_MANIFEST")
+  OFFLINE_DATA=$(jq -c --arg n "$NAME" '.entries[$n].data' "$CORPUS_MANIFEST")
 
   pt_post /navigate -d "{\"url\":\"${FIXTURES_URL}/corpus/${NAME}.html\"}" >/dev/null
   assert_ok "${NAME}: navigate to corpus/${NAME}.html"
@@ -48,10 +56,15 @@ for NAME in $(jq -r '.entries | keys[]' "$CORPUS_MANIFEST"); do
   HITS=$(echo "$OUTCOMES" | jq '[.[] | select(.hit)] | length')
   TOTAL=$(echo "$OUTCOMES" | jq 'length')
 
-  if [ "$HITS" -ge "$MIN_HITS" ]; then
-    pass_assert "${NAME}: pass, ${HITS}/${TOTAL} fields match expected.json (offline floor ${MIN_HITS})"
+  SAME=$(echo "$RESULT" | jq --argjson offline "$OFFLINE_DATA" '.data == $offline')
+  DRIFT=$(echo "$RESULT" | jq -c --argjson offline "$OFFLINE_DATA" '.data as $live | '"$CORPUS_DRIFT")
+  echo "$DRIFT" | jq -r '.[] | "    drift \(.path) live=\(.live | tojson) offline=\(.offline | tojson)" | .[0:160]'
+  DRIFTED=$(echo "$DRIFT" | jq 'length')
+
+  if [ "$HITS" -eq "$OFFLINE_HITS" ] && [ "$SAME" = "true" ]; then
+    pass_assert "${NAME}: pass, ${HITS}/${TOTAL} fields match expected.json and every field equals the offline run"
   else
-    fail_assert "${NAME}: fail, ${HITS}/${TOTAL} fields match expected.json, below the offline floor ${MIN_HITS}"
+    fail_assert "${NAME}: fail, ${HITS}/${TOTAL} fields match expected.json (offline ${OFFLINE_HITS}), ${DRIFTED} fields differ from the offline run"
   fi
 done
 

@@ -3,6 +3,7 @@ package extract
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"math"
 	"os"
 	"path/filepath"
@@ -21,6 +22,8 @@ const (
 	e2eCorpusDir   = "../../tests/e2e/fixtures/corpus"
 	e2eManifest    = "../../tests/e2e/fixtures/corpus/manifest.json"
 )
+
+var updateManifest = flag.Bool("update", false, "rewrite the e2e corpus manifest with the offline hits and data of every mirrored entry")
 
 type corpusEntry struct {
 	name     string
@@ -69,7 +72,7 @@ func TestCorpus(t *testing.T) {
 func TestCorpus_E2EMirrorMatchesUnitCorpus(t *testing.T) {
 	manifest := readE2EManifest(t)
 	entries := loadCorpus(t)
-	if len(manifest) != len(entries) {
+	if len(manifest) != len(entries) && !*updateManifest {
 		t.Errorf("%s lists %d entries, the unit corpus has %d", e2eManifest, len(manifest), len(entries))
 	}
 	for _, e := range entries {
@@ -77,18 +80,17 @@ func TestCorpus_E2EMirrorMatchesUnitCorpus(t *testing.T) {
 		_, statErr := os.Stat(filepath.Join(e2eCorpusDir, e.name+".html"))
 		mirrored := statErr == nil
 		switch {
-		case !listed:
-			t.Errorf("%s is missing from %s", e.name, e2eManifest)
-		case m.Offline != "" && m.MinHits != nil:
-			t.Errorf("%s is both offline-only and carries minHits", e.name)
 		case m.Offline != "":
 			if mirrored {
 				t.Errorf("%s is offline-only but has an e2e HTML fixture", e.name)
 			}
-		case m.MinHits == nil:
-			t.Errorf("%s needs either minHits or an offline reason", e.name)
+			if m.Hits != nil || m.Data != nil {
+				t.Errorf("%s is offline-only but carries offline hits or data", e.name)
+			}
+		case !mirrored && !listed:
+			t.Errorf("%s is missing from %s", e.name, e2eManifest)
 		case !mirrored:
-			t.Errorf("%s carries minHits but has no e2e HTML fixture", e.name)
+			t.Errorf("%s needs either an e2e HTML fixture or an offline reason", e.name)
 		default:
 			for _, file := range []string{"schema.json", "expected.json"} {
 				unit := mustRead(t, filepath.Join(corpusDir, e.name, file))
@@ -97,11 +99,39 @@ func TestCorpus_E2EMirrorMatchesUnitCorpus(t *testing.T) {
 					t.Errorf("%s: e2e copy of %s differs from the unit corpus", e.name, file)
 				}
 			}
-			if hits := countHits(scoreEntry(t, e)); hits < *m.MinHits {
-				t.Errorf("%s: offline hits %d fell below the e2e minHits %d", e.name, hits, *m.MinHits)
+			data := resolveEntry(t, e)
+			hits := countHits(compareObject("", data, e.expected))
+			if *updateManifest {
+				manifest[e.name] = e2eEntry{Hits: &hits, Data: data}
+				continue
 			}
+			checkManifestEntry(t, e.name, m, hits, data)
 		}
 	}
+	if *updateManifest {
+		writeE2EManifest(t, manifest)
+	}
+}
+
+func checkManifestEntry(t *testing.T, name string, m e2eEntry, hits int, data map[string]any) {
+	t.Helper()
+	switch {
+	case m.Hits == nil:
+		t.Errorf("%s: %s carries no offline hits; run go test ./internal/extract -run TestCorpus_E2EMirror -update", name, e2eManifest)
+	case *m.Hits != hits:
+		t.Errorf("%s: %s records %d offline hits, the offline run scores %d; run go test ./internal/extract -run TestCorpus_E2EMirror -update", name, e2eManifest, *m.Hits, hits)
+	}
+	if reflect.DeepEqual(m.Data, data) {
+		return
+	}
+	reported := map[string]bool{}
+	for _, o := range append(compareObject("", m.Data, data), swapped(compareObject("", data, m.Data))...) {
+		if !o.hit && !reported[o.path] {
+			reported[o.path] = true
+			t.Errorf("%s: %s records %s=%s, the offline run extracts %s", name, e2eManifest, o.path, show(o.got), show(o.want))
+		}
+	}
+	t.Errorf("%s: %s data differs from the offline run; run go test ./internal/extract -run TestCorpus_E2EMirror -update", name, e2eManifest)
 }
 
 func loadCorpus(t *testing.T) []corpusEntry {
@@ -137,6 +167,11 @@ func loadCorpus(t *testing.T) []corpusEntry {
 
 func scoreEntry(t *testing.T, e corpusEntry) []fieldOutcome {
 	t.Helper()
+	return compareObject("", resolveEntry(t, e), e.expected)
+}
+
+func resolveEntry(t *testing.T, e corpusEntry) map[string]any {
+	t.Helper()
 	raw, err := json.Marshal(Resolve(e.schema, e.nodes, Options{}).Data)
 	if err != nil {
 		t.Fatalf("%s: encode data: %v", e.name, err)
@@ -145,7 +180,7 @@ func scoreEntry(t *testing.T, e corpusEntry) []fieldOutcome {
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatalf("%s: decode data: %v", e.name, err)
 	}
-	return compareObject("", got, e.expected)
+	return got
 }
 
 func compareObject(prefix string, got, want map[string]any) []fieldOutcome {
@@ -173,6 +208,13 @@ func compareObject(prefix string, got, want map[string]any) []fieldOutcome {
 		}
 	}
 	return out
+}
+
+func swapped(outcomes []fieldOutcome) []fieldOutcome {
+	for i := range outcomes {
+		outcomes[i].got, outcomes[i].want = outcomes[i].want, outcomes[i].got
+	}
+	return outcomes
 }
 
 func countHits(outcomes []fieldOutcome) int {
@@ -220,8 +262,9 @@ func readBaseline(t *testing.T) float64 {
 }
 
 type e2eEntry struct {
-	MinHits *int   `json:"minHits"`
-	Offline string `json:"offline"`
+	Hits    *int           `json:"hits,omitempty"`
+	Data    map[string]any `json:"data,omitempty"`
+	Offline string         `json:"offline,omitempty"`
 }
 
 func readE2EManifest(t *testing.T) map[string]e2eEntry {
@@ -233,6 +276,22 @@ func readE2EManifest(t *testing.T) map[string]e2eEntry {
 		t.Fatalf("decode %s: %v", e2eManifest, err)
 	}
 	return manifest.Entries
+}
+
+func writeE2EManifest(t *testing.T, entries map[string]e2eEntry) {
+	t.Helper()
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(struct {
+		Entries map[string]e2eEntry `json:"entries"`
+	}{entries}); err != nil {
+		t.Fatalf("encode %s: %v", e2eManifest, err)
+	}
+	if err := os.WriteFile(e2eManifest, buf.Bytes(), 0o644); err != nil {
+		t.Fatalf("write %s: %v", e2eManifest, err)
+	}
 }
 
 func mustRead(t *testing.T, path string) []byte {

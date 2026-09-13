@@ -84,13 +84,21 @@ removed, the stylesheets reduced to the rules that match the page and inlined,
 images replaced by a 1x1 pixel) plus byte-identical copies of `schema.json` and
 `expected.json`. Each copy was checked to produce the same node list (depth,
 role, name, text, value) as the committed snapshot. Its `manifest.json` gives
-each mirrored entry a `minHits` floor, the offline hit count at commit time, and
-each offline-only entry the reason it is not mirrored.
-`TestCorpus_E2EMirrorMatchesUnitCorpus` keeps the copies, the manifest and the
-floors in step with this directory, and the
-`tests/e2e/scenarios/api/extract-corpus-extended.sh` scenario runs each mirrored
-page through the live pipeline, reporting every field and failing an entry
-whose hits fall below its floor.
+each mirrored entry the offline run's `hits` against `expected.json` and the
+`data` it extracts, and each offline-only entry the reason it is not mirrored.
+`TestCorpus_E2EMirrorMatchesUnitCorpus` keeps the copies and the manifest in
+step with this directory and fails when a recorded `hits` or `data` differs
+from the offline run. After a change that moves the offline result, regenerate
+the manifest rather than editing it:
+
+```
+go test ./internal/extract/ -run TestCorpus_E2EMirror -update
+```
+
+The `tests/e2e/scenarios/api/extract-corpus-extended.sh` scenario runs each
+mirrored page through the live pipeline, reports every field, and fails an
+entry whose live hits differ from the recorded `hits` or whose live `data`
+differs from the recorded `data`, printing each field that drifted.
 
 ## Attribution and licences
 
