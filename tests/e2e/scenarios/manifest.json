@@ -64,6 +64,14 @@
         "pr"
       ]
     },
+    "cli/tab-default-basic.sh": {
+      "tags": [
+        "tabs",
+        "text",
+        "mouse",
+        "pr"
+      ]
+    },
     "cli/a11y-axe-basic.sh": {
       "tags": [
         "a11y",
