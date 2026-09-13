@@ -585,15 +585,18 @@
       "services": [
         "pinchtab",
         "pinchtab-secure",
+        "pinchtab-medium",
         "fixtures"
       ],
       "ready": [
         "E2E_SERVER",
-        "E2E_SECURE_SERVER"
+        "E2E_SECURE_SERVER",
+        "E2E_MEDIUM_SERVER"
       ],
       "tags": [
         "memory",
-        "secure"
+        "secure",
+        "medium"
       ]
     },
     "cli/memory-basic.sh": {

@@ -18,8 +18,9 @@ TAB_ID=$(echo "$RESULT" | jq -r '.tabId')
 pt_get "/memory?tabId=${TAB_ID}&gc=true"
 assert_ok "baseline read with gc"
 for key in usedJSHeapSize totalJSHeapSize jsHeapSizeLimit documents nodes listeners frames; do
-  assert_json_exists "$RESULT" ".${key}" "usage reports ${key}"
+  assert_json_jq "$RESULT" "(.${key} | type) == \"number\"" "usage reports numeric ${key}" "${key} missing or not a number"
 done
+assert_json_jq "$RESULT" '.usedJSHeapSize > 0 and .jsHeapSizeLimit >= .totalJSHeapSize' "heap sizes are positive and ordered" "heap sizes missing or out of order"
 BASELINE=$(echo "$RESULT" | jq -r '.usedJSHeapSize')
 
 for i in 1 2 3; do
@@ -75,6 +76,21 @@ assert_ok "summary reads the file the snapshot wrote"
 assert_json_jq "$RESULT" '.nodeCount > 0 and .edgeCount > 0' "summary counts nodes and edges" "summary counted no nodes or edges"
 assert_json_jq "$RESULT" '([.topBySize[].name] + [.topByCount[].name]) | index("Array") != null' "Array is among the top constructors" "Array missing from the top constructors"
 assert_json_exists "$RESULT" '.duplicateStrings' "summary lists duplicate strings"
+
+pt_post "/tabs/${TAB_ID}/memory/snapshot" -d '{}'
+assert_ok "tab-scoped snapshot route"
+assert_json_eq "$RESULT" '.tabId' "$TAB_ID" "tab-scoped snapshot names the tab"
+TAB_SNAP_ID=$(echo "$RESULT" | jq -r '.id')
+if [ -n "$TAB_SNAP_ID" ] && [ "$TAB_SNAP_ID" != "$SNAP_ID" ]; then
+  pass_assert "tab-scoped snapshot got its own id ($TAB_SNAP_ID)"
+else
+  fail_assert "tab-scoped snapshot id '$TAB_SNAP_ID' is empty or reuses '$SNAP_ID'"
+fi
+
+pt_get /health
+assert_ok "health"
+assert_json_jq "$RESULT" '(.security.enabledSensitiveEndpoints // []) | index("memory") != null' \
+  "health lists memory among the enabled capabilities" "health does not list memory although allowMemory is on"
 
 pt_get "/memory/snapshot/heap_does_not_exist/summary"
 assert_http_status 404 "unknown snapshot id"
