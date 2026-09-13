@@ -92,6 +92,20 @@ fi
 pt_ok memory compare "$BASE_ID" "$HEAD_ID" --top 5 --retained
 assert_output_contains "RETAINED" "--retained adds the retained column"
 
+pt_ok memory compare "$BASE_ID" "$HEAD_ID" --top 5 --json
+if echo "$PT_OUT" | jq -e '[.constructors[] | has("retainedSize")] | any | not' >/dev/null; then
+  pass_assert "no retainedSize without --retained"
+else
+  fail_assert "retainedSize present without --retained"
+fi
+
+pt_fail memory compare "$BASE_ID" heap_does_not_exist
+if grep -q "404" <<<"$PT_ERR" && grep -q "heap_does_not_exist" <<<"$PT_ERR"; then
+  pass_assert "unknown head id reports 404 naming the id"
+else
+  fail_assert "unknown head id stderr lacks 404 or the id: $PT_ERR"
+fi
+
 pt_ok click "#release"
 
 end_test

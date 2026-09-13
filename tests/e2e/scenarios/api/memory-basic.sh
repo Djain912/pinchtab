@@ -156,4 +156,24 @@ assert_http_status 404 "unknown head id"
 assert_json_eq "$RESULT" '.code' 'memory_snapshot_not_found' "unknown id is memory_snapshot_not_found"
 assert_json_eq "$RESULT" '.details.id' 'heap_does_not_exist' "refusal names the missing id"
 
+pt_get "/memory/compare?base=heap_does_not_exist&head=${LEAK_ID}"
+assert_http_status 404 "unknown base id"
+assert_json_eq "$RESULT" '.details.id' 'heap_does_not_exist' "refusal names the missing base id"
+
+pt_get "/memory/compare?base=..%2F..%2Fetc%2Fpasswd&head=${LEAK_ID}"
+assert_http_status 400 "traversal-looking base id refused"
+assert_json_eq "$RESULT" '.code' 'bad_snapshot_id' "traversal id is bad_snapshot_id"
+
+pt_get "/memory/compare?base=${BASE_ID}&head=..%2F${LEAK_ID}"
+assert_http_status 400 "traversal-looking head id refused"
+assert_json_eq "$RESULT" '.code' 'bad_snapshot_id' "traversal head id is bad_snapshot_id"
+
+pt_get "/memory/compare?head=${LEAK_ID}"
+assert_http_status 400 "missing base refused"
+assert_json_eq "$RESULT" '.code' 'bad_snapshot_id' "missing base is bad_snapshot_id"
+
+pt_get "/memory/compare?base=${BASE_ID}&head=${LEAK_ID}&retained=maybe"
+assert_http_status 400 "non-boolean retained refused"
+assert_json_eq "$RESULT" '.code' 'bad_retained' "non-boolean retained is bad_retained"
+
 end_test
