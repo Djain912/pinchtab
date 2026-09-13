@@ -69,7 +69,7 @@ pinchtab instance logs <id>
 Creating a profile only creates an empty browser state. A human must start it headed and
 authenticate before an agent can reuse that session.
 
-Once a profile instance is running, the CLI auto-routes to it; you can also target it explicitly:
+Once a profile instance is running, the server routes to the instance that owns the tab (or the first running one); you can also target it explicitly:
 
 ```bash
 pinchtab --server http://localhost:9868 snap -i
@@ -96,7 +96,7 @@ curl -s -X POST http://localhost:9867/profiles/$PROFILE_ID/stop
 
 ## Profile IDs
 
-Each profile gets a stable 12-char hex ID (SHA-256 of name, truncated) stored in `profile.json`. IDs are URL-safe and never change — use them instead of names in automation.
+Each profile gets a stable ID of the form `prof_XXXXXXXX` (`prof_` + the first 8 hex chars of SHA-256 of the name) stored in `profile.json`. IDs are URL-safe and never change — use them instead of names in automation.
 
 ## Headed mode
 
@@ -109,10 +109,10 @@ Headed mode = real visible Chrome window managed by Pinchtab.
 Recommended human + agent flow:
 
 ```bash
-# Human starts PinchTab and sets up profile
-pinchtab
+# Human starts the PinchTab server and sets up the profile
+pinchtab server
 
-# Agent resolves the profile endpoint
-PINCHTAB_BASE_URL="$(pinchtab connect <profile-name>)"
-curl "$PINCHTAB_BASE_URL/health"
+# Agent resolves the profile's running instance
+PORT=$(curl -s http://localhost:9867/profiles/<profile-name>/instance | jq -r .port)
+curl "http://localhost:$PORT/health"
 ```

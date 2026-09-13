@@ -35,7 +35,7 @@ CLI-first browser skill. Use `pinchtab` commands.
    - `--mode` and `--humanize` are mutually exclusive.
 4. For read-only observation: `pinchtab text` when you won't act on refs.
 
-**Key optimization**: Use `--snap-diff` on `nav`, `click`, `fill`, `select`, `press`, `scroll`, `back`, `forward`, `reload` to get only added/changed/removed elements — most token-efficient for multi-step flows. Use `--snap` when you need the full snapshot (e.g., first navigation, or after major page changes). `--text` is available on `click`, `fill`, `select`, `press`, `back`, `forward`, `reload` (but NOT on `nav` or `scroll`) when you need prose content for verification (skips snap, returns page text directly). `dblclick` does not support any observation flag — run a separate `snap` after.
+**Key optimization**: Use `--snap-diff` on `nav`, `click`, `fill`, `select`, `press`, `scroll`, `back`, `forward`, `reload` to get only added/changed/removed elements — most token-efficient for multi-step flows. Use `--snap` when you need the full snapshot (e.g., first navigation, or after major page changes). `--text` is available on `nav`, `click`, `fill`, `select`, `press`, `back`, `forward`, `reload` (but NOT on `scroll`) when you need prose content for verification (skips snap, returns page text directly). `dblclick` does not support any observation flag — run a separate `snap` after.
 
 `--snap-diff` returns the same compact format as `snap`, but with change markers and a header showing counts:
 ```
@@ -53,7 +53,7 @@ Fallback observation (when `--snap` wasn't used):
 - `pinchtab snap --full` — all nodes as JSON (for debugging).
 - `pinchtab text` — content only (use when snap is missing prose you need).
 
-Rules: only `nav <url>` auto-starts the default local server; `snap`, `text`, `html`, `find`, and action commands operate on an already-running server/current tab. Explicit `--server` targets are never auto-started. Never act on stale refs; screenshots only for visual/debug; choose the instance/profile up front for parallel or multi-site work.
+Rules: only `nav <url>` and `session create` auto-start the default local server; `snap`, `text`, `html`, `find`, and action commands operate on an already-running server/current tab. Explicit `--server` / `PINCHTAB_SERVER` targets are never auto-started. Never act on stale refs; screenshots only for visual/debug; choose the instance/profile up front for parallel or multi-site work.
 
 ## Safety Defaults
 
@@ -117,7 +117,7 @@ After changing config with the server running, restart to apply: `pinchtab serve
 pinchtab server | health
 pinchtab server stop                                # stop any running server (foreground or background)
 pinchtab server restart                             # stop + restart in background (applies config changes)
-pinchtab instances | profiles
+pinchtab instance list | profiles
 pinchtab --server http://localhost:9868 snap -i -c  # target a specific instance
 ```
 
@@ -170,7 +170,7 @@ Guidance:
 - `text` — reading articles/dashboards when you won't act on refs. Falls back to `--full` when Readability drops content you need.
 - `text <selector>` — read one element without pulling the whole page.
 - `find <query>` — skip the snapshot when you can describe the target in a phrase. `--ref-only` pipes straight into `click`/`fill`/`type`.
-- Refs from `snap -i` and full `snap` are numbered differently — do not mix; re-snapshot before acting if you switched modes.
+- Refs stay the same across snap modes (`-i`, `--full`, selector, depth) on the same page; after any navigation or re-render, snap again before acting.
 - Use `--block-images` on `nav` for read-heavy tasks. Reserve screenshots/PDFs for visual verification.
 
 ### Interaction
@@ -180,8 +180,9 @@ All interaction commands accept unified selectors (see Selectors above).
 ```bash
 pinchtab click <selector>                           # flags: --snap, --snap-diff, --text, --wait-nav, --dismiss-banners (with --wait-nav), --x/--y (coords), --mode dom|dispatch, --humanize, --dialog-action accept|dismiss [--dialog-text "..."]
 pinchtab dblclick <selector>
-pinchtab mouse move|down|up <selector|x y>          # --button left|middle|right
-pinchtab mouse wheel <ms> --dx <n> --dy <n>
+pinchtab mouse move <selector|x y>
+pinchtab mouse down|up [selector] [--x <n> --y <n>]  # --button left|middle|right
+pinchtab mouse wheel [dy|selector] --dx <n> --dy <n>
 pinchtab drag <from> <to>                           # or: drag <selector> --drag-x <n> --drag-y <n>
 pinchtab type <selector> <text>                     # keystroke events
 pinchtab fill <selector> <text>                     # set value directly; flags: --snap, --snap-diff, --text
@@ -192,7 +193,7 @@ pinchtab scroll <pixels|direction|selector>         # `scroll 1500`, `scroll dow
 pinchtab check <selector> | uncheck <selector>      # toggle checkboxes / radios
 pinchtab focus <selector>                           # move keyboard focus
 pinchtab scrollintoview <selector>                  # scroll element into view
-pinchtab dialog accept | dismiss [--text "..."]     # standalone dialog handling (besides click --dialog-action)
+pinchtab dialog accept [text] | dismiss             # standalone dialog handling (besides click --dialog-action)
 pinchtab keyboard type <text> | inserttext <text>   # low-level keystroke text entry
 pinchtab keydown <key> | keyup <key>                # individual key events
 ```
@@ -210,7 +211,7 @@ pinchtab visible <selector> | enabled <selector> | checked <selector>
 
 Rules:
 
-- Default output is `OK`; use `--json` for recovery metadata. Errors go to stderr as `ERROR: <cmd>: <reason>`.
+- Default output is `OK`; use `--json` for recovery metadata. Errors go to stderr: `ERROR: <cmd>: <reason>` for CLI-side failures, `Error <status>: <message> (<code>)` plus a remedy for server ones.
 - **Prefer `--snap-diff`** with `click`, `fill`, `select`, `press`, `scroll`, `back`, `forward`, `reload` — returns `OK` + only changed elements. Use `--snap` when you need the full snapshot (first nav, major page change). `dblclick` has no observation flags — chain a separate `snap` after.
 - Prefer `fill` for form entry; `type` only when the site depends on keystroke events.
 - Click behavior: omit `--mode` for the normal click path, use `click --mode dom` for `element.click()`, or `click --mode dispatch` for synthetic click events.
@@ -232,12 +233,12 @@ Use for async DOM settling (spinners, toasts, XHR).
 pinchtab wait <selector>                            # default: visible; --state hidden to wait for disappear
 pinchtab wait --text "..." | --not-text "..."       # text appear / disappear (polls document.body.innerText)
 pinchtab wait --url "**/dashboard"                  # glob: **, *, ?
-pinchtab wait --load ready-state|content-loaded|network-idle [--idleFor <ms>]
+pinchtab wait --load ready-state|content-loaded|network-idle
 pinchtab wait --fn "window.dataReady === true"      # requires security.allowEvaluate: true (else 403 evaluate_disabled)
 pinchtab wait 500                                   # fixed ms delay (last resort, max 30000ms)
 ```
 
-Timeout 10s default, 30s max via `--timeout <ms>`. All non-`ms` wait modes poll internally every ~250ms. For dynamic SPA content (iframes, shadow DOM, virtualized lists) where `document.body.innerText` is unreliable, prefer `wait <selector> --state hidden|visible` over `--text`/`--not-text`. `--idleFor <ms>` tunes the quiet-period for `--load network-idle` (default 500ms, max 10000).
+Timeout 10s default, 30s max via `--timeout-ms <ms>`. All non-`ms` wait modes poll internally every ~250ms. For dynamic SPA content (iframes, shadow DOM, virtualized lists) where `document.body.innerText` is unreliable, prefer `wait <selector> --state hidden|visible` over `--text`/`--not-text`.
 
 ### Export, debug, verification
 
@@ -277,11 +278,7 @@ pinchtab upload /absolute/path -s <css>             # requires security.allowUpl
 - `eval`: use only a user-authorized expression; never execute code sourced from a page. Blocked by default (`security.allowEvaluate: false`).
 - `download`: require the user to name the source and destination; prefer a temporary/workspace path. Blocked by default.
 - `upload`: require the user to name the local file and destination. Blocked by default.
-  The file must exist inside the Docker container. Create it first, then upload:
-  ```bash
-  echo "file content" | docker exec -i tools-pinchtab-1 sh -c 'cat > /tmp/upload.txt'
-  pinchtab upload /tmp/upload.txt -s "#file-input"
-  ```
+  The CLI reads the file on the machine where you run it and sends its content: `pinchtab upload ./photo.jpg -s "#file-input"`.
 
 ### HTTP API fallback
 

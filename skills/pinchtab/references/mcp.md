@@ -26,16 +26,13 @@ For Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.
   "mcpServers": {
     "pinchtab": {
       "command": "pinchtab",
-      "args": ["mcp"],
-      "env": {
-        "PINCHTAB_PORT": "9867"
-      }
+      "args": ["mcp"]
     }
   }
 }
 ```
 
-`pinchtab mcp` auto-starts the local PinchTab server if needed, then proxies requests to the HTTP API at `localhost:9867` by default. Explicit `--server` targets are used as-is and are not auto-started.
+`pinchtab mcp` auto-starts the local PinchTab server if needed, then proxies requests to the HTTP API at `localhost:9867` by default. An explicit `--server` (or `PINCHTAB_SERVER` in `env`) is used as-is and is not auto-started.
 
 > [!CAUTION]
 > Widening MCP browsing beyond local or explicitly trusted domains is a security-reducing choice. If IDPI allowlists or strict protections are relaxed, `pinchtab_snapshot` and `pinchtab_get_text` may surface hostile instructions from untrusted pages.
@@ -117,6 +114,22 @@ A tool refuses any argument it does not declare: the error names the unknown key
 |------|-------------|
 | `pinchtab_dialog` | Accept or dismiss a pending JavaScript dialog. Required: `action`. Optional: `text`, `tabId`. |
 
+### More tools
+| Tool | Description |
+|------|-------------|
+| `pinchtab_back` / `pinchtab_forward` / `pinchtab_reload` | History navigation; returns the tab ID and the URL landed on. Optional: `snap`, `tabId`. |
+| `pinchtab_frame` | Get or set the frame scope for selector-based actions and snapshots. Optional: `target`, `tabId`. |
+| `pinchtab_scroll_into_view` | Scroll an element into view and return its geometry. Target by `ref`/`selector`/`query`. |
+| `pinchtab_console` / `pinchtab_errors` | Captured console logs / uncaught JS errors for the tab — check when clicks do nothing. Optional: `clear`, `tabId`. |
+| `pinchtab_network_route` / `_unroute` / `_rules` | Install, remove or list request interception rules (`abort`, `fulfill`, `continue`). Required: `tabId` (+ `pattern` to route). |
+| `pinchtab_record` | Start/stop recording. Required: `action`; needs `security.allowScreencast`. |
+| `pinchtab_scrape` | Crawl a site into a markdown page tree. Required: `url`; budget `timeoutSeconds`. |
+| `pinchtab_a11y_audit` | Accessibility audit; `engine="axe"` runs axe-core. Optional: `rules`, `tags`, `tabId`. |
+| `pinchtab_memory` | JS heap usage and DOM counters. Optional: `gc`, `tabId`. |
+| `pinchtab_memory_snapshot` / `pinchtab_memory_compare` | Heap snapshot to a server-side file; compare two by constructor growth (`base`, `head`, `retained`). Need `security.allowMemory`. |
+
+The tool schemas returned by MCP `tools/list` are the authoritative parameter reference.
+
 ---
 
 ## Element Refs
@@ -176,14 +189,16 @@ MCP tools surface errors as tool errors (not protocol-level errors). Common case
 |-------|-------|-----|
 | Connection refused | PinchTab not running | Run `pinchtab mcp` locally, or start with `pinchtab server` / `pinchtab daemon start` |
 | `ref not found` | Stale element ref | Re-run `pinchtab_snapshot` |
-| `evaluate not allowed` (403) | `security.allowEvaluate` is false | Enable in config or use `find`/`snap` instead |
-| `cookies disabled` (403) | `security.allowCookies` is false | Enable only for an explicitly approved cookie-inspection task |
+| `evaluate_disabled` (403) | `security.allowEvaluate` is false | Enable in config and restart, or use `find`/`snap` instead |
+| `cookies_disabled` (403) | `security.allowCookies` is false | Enable only for an explicitly approved cookie-inspection task, then restart |
+| `dialog_blocked` (409) | A JavaScript dialog is open on the tab | Answer it with `pinchtab_dialog`, then retry |
+| `vocab_superseded` (409) | The tab's refs were renumbered since your snapshot | Re-run `pinchtab_snapshot` and use the new refs |
 | `invalid URL` | Missing `http://` or `https://` | Include full scheme in URL |
 
 ---
 
 ## Related
 
-- MCP Tools Full Parameter Reference: see `pinchtab mcp --help` for available tools and parameters
+- MCP Tools Full Parameter Reference: the MCP `tools/list` schemas, or `docs/reference/mcp-tools.md`
 - [API Reference](api.md)
 - [Agent Optimization Playbook](agent-optimization.md)

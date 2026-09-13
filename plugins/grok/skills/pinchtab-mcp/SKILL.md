@@ -80,17 +80,15 @@ pinchtab_scrape(url="https://example.com", preview=true)
 pinchtab_snapshot(interactive=true, compact=true)
 ```
 
-Returns an accessibility tree with numbered refs:
+Returns an accessibility tree, one element per line as `ref:role "name"`:
 ```
-[0]<a href="/about" />
-	About
-[2]<button aria-label="Sign in" />
-	Sign in
-[5]<input type="text" placeholder="Search" />
+e0:link "About"
+e2:button "Sign in"
+e5:textbox "Search"
 ```
 
 **Key rules**:
-- Only elements with `[index]` are interactive.
+- Each line's leading `eN` is the ref to pass to action tools.
 - Refs are the fastest way to target elements.
 - Use `diff=true` after an interaction to see only changed elements (saves tokens).
 - Use `selector` to scope the snapshot to a specific section.
@@ -284,7 +282,7 @@ pinchtab_close_tab(tabId="...")  # Close a specific tab
 ```
 
 - Each navigation reuses the current tab by default.
-- For research tasks, open a new tab on the server side.
+- For research tasks, navigate with `newTab=true`.
 - Use `tabId` parameter on any tool to target a specific tab.
 
 ---
@@ -372,7 +370,7 @@ For these, use the pinchtab CLI or HTTP API directly.
 |---------|-------|-----|
 | Connection refused | PinchTab server not running | Check container status, restart |
 | `ref not found` | Stale element ref | Re-call `pinchtab_snapshot()` |
-| `evaluate not allowed` | `security.allowEvaluate` is false | Use `pinchtab_find` instead |
+| `evaluate_disabled` | `security.allowEvaluate` is false | Use `pinchtab_find` instead |
 | `invalid URL` | Missing scheme | Include `http://` or `https://` |
 | Element not found | Page not loaded | Use `pinchtab_wait(for="selector", value=…)` |
 | Action seems ignored | Page changed mid-action | Re-snapshot, use fresh refs |

@@ -219,7 +219,7 @@ Extract readable text from the page.
 
 ```bash
 pinchtab text
-pinchtab text --raw    # no formatting cleanup
+pinchtab text --raw    # = --full: whole-page innerText instead of the filtered main content
 pinchtab text "#main"  # text from one element
 pinchtab text --markdown              # Markdown for article-shaped pages (keeps links, tables)
 pinchtab text --markdown --output page.md  # write Markdown to a file, print a one-line confirmation
@@ -230,11 +230,12 @@ headings, inline links and tables, and `--output` keeps a long page out of the
 context window. It cannot be combined with `--full`/`--raw`.
 
 ### `pinchtab find <query>`
-Find elements by text content or CSS selector.
+Find elements by natural-language description over the accessibility tree (not CSS).
 
 ```bash
 pinchtab find "Submit"
-pinchtab find ".btn-primary"
+pinchtab find "login button" --ref-only   # print just the best ref
+pinchtab find "search box" --threshold 0.5 --explain
 ```
 
 ### `pinchtab extract --schema <file|->`
@@ -369,9 +370,35 @@ pinchtab storage clear --all              # both stores in one call
 
 `storage delete` needs a key: a bare `storage delete` is refused and names `storage clear`, which is the only verb that wipes a store. `storage clear` clears the store `--type` selects — localStorage unless you pass `--type session` — for the tab's origin, and `clear --all` empties both. `--all` is registered on `clear` only; `delete --all` is refused as an unknown flag.
 
+### `pinchtab clipboard`
+Read and write the server's shared clipboard (not the page's).
+
+```bash
+pinchtab clipboard write "text"   # alias: copy
+pinchtab clipboard read           # alias: paste
+```
+
+### `pinchtab memory`
+JS heap usage and DOM counters for the tab; heap snapshots need `security.allowMemory`.
+
+```bash
+pinchtab memory --gc                       # collect garbage first so two reads compare live memory
+pinchtab memory snapshot                   # V8 heap snapshot to a server-side file; prints its id
+pinchtab memory summary <id>               # top constructors and duplicate strings
+pinchtab memory compare <base> <head> --retained   # what grew between two snapshots
+```
+
 ---
 
 ## Audit Commands
+
+### `pinchtab a11y`
+Accessibility audit of the current page: native scan by default, axe-core with `--axe`.
+
+```bash
+pinchtab a11y audit
+pinchtab a11y audit --axe --rules color-contrast,label --json
+```
 
 ### `pinchtab audit`
 Browser-level site audit: screenshots, console errors, broken assets, interactive elements, accessibility score, Core Web Vitals, security findings.
@@ -410,8 +437,25 @@ pinchtab profiles create work
 pinchtab instance start --profile work
 ```
 
-### `pinchtab instances`
-List running PinchTab instances across profiles.
+### `pinchtab instance list`
+List running PinchTab instances across profiles (`pinchtab instances` is a deprecated alias).
+
+### Other commands agents commonly need
+
+```bash
+pinchtab wait "#results"          # a selector, or `wait 500` for ms; also --text, --url, --load
+pinchtab back | forward | reload
+pinchtab title | url | html
+pinchtab pdf --output page.pdf
+pinchtab dialog accept | dismiss  # answer a JS dialog; other page commands refuse with dialog_blocked while one is open
+pinchtab upload <file> --selector "input[type=file]"   # needs security.allowUpload
+pinchtab session create --agent-id myagent   # prints a ses_... token for PINCHTAB_SESSION
+pinchtab console --json            # raw envelope: jq '.console[]'
+pinchtab errors --json             # raw envelope: jq '.errors[]'
+pinchtab state save <name> | load <name> | show <name> | delete <name> | list | clean
+```
+
+`pinchtab <command> --help` is the authoritative flag list.
 
 ---
 
