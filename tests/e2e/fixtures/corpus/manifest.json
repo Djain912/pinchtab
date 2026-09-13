@@ -1,0 +1,12 @@
+{
+  "entries": {
+    "article": { "minHits": 0 },
+    "infobox": { "minHits": 0 },
+    "listing": { "minHits": 11 },
+    "login": { "minHits": 2 },
+    "pricing": { "offline": "github.com/pricing is GitHub, Inc. page content that cannot be redistributed" },
+    "product": { "minHits": 1 },
+    "search": { "minHits": 0 },
+    "stories": { "offline": "the news.ycombinator.com front page is Y Combinator and user-submitted content that cannot be redistributed" }
+  }
+}

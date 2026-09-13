@@ -560,6 +560,12 @@
         "idpi",
         "security"
       ]
+    },
+    "api/extract-corpus-extended.sh": {
+      "tags": [
+        "extract",
+        "corpus"
+      ]
     }
   }
 }
