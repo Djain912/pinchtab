@@ -480,15 +480,24 @@ func addRootCommands(cmds ...*cobra.Command) {
 func addTabFlag(cmds ...*cobra.Command) {
 	for _, cmd := range cmds {
 		cmd.Flags().String("tab", "", "Tab ID")
+		tabFlagCommands = append(tabFlagCommands, cmd)
 		existingPreRun := cmd.PreRun
-		cmd.PreRun = func(cmd *cobra.Command, args []string) {
+		existingPreRunE := cmd.PreRunE
+		cmd.PreRun = nil
+		cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 			defaultTabFlagFromState(cmd)
 			if existingPreRun != nil {
 				existingPreRun(cmd, args)
 			}
+			if existingPreRunE != nil {
+				return existingPreRunE(cmd, args)
+			}
+			return nil
 		}
 	}
 }
+
+var tabFlagCommands []*cobra.Command
 
 func portIsListening(baseURL string) bool {
 	host := strings.TrimPrefix(baseURL, "http://")

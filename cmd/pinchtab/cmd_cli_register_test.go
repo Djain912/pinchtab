@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -45,6 +46,8 @@ func TestTextCommandRegistersMarkdownAndOutput(t *testing.T) {
 }
 
 func TestTextMarkdownRefusesConflictingModesLocally(t *testing.T) {
+	newTabStateHarness(t)
+	defer resetTabFlag(textCmd)
 	if textCmd.PreRunE == nil {
 		t.Fatal("textCmd has no PreRunE, so --markdown --full costs a server round trip to discover")
 	}
@@ -74,6 +77,91 @@ func TestTextMarkdownRefusesConflictingModesLocally(t *testing.T) {
 	_ = textCmd.Flags().Set("markdown", "true")
 	if err := textCmd.PreRunE(textCmd, nil); err != nil {
 		t.Errorf("--markdown alone was refused: %v", err)
+	}
+}
+
+func resetTabFlag(cmd *cobra.Command) {
+	if f := cmd.Flags().Lookup("tab"); f != nil {
+		_ = f.Value.Set("")
+		f.Changed = false
+	}
+}
+
+func TestEveryTabFlagMemberDefaultsTabFromStateInPreRunE(t *testing.T) {
+	newTabStateHarness(t)
+	WriteTabStateFile("TAB-A")
+
+	if len(tabFlagCommands) == 0 {
+		t.Fatal("no addTabFlag members were recorded")
+	}
+	for _, cmd := range tabFlagCommands {
+		name := cmd.CommandPath()
+		if cmd.PreRun != nil {
+			t.Errorf("%s has a PreRun; cobra skips it whenever a PreRunE is also set, so the tab default must live in PreRunE", name)
+		}
+		if cmd.PreRunE == nil {
+			t.Errorf("%s has no PreRunE, so --tab is never defaulted from the state file", name)
+			continue
+		}
+		resetTabFlag(cmd)
+		if err := cmd.PreRunE(cmd, nil); err != nil {
+			t.Errorf("%s PreRunE: %v", name, err)
+		}
+		if got, _ := cmd.Flags().GetString("tab"); got != "TAB-A" {
+			t.Errorf("%s --tab = %q after PreRunE, want the state file's TAB-A", name, got)
+		}
+		resetTabFlag(cmd)
+	}
+}
+
+func TestMouseButtonValidationStillRunsAfterTheTabChain(t *testing.T) {
+	newTabStateHarness(t)
+	for _, cmd := range []*cobra.Command{mouseDownCmd, mouseUpCmd, dragCmd} {
+		if err := cmd.Flags().Set("button", "bogus"); err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.PreRunE(cmd, nil); err == nil {
+			t.Errorf("%s accepted --button bogus", cmd.CommandPath())
+		}
+		f := cmd.Flags().Lookup("button")
+		_ = f.Value.Set(f.DefValue)
+		f.Changed = false
+		resetTabFlag(cmd)
+	}
+}
+
+func TestAddTabFlagLiftsPreRunAndWrapsPreRunE(t *testing.T) {
+	newTabStateHarness(t)
+	WriteTabStateFile("TAB-A")
+	saved := tabFlagCommands
+	t.Cleanup(func() { tabFlagCommands = saved })
+
+	var order []string
+	withPreRun := &cobra.Command{Use: "pre-run", PreRun: func(*cobra.Command, []string) { order = append(order, "prerun") }}
+	refusal := errors.New("refused")
+	withPreRunE := &cobra.Command{Use: "pre-run-e", PreRunE: func(c *cobra.Command, _ []string) error {
+		got, _ := c.Flags().GetString("tab")
+		order = append(order, "prerune:"+got)
+		return refusal
+	}}
+	addTabFlag(withPreRun, withPreRunE)
+
+	for _, cmd := range []*cobra.Command{withPreRun, withPreRunE} {
+		if cmd.PreRun != nil {
+			t.Errorf("%s kept a PreRun after addTabFlag", cmd.Name())
+		}
+		if cmd.PreRunE == nil {
+			t.Fatalf("%s has no PreRunE after addTabFlag", cmd.Name())
+		}
+	}
+	if err := withPreRun.PreRunE(withPreRun, nil); err != nil {
+		t.Errorf("lifted PreRun chain returned %v", err)
+	}
+	if err := withPreRunE.PreRunE(withPreRunE, nil); !errors.Is(err, refusal) {
+		t.Errorf("wrapped PreRunE error = %v, want the original refusal", err)
+	}
+	if strings.Join(order, ",") != "prerun,prerune:TAB-A" {
+		t.Errorf("chain order = %v, want the lifted PreRun and the wrapped PreRunE to run after the tab default", order)
 	}
 }
 
