@@ -143,6 +143,8 @@ Most element commands accept a unified selector:
 
 Positional wrappers index the candidates in **document order** for every selector kind, so `nth:0:` is the first match in the page and `nth:1:` always comes after it. A bare `text:` selector is the one form that does not index: it picks the most control-like match among the smallest ones, so `text:Save` prefers a `<button>` over a `<div>` carrying the same label — which means `text:X` and `first:text:X` can resolve to different elements. A wrapper only ever chooses among the matches a bare selector would find; it never changes which matches exist.
 
+`text:` matches by **exact label first, containment second**. On a page offering both `Save` and `Save and exit`, `text:Save` is the button labelled exactly `Save`, wherever either sits in the document; containment only answers when no label is exactly the query, which is what lets `text:Sign` reach `Sign in with Google`. This is the same ladder [`select`](./reference/select.md) uses for option text. Prefer the full label when controls share a prefix — `Delete` and `Delete all` are one typo apart in effect.
+
 Selector prefixes are case-insensitive, so `CSS:#login` and `css:#login` mean the same thing. Only the prefix is case-folded; the value after it is passed through unchanged.
 
 Structured forms such as `role:`, `label:`, and `testid:` are matched by the semantic engine against enriched snapshot descriptors. CSS, XPath, refs, the existing `text:` action selector, and bare CSS/text wrappers remain browser-side selector resolution.

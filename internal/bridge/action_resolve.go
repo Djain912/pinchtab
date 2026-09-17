@@ -536,8 +536,21 @@ const resolveSelectorAtFn = `function(kind, value, index, fromEnd, positional) {
 		const elements = deepQueryAll("*", root.body || root)
 			.filter((el) => !nonRendered.has((el.tagName || "").toLowerCase()));
 		const measured = elements.map((el) => ({ el, text: normalize(el.textContent || ""), size: el.getElementsByTagName("*").length }));
-		const exact = measured.filter((item) => item.text && item.text.includes(query));
-		if (exact.length) return smallestMatches(exact);
+		// An element whose label IS the query beats one that merely contains it.
+		// Without this rung the two were one filter — named exact, testing
+		// includes — so "Save" and "Save and exit" were equally good answers to
+		// text:Save, both leaf-most, both weighted as buttons, and the tie fell to
+		// document order. A page listing the longer label first therefore sent
+		// text:Delete to "Delete all" and reported OK.
+		//
+		// Containment still answers when nothing matches outright, so the
+		// shorthand that reaches "Sign in" by text:Sign is untouched. This is the
+		// ladder the select-option matcher already documents in
+		// docs/reference/select.md: exact visible text, then substring.
+		const equals = measured.filter((item) => item.text === query);
+		if (equals.length) return smallestMatches(equals);
+		const contains = measured.filter((item) => item.text && item.text.includes(query));
+		if (contains.length) return smallestMatches(contains);
 		const tokens = query.split(" ").filter(Boolean);
 		if (!tokens.length) return [];
 		const fuzzy = measured.filter((item) => {
