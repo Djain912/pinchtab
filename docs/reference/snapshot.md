@@ -117,6 +117,17 @@ The cost is measured, not modelled: each node is charged the bytes its own forma
 rendered for `compact` and `text`, marshalled for `json` and `yaml` — so a change to a
 formatter changes the budget with it. Tokens are estimated at four bytes each.
 
+For `compact` and `text` the ceiling covers the **whole reply**, not only the nodes in it.
+The header, the `# hint:` and `# ignored params:` lines and the untrusted-content wrapper
+are reserved before any node is allocated, so the budget is not spent twice. This matters
+because the header carries the page title and URL: on a page with an ordinary marketing
+title and a nested path it is around 45 tokens, which a budget of 100 cannot absorb
+silently. The framing is priced by building the string that gets written, so what is
+reserved and what is sent cannot drift apart.
+
+`json` and `yaml` budget the node array only; their envelope is a small fixed cost next to
+nodes that run to hundreds of bytes each.
+
 Formats are not interchangeable for a given budget. `yaml` is roughly three times the size
 of `json` for the same nodes, because the node struct carries JSON field tags and no YAML
 ones, so YAML emits every field including the empty ones. The same `maxTokens` therefore
