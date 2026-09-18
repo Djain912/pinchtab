@@ -79,7 +79,29 @@ func PointerPointForNode(ctx context.Context, backendNodeID int64, requireTopMos
 		const viewportWidth = topWindow && topWindow.innerWidth ? topWindow.innerWidth : view.innerWidth;
 		const viewportHeight = topWindow && topWindow.innerHeight ? topWindow.innerHeight : view.innerHeight;
 		const inViewport = x >= 0 && y >= 0 && x <= viewportWidth && y <= viewportHeight;
-		const visible = !!style && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || '1') > 0;
+		// Opacity is the one of the three that does not reach a descendant on its
+		// own. display:none gives the child no box at all, so the width/height
+		// check below catches it; visibility:hidden is inherited, so the child's
+		// own computed style already reports it. opacity:0 is neither — the child
+		// keeps a real box and a computed opacity of 1 — so reading only this
+		// element passed a button inside an opacity:0 panel as visible, and it
+		// was clicked. An element nobody can see is the same hazard as the wrong
+		// element: the caller is told OK about something it cannot perceive.
+		//
+		// Walks this document only. An opacity:0 IFRAME hiding its contents is
+		// not covered here, because reaching the frame owner can throw on a
+		// cross-origin ancestor and the coordinate walk above already treats that
+		// as a case higher layers decide.
+		const transparentAncestor = () => {
+			for (let n = this; n && n.nodeType === 1; n = n.parentElement) {
+				const s = view.getComputedStyle(n);
+				if (s && !(Number(s.opacity === '' || s.opacity == null ? '1' : s.opacity) > 0)) {
+					return true;
+				}
+			}
+			return false;
+		};
+		const visible = !!style && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || '1') > 0 && !transparentAncestor();
 		const pointerEvent = style ? String(style.pointerEvents || '') : '';
 		let occluded = false;
 		let topTag = '';
