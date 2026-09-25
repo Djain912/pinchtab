@@ -49,12 +49,7 @@ func TestSnapshotBudgetCoversTheFramingNotJustTheNodes(t *testing.T) {
 	for _, format := range []string{"compact", "text"} {
 		for _, budget := range []int{100, 150, 300, 600} {
 			t.Run(fmt.Sprintf("%s/%d", format, budget), func(t *testing.T) {
-				reserve := estimateSnapshotTokens(
-					h.snapshotFramingReserve(format, title, url, len(nodes), nil, "", nil, budget))
-				nodeBudget := budget - reserve
-				if nodeBudget < 0 {
-					nodeBudget = 0
-				}
+				nodeBudget := h.snapshotNodeBudget(format, "", title, url, len(nodes), nil, "", nil, budget)
 				kept, truncated := bridge.TruncateToTokens(nodes, nodeBudget, format)
 
 				header := snapshotCompactHeader(title, url, len(kept), nil)
@@ -128,5 +123,31 @@ func TestFramingReserveChargesTheUntrustedContentWrapper(t *testing.T) {
 	}
 	if overhead := wrapped - bare; overhead < 100 {
 		t.Errorf("wrapper charged only %d bytes; the advisory alone is larger than that", overhead)
+	}
+}
+
+// json and yaml carry no plain-text header or advisory, and a file export writes its
+// own layout, so none of them give up node budget to framing they never send. json
+// is the default format: charging it the compact header and the advisory left a
+// 100-token budget with no nodes at all on a long title and URL.
+func TestNodeBudgetIsNotChargedFramingTheReplyDoesNotCarry(t *testing.T) {
+	h := &Handlers{
+		Config:    &config.RuntimeConfig{IDPI: config.IDPIConfig{Enabled: true, WrapContent: true}},
+		IDPIGuard: idpi.NewGuard(config.IDPIConfig{Enabled: true, WrapContent: true}, nil),
+	}
+	const (
+		title = "Enterprise Platform Pricing, Plans and Frequently Asked Questions"
+		url   = "https://example.com/a-fairly-long-marketing-path/with-nested-segments/"
+	)
+
+	for _, tc := range []struct{ format, output string }{
+		{"json", ""}, {"yaml", ""}, {"compact", "file"}, {"text", "file"}, {"json", "file"},
+	} {
+		if got := h.snapshotNodeBudget(tc.format, tc.output, title, url, 80, nil, "", nil, 100); got != 100 {
+			t.Errorf("format=%s output=%q: node budget %d, want the full 100", tc.format, tc.output, got)
+		}
+	}
+	if got := h.snapshotNodeBudget("compact", "", title, url, 80, nil, "", nil, 100); got >= 100 {
+		t.Errorf("compact: node budget %d, want the framing reserved out of 100", got)
 	}
 }

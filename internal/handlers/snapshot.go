@@ -103,6 +103,24 @@ func (h *Handlers) snapshotFramingReserve(format, title, url string, count int, 
 	return n
 }
 
+// snapshotFramingIsReserved reports whether the reply carries the plain-text framing
+// the reserve prices. json and yaml carry no header or advisory — only the node
+// array is budgeted — and a file export writes its own layout.
+func snapshotFramingIsReserved(format, output string) bool {
+	return output != "file" && (format == "compact" || format == "text")
+}
+
+// snapshotNodeBudget is what is left of maxTokens for nodes once the framing is paid
+// for. It holds back one token more than the framing: the truncator rounds its
+// charge down, so it can spend up to three bytes past the budget it is handed.
+func (h *Handlers) snapshotNodeBudget(format, output, title, url string, count int, scope *frameDisclosure, hint string, ignored []string, maxTokens int) int {
+	if !snapshotFramingIsReserved(format, output) {
+		return maxTokens
+	}
+	reserve := estimateSnapshotTokens(h.snapshotFramingReserve(format, title, url, count, scope, hint, ignored, maxTokens))
+	return max(maxTokens-reserve-1, 0)
+}
+
 func ignoredParamsComment(ignored []string) string {
 	if len(ignored) == 0 {
 		return ""
@@ -298,11 +316,7 @@ func (h *Handlers) HandleSnapshot(w http.ResponseWriter, r *http.Request) {
 		// so where the two readings differ this takes the larger one. The node count
 		// in the header is the pre-truncation one for the same reason — it has at
 		// least as many digits as the count that will be printed.
-		reserve := estimateSnapshotTokens(h.snapshotFramingReserve(format, title, url, len(flat), scopeInfo, scopedEmptyHint, controls.Ignored, maxTokens))
-		nodeBudget := maxTokens - reserve
-		if nodeBudget < 0 {
-			nodeBudget = 0
-		}
+		nodeBudget := h.snapshotNodeBudget(format, output, title, url, len(flat), scopeInfo, scopedEmptyHint, controls.Ignored, maxTokens)
 		flat, truncated = bridge.TruncateToTokens(flat, nodeBudget, format)
 	}
 
