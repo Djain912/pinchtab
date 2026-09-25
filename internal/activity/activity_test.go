@@ -819,7 +819,7 @@ func TestQuerySourcesNarrowsFileWalkAndSkipsUnrequestedSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
-	day := time.Date(2026, 9, 12, 10, 0, 0, 0, time.UTC)
+	day := time.Now().UTC()
 	for _, src := range []string{SourceClient, SourceScheduler, SourceDashboard} {
 		if err := store.Record(Event{Source: src, Timestamp: day, Method: "GET", Path: "/" + src, Status: 200}); err != nil {
 			t.Fatalf("Record(%s): %v", src, err)
