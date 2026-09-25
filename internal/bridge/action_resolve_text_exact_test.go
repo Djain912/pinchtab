@@ -28,6 +28,11 @@ const textPrefixFixtureHTML = `<!doctype html>
 
 func newTextPrefixFixture(t *testing.T) context.Context {
 	t.Helper()
+	return newTextFixture(t, textPrefixFixtureHTML, "#save")
+}
+
+func newTextFixture(t *testing.T, html, waitFor string) context.Context {
+	t.Helper()
 	chromePath := testbrowser.Path(t)
 
 	alloc, cancelAlloc := chromedp.NewExecAllocator(context.Background(), append(
@@ -45,10 +50,10 @@ func newTextPrefixFixture(t *testing.T) context.Context {
 		cancelAlloc()
 	})
 
-	dataURL := "data:text/html;base64," + base64.StdEncoding.EncodeToString([]byte(textPrefixFixtureHTML))
+	dataURL := "data:text/html;base64," + base64.StdEncoding.EncodeToString([]byte(html))
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(dataURL),
-		chromedp.WaitVisible("#save", chromedp.ByID),
+		chromedp.WaitVisible(waitFor, chromedp.ByQuery),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -108,5 +113,45 @@ func TestExactPreferenceAppliesUnderPositionalWrappers(t *testing.T) {
 	if got := resolve(t, ctx, "first:text:Delete"); got != want {
 		t.Errorf("first:text:Delete resolved to %s, want button#delete (%s)",
 			describeNode(t, ctx, got), describeNode(t, ctx, want))
+	}
+}
+
+// Plain text whose words ARE the query sits beside a control whose label only
+// contains it: a dialog heading over its sign-in button, a column header over a
+// bulk action, a section title over its save button. The exact label must not
+// outrank the control — clicking the heading does nothing and reports OK, the
+// same silent miss the exact rule exists to prevent. Where the exact label is
+// itself inside a control, it still wins over a longer control label.
+const textControlFixtureHTML = `<!doctype html>
+<html><body>
+<h2 id="signinheading">Sign in</h2>
+<button id="signin">Sign in with Google</button>
+<table><tr><th id="deleteheader">Delete</th></tr></table>
+<button id="deleteselected">Delete selected</button>
+<h3 id="savetitle">Save</h3>
+<button id="savechanges">Save changes</button>
+<button id="publishall">Publish all</button>
+<button id="publish"><span id="publishlabel">Publish</span></button>
+</body></html>`
+
+func TestTextSelectorPrefersAControlOverPlainTextThatIsTheQuery(t *testing.T) {
+	ctx := newTextFixture(t, textControlFixtureHTML, "#publish")
+
+	for _, tc := range []struct {
+		query string
+		wantX string
+	}{
+		{query: "text:Sign in", wantX: "css:#signin"},
+		{query: "text:Delete", wantX: "css:#deleteselected"},
+		{query: "text:Save", wantX: "css:#savechanges"},
+		{query: "text:Publish", wantX: "css:#publishlabel"},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			want := resolve(t, ctx, tc.wantX)
+			if got := resolve(t, ctx, tc.query); got != want {
+				t.Errorf("%s resolved to %s, want %s",
+					tc.query, describeNode(t, ctx, got), describeNode(t, ctx, want))
+			}
+		})
 	}
 }
